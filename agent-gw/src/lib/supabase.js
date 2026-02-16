@@ -50,7 +50,7 @@ export async function listCommitments(env, { project_id, limit = 10 }) {
 
 export async function upsertCommitments(env, { project_id, items }) {
   requireEnv(env, ["SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY"], "agent-gw");
-  if (!Array.isArray(items) || !items.length) return { attempted: 0, ok: 0 };
+  if (!Array.isArray(items) || !items.length) return { attempted: 0, ok: 0, skipped: 0 };
 
   const now = new Date().toISOString();
 
@@ -72,19 +72,26 @@ export async function upsertCommitments(env, { project_id, items }) {
     .filter((r) => r.what && String(r.what).trim().length);
 
   const url = `${env.SUPABASE_URL}/rest/v1/project_commitments?on_conflict=project_id,side,what,due_at`;
-
   const res = await fetch(url, {
     method: "POST",
-    headers: { ...supabaseHeaders(env), Prefer: "return=representation,resolution=merge-duplicates" },
+    headers: { ...supabaseHeaders(env), Prefer: "resolution=merge-duplicates,return=representation" },
     body: JSON.stringify(rows),
   });
 
   const txt = await res.text();
-  if (!res.ok) throw new Error(`Supabase upsert commitments ${res.status}: ${txt}`);
+
+  if (!res.ok) {
+    // Treat dedup conflicts as no-op (idempotent behavior)
+    if (res.status === 409 && txt.includes('"code":"23505"') && txt.includes('project_commitments_dedup_idx')) {
+      return { attempted: rows.length, ok: 0, skipped: rows.length };
+    }
+    throw new Error(`Supabase upsert commitments ${res.status}: ${txt}`);
+  }
 
   const data = safeJson(txt);
   const ok = Array.isArray(data) ? data.length : 0;
-  return { attempted: rows.length, ok };
+  const skipped = Math.max(0, rows.length - ok);
+  return { attempted: rows.length, ok, skipped };
 }
 
 export async function ragSearchMvp(env, { project_id, query_text, limit = 5 }) {
