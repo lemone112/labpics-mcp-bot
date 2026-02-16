@@ -1,0 +1,23 @@
+name = "tgbot"
+main = "src/index.js"
+compatibility_date = "2026-02-16"
+
+[vars]
+# Runtime vars should be set in Cloudflare dashboard (recommended).
+# This file exists primarily for CI deploy.
+
+# ENV = "dev"
+# SUPABASE_URL = "https://<ref>.supabase.co"
+# TELEGRAM_WEBHOOK_PATH = "/telegram/webhook/<random>"
+# PUBLIC_BASE_URL = "https://tgbot.example.workers.dev"
+# AGENT_GATEWAY_URL = "https://agent-gw.example.workers.dev"
+# CHATWOOT_BASE_URL = "https://app.chatwoot.com"
+# CHATWOOT_ACCOUNT_ID = "123"
+
+# Service binding (tgbot -> agent-gw)
+[[services]]
+binding = "AGENT_GW"
+service = "agent-gw"
+
+[triggers]
+crons = []

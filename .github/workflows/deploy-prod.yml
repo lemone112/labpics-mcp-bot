@@ -1,0 +1,62 @@
+name: Deploy (prod)
+
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: "Which worker(s) to deploy"
+        required: true
+        type: choice
+        options:
+          - all
+          - tgbot
+          - agent-gw
+          - cw-sync
+
+concurrency:
+  group: cf-workers-prod
+  cancel-in-progress: false
+
+jobs:
+  deploy-prod:
+    runs-on: ubuntu-latest
+    environment: production
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install Wrangler
+        run: npm i -g wrangler@3
+
+      - name: Deploy tgbot (prod)
+        if: ${{ inputs.target == 'all' || inputs.target == 'tgbot' }}
+        working-directory: tgbot
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          wrangler deploy --name tgbot
+
+      - name: Deploy agent-gw (prod)
+        if: ${{ inputs.target == 'all' || inputs.target == 'agent-gw' }}
+        working-directory: agent-gw
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          wrangler deploy --name agent-gw
+
+      - name: Deploy cw-sync (prod)
+        if: ${{ inputs.target == 'all' || inputs.target == 'cw-sync' }}
+        working-directory: cw-sync
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          wrangler deploy --name cw-sync
