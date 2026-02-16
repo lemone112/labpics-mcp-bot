@@ -34,14 +34,87 @@ jobs:
       - name: Install Wrangler
         run: npm i -g wrangler@3
 
+      # -----------------
+      # tgbot (prod)
+      # -----------------
+      - name: Configure secrets (tgbot)
+        if: ${{ inputs.target == 'all' || inputs.target == 'tgbot' }}
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          CHATWOOT_API_TOKEN: ${{ secrets.CHATWOOT_API_TOKEN }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          AGENT_GATEWAY_HMAC_SECRET: ${{ secrets.AGENT_GATEWAY_HMAC_SECRET }}
+          COMPOSIO_API_KEY: ${{ secrets.COMPOSIO_API_KEY }}
+          APP_HMAC_SECRET: ${{ secrets.APP_HMAC_SECRET }}
+        run: |
+          set -euo pipefail
+          for kv in \
+            "TELEGRAM_BOT_TOKEN=$TELEGRAM_BOT_TOKEN" \
+            "CHATWOOT_API_TOKEN=$CHATWOOT_API_TOKEN" \
+            "SUPABASE_SERVICE_ROLE_KEY=$SUPABASE_SERVICE_ROLE_KEY" \
+            "OPENAI_API_KEY=$OPENAI_API_KEY" \
+            "AGENT_GATEWAY_HMAC_SECRET=$AGENT_GATEWAY_HMAC_SECRET" \
+            "COMPOSIO_API_KEY=$COMPOSIO_API_KEY" \
+            "APP_HMAC_SECRET=$APP_HMAC_SECRET"; do
+              name="${kv%%=*}"
+              val="${kv#*=}"
+              printf "%s" "$val" | wrangler secret put "$name" --name tgbot
+              echo "set secret $name (tgbot)"
+          done
+
       - name: Deploy tgbot (prod)
         if: ${{ inputs.target == 'all' || inputs.target == 'tgbot' }}
         working-directory: tgbot
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          ENV: ${{ vars.ENV }}
+          SUPABASE_URL: ${{ vars.SUPABASE_URL }}
+          TELEGRAM_WEBHOOK_PATH: ${{ vars.TELEGRAM_WEBHOOK_PATH }}
+          PUBLIC_BASE_URL: ${{ vars.PUBLIC_BASE_URL }}
+          AGENT_GATEWAY_URL: ${{ vars.AGENT_GATEWAY_URL }}
+          CHATWOOT_BASE_URL: ${{ vars.CHATWOOT_BASE_URL }}
+          CHATWOOT_ACCOUNT_ID: ${{ vars.CHATWOOT_ACCOUNT_ID }}
+          SUPABASE_PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF }}
         run: |
-          wrangler deploy --name tgbot
+          set -euo pipefail
+          wrangler deploy --name tgbot \
+            --var ENV:$ENV \
+            --var SUPABASE_URL:$SUPABASE_URL \
+            --var TELEGRAM_WEBHOOK_PATH:$TELEGRAM_WEBHOOK_PATH \
+            --var PUBLIC_BASE_URL:$PUBLIC_BASE_URL \
+            --var AGENT_GATEWAY_URL:$AGENT_GATEWAY_URL \
+            --var CHATWOOT_BASE_URL:$CHATWOOT_BASE_URL \
+            --var CHATWOOT_ACCOUNT_ID:$CHATWOOT_ACCOUNT_ID \
+            --var SUPABASE_PROJECT_REF:$SUPABASE_PROJECT_REF
+
+      # -----------------
+      # agent-gw (prod)
+      # -----------------
+      - name: Configure secrets (agent-gw)
+        if: ${{ inputs.target == 'all' || inputs.target == 'agent-gw' }}
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          AGENT_GATEWAY_HMAC_SECRET: ${{ secrets.AGENT_GATEWAY_HMAC_SECRET }}
+          COMPOSIO_API_KEY: ${{ secrets.COMPOSIO_API_KEY }}
+        run: |
+          set -euo pipefail
+          for kv in \
+            "SUPABASE_SERVICE_ROLE_KEY=$SUPABASE_SERVICE_ROLE_KEY" \
+            "OPENAI_API_KEY=$OPENAI_API_KEY" \
+            "AGENT_GATEWAY_HMAC_SECRET=$AGENT_GATEWAY_HMAC_SECRET" \
+            "COMPOSIO_API_KEY=$COMPOSIO_API_KEY"; do
+              name="${kv%%=*}"
+              val="${kv#*=}"
+              printf "%s" "$val" | wrangler secret put "$name" --name agent-gw
+              echo "set secret $name (agent-gw)"
+          done
 
       - name: Deploy agent-gw (prod)
         if: ${{ inputs.target == 'all' || inputs.target == 'agent-gw' }}
@@ -49,8 +122,35 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          SUPABASE_URL: ${{ vars.SUPABASE_URL }}
         run: |
-          wrangler deploy --name agent-gw
+          set -euo pipefail
+          wrangler deploy --name agent-gw --var SUPABASE_URL:$SUPABASE_URL
+
+      # -----------------
+      # cw-sync (prod)
+      # -----------------
+      - name: Configure secrets (cw-sync)
+        if: ${{ inputs.target == 'all' || inputs.target == 'cw-sync' }}
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CHATWOOT_API_TOKEN: ${{ secrets.CHATWOOT_API_TOKEN }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          SYNC_TOKEN: ${{ secrets.SYNC_TOKEN }}
+        run: |
+          set -euo pipefail
+          for kv in \
+            "CHATWOOT_API_TOKEN=$CHATWOOT_API_TOKEN" \
+            "SUPABASE_SERVICE_ROLE_KEY=$SUPABASE_SERVICE_ROLE_KEY" \
+            "OPENAI_API_KEY=$OPENAI_API_KEY" \
+            "SYNC_TOKEN=$SYNC_TOKEN"; do
+              name="${kv%%=*}"
+              val="${kv#*=}"
+              printf "%s" "$val" | wrangler secret put "$name" --name cw-sync
+              echo "set secret $name (cw-sync)"
+          done
 
       - name: Deploy cw-sync (prod)
         if: ${{ inputs.target == 'all' || inputs.target == 'cw-sync' }}
@@ -58,5 +158,16 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          SUPABASE_URL: ${{ vars.SUPABASE_URL }}
+          CHATWOOT_BASE_URL: ${{ vars.CHATWOOT_BASE_URL }}
+          CHATWOOT_ACCOUNT_ID: ${{ vars.CHATWOOT_ACCOUNT_ID }}
+          SYNC_TABLE: ${{ vars.SYNC_TABLE }}
+          RAG_TABLE: ${{ vars.RAG_TABLE }}
         run: |
-          wrangler deploy --name cw-sync
+          set -euo pipefail
+          wrangler deploy --name cw-sync \
+            --var SUPABASE_URL:$SUPABASE_URL \
+            --var CHATWOOT_BASE_URL:$CHATWOOT_BASE_URL \
+            --var CHATWOOT_ACCOUNT_ID:$CHATWOOT_ACCOUNT_ID \
+            --var SYNC_TABLE:$SYNC_TABLE \
+            --var RAG_TABLE:$RAG_TABLE
