@@ -70,7 +70,7 @@ jobs:
           SUPABASE_PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF }}
         run: |
           set -euo pipefail
-          wrangler deploy --name tgbot-dev \
+          wrangler deploy --config wrangler.dev.toml \
             --var ENV:$ENV \
             --var SUPABASE_URL:$SUPABASE_URL \
             --var TELEGRAM_WEBHOOK_PATH:$TELEGRAM_WEBHOOK_PATH \
