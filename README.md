@@ -1,6 +1,6 @@
 # Labpics MCP Bot (Telegram + Cloudflare Workers)
 
-This repo contains **two Cloudflare Workers**:
+This repo contains **two Cloudflare Workers**:  
 
 - `tgbot` — Telegram webhook/UI worker (Projects/Dashboard, free text, voice transcription optional).
 - `agent-gw` — Agent gateway worker (commitments extraction via LLM, Supabase writeback).
