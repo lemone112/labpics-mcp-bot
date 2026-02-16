@@ -1,31 +1,45 @@
 // @ts-nocheck
 
+import { btn, toReplyMarkup, escapeHtml, shortId, json, safeJson } from "./lib/ui.js";
+import { tgSendMessage, tgAnswerCallbackQuery } from "./lib/telegram.js";
+import {
+  upsertTelegramUser,
+  listProjects,
+  getProject,
+  getActiveProjectId,
+  setActiveProject,
+  getUserPendingInput,
+  setUserPendingInput,
+  clearUserPendingInput,
+  createProject,
+  loadProjectContext,
+  getLinkCounts,
+} from "./lib/supabase.js";
+import { hmacSha256Hex } from "./lib/security.js";
+
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
 
     if (url.pathname === "/__whoami") {
-      return new Response("tgbot:FIN-v7 (commitments+search+voice)", {
+      return new Response("tgbot:refactor-lib-split", {
         status: 200,
         headers: { "content-type": "text/plain; charset=utf-8" },
       });
     }
 
     if (url.pathname === "/__env") {
-      return new Response(
-        JSON.stringify({
-          ENV: env.ENV || null,
-          TELEGRAM_WEBHOOK_PATH: env.TELEGRAM_WEBHOOK_PATH || null,
-          SUPABASE_URL: env.SUPABASE_URL || null,
-          HAS_AGENT_GW_BINDING: Boolean(env.AGENT_GW),
-          HAS_OPENAI_API_KEY: Boolean(env.OPENAI_API_KEY),
-        }),
-        { status: 200, headers: { "content-type": "application/json; charset=utf-8" } }
-      );
+      return json({
+        ENV: env.ENV || null,
+        TELEGRAM_WEBHOOK_PATH: env.TELEGRAM_WEBHOOK_PATH || null,
+        SUPABASE_URL: env.SUPABASE_URL || null,
+        HAS_AGENT_GW_BINDING: Boolean(env.AGENT_GW),
+        HAS_OPENAI_API_KEY: Boolean(env.OPENAI_API_KEY),
+      });
     }
 
     if (url.pathname === "/health") {
-      return json({ ok: true, service: "tgbot", version: "FIN-v7" });
+      return json({ ok: true, service: "tgbot", version: "refactor-1" });
     }
 
     if (url.pathname === env.TELEGRAM_WEBHOOK_PATH) {
@@ -42,10 +56,6 @@ export default {
     return new Response("Not Found", { status: 404 });
   },
 };
-
-/* -----------------------------
-   Errors
------------------------------- */
 
 function debugId() {
   return crypto.randomUUID().slice(0, 8);
@@ -71,10 +81,6 @@ async function sendErrorToChat(env, chatId, id, where, e) {
   });
 }
 
-/* -----------------------------
-   Router
------------------------------- */
-
 async function handleTelegramUpdate(update, env) {
   const id = debugId();
   try {
@@ -95,32 +101,10 @@ async function onMessage(message, env, id) {
 
   let text = (message.text || "").trim();
 
-  // Voice/audio -> transcription (optional)
-  if (!text && (message.voice || message.audio)) {
-    const fileId = message.voice?.file_id || message.audio?.file_id;
-    if (!fileId) return;
-
-    await tgSendMessage(env, chatId, "<b>🎙️ Голос</b>\nРаспознаю…", {});
-    const transcript = await transcribeTelegramFile(env, fileId);
-    text = transcript.trim();
-
-    if (!text) {
-      return tgSendMessage(env, chatId, "Не удалось распознать голос.", {
-        reply_markup: toReplyMarkup([[btn("🏠 Home", "NAV:HOME")]]),
-      });
-    }
-
-    await tgSendMessage(env, chatId, `<b>📝 Распознано:</b>\n<blockquote>${escapeHtml(text)}</blockquote>`, {
-      reply_markup: toReplyMarkup([[btn("🤝 Договоренности", "NAV:COMMIT"), btn("🔎 Search", "NAV:SEARCH")]]),
-    });
-  }
-
-  // Commands
   if (text === "/start" || text === "/home") return renderHome(env, chatId, uid);
   if (text === "/projects") return renderProjectsList(env, chatId, uid);
   if (text === "/help") return tgSendMessage(env, chatId, helpText(), { reply_markup: toReplyMarkup([[btn("🏠 Home", "NAV:HOME")]]) });
 
-  // Wizard
   const pending = await getUserPendingInput(env, uid);
 
   if (pending?.kind === "new_project_name") {
@@ -136,10 +120,7 @@ async function onMessage(message, env, id) {
     return runViaGateway(env, chatId, uid, text, id);
   }
 
-  // Text intent shortcuts
   if (isCommitmentsText(text)) return runViaGateway(env, chatId, uid, "договоренности", id);
-
-  // Default: forward to gateway
   return runViaGateway(env, chatId, uid, text, id);
 }
 
@@ -171,9 +152,8 @@ async function onCallbackQuery(cq, env, id) {
     if (data === "NAV:SEARCH") {
       const pid = await getActiveProjectId(env, uid);
       if (!pid) return renderProjectsList(env, chatId, uid);
-
       await setUserPendingInput(env, uid, "search_query", { id }, 600);
-      return tgSendMessage(env, chatId, "<b>🔎 Search</b>\nВведите запрос текстом или голосом.", {
+      return tgSendMessage(env, chatId, "<b>🔎 Search</b>\nВведите запрос текстом.", {
         reply_markup: toReplyMarkup([[btn("🏠 Home", "NAV:HOME")]]),
       });
     }
@@ -196,10 +176,6 @@ async function onCallbackQuery(cq, env, id) {
     return sendErrorToChat(env, chatId, id, `callback:${data}`, e);
   }
 }
-
-/* -----------------------------
-   Screens
------------------------------- */
 
 async function renderHome(env, chatId, uid) {
   const pid = await getActiveProjectId(env, uid);
@@ -268,10 +244,6 @@ async function renderDashboard(env, chatId, uid, pid) {
   });
 }
 
-/* -----------------------------
-   Gateway call (Service Binding)
------------------------------- */
-
 async function runViaGateway(env, chatId, uid, query, id) {
   const pid = await getActiveProjectId(env, uid);
   if (!pid) {
@@ -282,15 +254,14 @@ async function runViaGateway(env, chatId, uid, query, id) {
 
   if (!env.AGENT_GW) throw new Error("Missing service binding AGENT_GW");
 
-  const ctx = await loadProjectContext(env, pid);
-
+  const context = await loadProjectContext(env, pid);
   const body = JSON.stringify({
     request_id: id,
     telegram_user_id: uid,
     chat_id: String(chatId),
     active_project_id: pid,
     user_text: query,
-    context: ctx,
+    context,
   });
 
   const sig = await hmacSha256Hex(env.AGENT_GATEWAY_HMAC_SECRET || "", body);
@@ -315,242 +286,12 @@ function isCommitmentsText(text) {
   return t.includes("договор") || t.includes("обещ") || t.includes("кто что должен") || t.includes("commit");
 }
 
-/* -----------------------------
-   Voice (optional)
------------------------------- */
-
-async function transcribeTelegramFile(env, fileId) {
-  if (!env.OPENAI_API_KEY) throw new Error("OPENAI_API_KEY missing (needed for voice transcription)");
-
-  const file = await tgCall(env, "getFile", { file_id: fileId });
-  const filePath = file?.file_path;
-  if (!filePath) throw new Error("Telegram getFile: no file_path");
-
-  const fileUrl = `https://api.telegram.org/file/bot${env.TELEGRAM_BOT_TOKEN}/${filePath}`;
-  const audioRes = await fetch(fileUrl);
-  if (!audioRes.ok) throw new Error(`Telegram file download ${audioRes.status}`);
-
-  const audioBytes = await audioRes.arrayBuffer();
-
-  const form = new FormData();
-  form.append("model", "whisper-1");
-  form.append("file", new Blob([audioBytes]), "audio.ogg");
-
-  const res = await fetch("https://api.openai.com/v1/audio/transcriptions", {
-    method: "POST",
-    headers: { Authorization: `Bearer ${env.OPENAI_API_KEY}` },
-    body: form,
-  });
-
-  const txt = await res.text();
-  if (!res.ok) throw new Error(`OpenAI transcribe ${res.status}: ${txt}`);
-
-  const data = safeJson(txt);
-  return String(data?.text || "");
-}
-
-/* -----------------------------
-   Supabase
------------------------------- */
-
-function sbHeaders(env) {
-  return {
-    apikey: env.SUPABASE_SERVICE_ROLE_KEY,
-    Authorization: `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}`,
-    "content-type": "application/json",
-    Prefer: "return=representation,resolution=merge-duplicates",
-  };
-}
-
-async function sbFetch(env, path, { method = "GET", body } = {}) {
-  const res = await fetch(`${env.SUPABASE_URL}/rest/v1${path}`, {
-    method,
-    headers: sbHeaders(env),
-    body: body ? JSON.stringify(body) : undefined,
-  });
-  const txt = await res.text();
-  const data = txt ? safeJson(txt) : null;
-  if (!res.ok) throw new Error(`Supabase ${res.status}: ${txt || "(empty body)"}`);
-  return { data };
-}
-
-async function upsertTelegramUser(env, from) {
-  const row = {
-    telegram_user_id: String(from.id),
-    username: from.username || null,
-    first_name: from.first_name || null,
-    last_name: from.last_name || null,
-  };
-  await sbFetch(env, `/telegram_users?on_conflict=telegram_user_id`, { method: "POST", body: row });
-}
-
-async function listProjects(env) {
-  const { data } = await sbFetch(env, `/projects?select=project_id,name,status&order=created_at.desc`);
-  return Array.isArray(data) ? data : [];
-}
-
-async function getProject(env, pid) {
-  const { data } = await sbFetch(env, `/projects?select=project_id,name,status&project_id=eq.${encodeURIComponent(pid)}&limit=1`);
-  return Array.isArray(data) && data[0] ? data[0] : null;
-}
-
-async function getActiveProjectId(env, uid) {
-  const { data } = await sbFetch(env, `/user_project_state?select=project_id&telegram_user_id=eq.${encodeURIComponent(String(uid))}&is_active=eq.true&limit=1`);
-  return Array.isArray(data) && data[0] ? data[0].project_id : null;
-}
-
-async function setActiveProject(env, uid, pid) {
-  const userId = String(uid);
-  const now = new Date().toISOString();
-
-  await sbFetch(env, `/user_project_state?telegram_user_id=eq.${encodeURIComponent(userId)}`, {
-    method: "PATCH",
-    body: { is_active: false, updated_at: now },
-  });
-
-  await sbFetch(
-    env,
-    `/user_project_state?telegram_user_id=eq.${encodeURIComponent(userId)}&project_id=eq.${encodeURIComponent(pid)}`,
-    { method: "PATCH", body: { is_active: true, last_used_at: now, updated_at: now } }
-  );
-
-  const { data } = await sbFetch(
-    env,
-    `/user_project_state?select=id&telegram_user_id=eq.${encodeURIComponent(userId)}&project_id=eq.${encodeURIComponent(pid)}&limit=1`
-  );
-
-  if (!(Array.isArray(data) && data[0])) {
-    await sbFetch(env, `/user_project_state`, {
-      method: "POST",
-      body: { telegram_user_id: userId, project_id: pid, is_active: true, last_used_at: now, updated_at: now },
-    });
-  }
-}
-
-async function getUserPendingInput(env, uid) {
-  const userId = String(uid);
-  const { data } = await sbFetch(env, `/user_input_state?select=kind,payload,expires_at&telegram_user_id=eq.${encodeURIComponent(userId)}&limit=1`);
-  return Array.isArray(data) && data[0] ? data[0] : null;
-}
-
-async function setUserPendingInput(env, uid, kind, payload = {}, ttlSeconds = 600) {
-  const row = {
-    telegram_user_id: String(uid),
-    kind,
-    payload,
-    expires_at: new Date(Date.now() + ttlSeconds * 1000).toISOString(),
-    updated_at: new Date().toISOString(),
-  };
-  await sbFetch(env, `/user_input_state?on_conflict=telegram_user_id`, { method: "POST", body: row });
-}
-
-async function clearUserPendingInput(env, uid) {
-  await sbFetch(env, `/user_input_state?telegram_user_id=eq.${encodeURIComponent(String(uid))}`, { method: "DELETE" });
-}
-
-async function createProject(env, name) {
-  const pid = crypto.randomUUID();
-  await sbFetch(env, `/projects?on_conflict=project_id`, {
-    method: "POST",
-    body: { project_id: pid, name, status: "open", meta: {}, updated_at: new Date().toISOString() },
-  });
-  return pid;
-}
-
-async function loadProjectContext(env, pid) {
-  const [links, proj] = await Promise.all([
-    sbFetch(env, `/project_links?select=source_system,external_type,external_id,meta&project_id=eq.${encodeURIComponent(pid)}&limit=200`).then(r => r.data || []),
-    getProject(env, pid),
-  ]);
-  return { project: proj, links };
-}
-
-async function getLinkCounts(env, pid) {
-  const { data } = await sbFetch(env, `/project_links?select=external_type&project_id=eq.${encodeURIComponent(pid)}&limit=500`);
-  const arr = Array.isArray(data) ? data : [];
-  const count = (t) => arr.filter((x) => x.external_type === t).length;
-  return {
-    conversation: count("conversation"),
-    person: count("person"),
-    deal: count("deal"),
-    company: count("company") > 0,
-    linear_project: count("linear_project") > 0,
-  };
-}
-
-/* -----------------------------
-   Telegram + crypto + misc
------------------------------- */
-
-async function hmacSha256Hex(secret, message) {
-  const key = await crypto.subtle.importKey(
-    "raw",
-    new TextEncoder().encode(secret),
-    { name: "HMAC", hash: "SHA-256" },
-    false,
-    ["sign"]
-  );
-  const sig = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(message));
-  return [...new Uint8Array(sig)].map((b) => b.toString(16).padStart(2, "0")).join("");
-}
-
-async function tgCall(env, method, payload) {
-  const res = await fetch(`https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/${method}`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify(payload),
-  });
-  const data = await res.json().catch(() => ({}));
-  if (!data.ok) throw new Error(`Telegram ${method} failed: ${JSON.stringify(data)}`);
-  return data.result;
-}
-
-function tgSendMessage(env, chat_id, text, opts = {}) {
-  return tgCall(env, "sendMessage", {
-    chat_id,
-    text,
-    parse_mode: "HTML",
-    disable_web_page_preview: true,
-    ...opts,
-  });
-}
-
-function tgAnswerCallbackQuery(env, callback_query_id) {
-  return tgCall(env, "answerCallbackQuery", { callback_query_id });
-}
-
-function btn(text, callback_data) {
-  return { text, callback_data };
-}
-
-function toReplyMarkup(rows) {
-  return JSON.stringify({ inline_keyboard: rows });
-}
-
-function shortId(id) {
-  const s = String(id || "");
-  return s.length <= 10 ? s : `${s.slice(0, 4)}…${s.slice(-4)}`;
-}
-
-function escapeHtml(s) {
-  return String(s).replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
-}
-
 function helpText() {
   return (
     "<b>Помощь</b>\n\n" +
     "• /start — Home\n" +
     "• /projects — проекты\n\n" +
     "• 🤝 Договоренности — кто-что-должен по проекту\n" +
-    "• 🔎 Search — поиск\n\n" +
-    "Голос: отправьте voice/audio (нужен OPENAI_API_KEY)."
+    "• 🔎 Search — поиск\n"
   );
-}
-
-function safeJson(s) {
-  try { return JSON.parse(s); } catch { return null; }
-}
-
-function json(obj, status = 200) {
-  return new Response(JSON.stringify(obj), { status, headers: { "content-type": "application/json; charset=utf-8" } });
 }
