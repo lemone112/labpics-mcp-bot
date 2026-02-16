@@ -1,65 +1,252 @@
-# Labpics MCP Bot (Telegram + Cloudflare Workers)
+# Labpics MCP Bot — операционная система дизайн‑студии (Telegram + Cloudflare Workers + Supabase)
 
-This repo contains **two Cloudflare Workers**:  
+Этот репозиторий — backend продукта для **управления проектами дизайн‑студии** через Telegram‑бота на основе “операционной памяти” из переписок с клиентами.
 
-- `tgbot` — Telegram webhook/UI worker (Projects/Dashboard, free text, voice transcription optional).
-- `agent-gw` — Agent gateway worker (commitments extraction via LLM, Supabase writeback).
+Продукт подключается к:
+- **Chatwoot** — канал общения с клиентами (источник переписок).
+- **Supabase (Postgres + pgvector)** — база данных и векторное хранилище, где лежит история коммуникации и структура проекта.
+- **Linear** — PM/таск‑трекинг (создание задач по action items/договорённостям).
+- **Attio** — CRM (заполнение карточек клиента/компании/сделки фактами из переписок).
+- **Telegram** — единый интерфейс управления (кнопки + текст + голос).
 
-## Architecture
+> Статусы в README:
+> - ✅ реализовано
+> - 🧪 прототип / частично реализовано
+> - 🗺️ в планах
 
-Telegram -> **tgbot** (webhook) -> **Service Binding** -> **agent-gw** -> Supabase (memory/linking/commitments)
+---
 
-## Cloudflare setup
+## Зачем это нужно (проблема → решение)
 
-### 1) Deploy workers
-Create 2 workers in Cloudflare:
+В студии проектный менеджмент часто ломается из‑за:
+- договорённости “теряются” в переписках;
+- инсайты клиента не фиксируются;
+- задачи в PM появляются с задержкой;
+- CRM заполняется вручную и всегда неполная;
+- контекст размазан по людям и каналам.
 
-- `tgbot`
-- `agent-gw`
+**Labpics MCP Bot** делает переписку структурируемой:
+- извлекает **договорённости / action items**;
+- хранит “операционную память” проекта;
+- позволяет **управлять** внешними системами (CRM/PM) “по контексту”;
+- всё управление — в Telegram.
 
-Paste code from:
+---
+
+## Архитектура (3 Cloudflare Worker’а)
+
+### 1) `tgbot` — Telegram UI / контроллер
+- ✅ принимает Telegram webhook
+- ✅ показывает кнопки (Home / Projects / Dashboard / Search / Договорённости)
+- ✅ хранит состояние пользователя (активный проект, ожидаемый ввод)
+- ✅ проксирует запросы в `agent-gw` по Service Binding
+
+### 2) `agent-gw` — агент (LLM + логика)
+- ✅ принимает запросы от `tgbot`
+- ✅ определяет intent (поиск / договорённости)
+- ✅ делает простой поиск по памяти проекта
+- ✅ извлекает commitments (договорённости) и пишет в Supabase
+- 🧪 готовит основу для действий в Linear/Attio (через таблицы linking/automation), но не все действия включены в UI
+
+### 3) `cw-sync` — ingestion (Chatwoot → Supabase + embeddings)
+- ✅ забирает переписки из Chatwoot (conversations/messages)
+- ✅ пишет “сырые” данные в `cw_*` таблицы
+- ✅ режет сообщения на чанки и сохраняет в `rag_chunks`
+- ✅ считает embeddings через OpenAI и сохраняет в `rag_chunks.embedding`
+- ✅ ведёт watermark (курсор синхронизации)
+
+---
+
+## Репозиторий: что где лежит
+
+- `tgbot/src/index.js` — Telegram worker
+- `agent-gw/src/index.js` — agent gateway
+- `cw-sync/src/index.js` — Chatwoot ingestion + embeddings
+
+CI/CD:
+- `.github/workflows/deploy-dev.yml` — деплой dev
+- `.github/workflows/deploy-prod.yml` — деплой prod
+
+Wrangler configs:
+- `tgbot/wrangler.toml` — prod binding на `agent-gw`
+- `tgbot/wrangler.dev.toml` — dev binding на `agent-gw-dev`
+- `agent-gw/wrangler.toml`
+- `cw-sync/wrangler.toml`
+
+---
+
+## Supabase: как устроены данные (высокоуровнево)
+
+### Проекты и линковка систем
+- ✅ `projects` — список проектов студии.
+- ✅ `project_links` — слой связей проекта с внешними сущностями (Chatwoot/Attio/Linear).
+  
+  Пример: “этот проект ↔ эта сделка в Attio ↔ этот Linear project ↔ этот Chatwoot conversation”.
+
+### Переписки из Chatwoot
+- ✅ `cw_conversations`
+- ✅ `cw_messages`
+- ✅ `cw_contacts`
+- 🧪 `cw_webhook_events` (есть таблица, но ingestion сейчас работает polling’ом через `cw-sync`)
+
+### Векторная память / RAG
+- ✅ `rag_chunks` — чанки текста + `embedding vector` + метаданные/происхождение.
+- 🧪 embedding‑поиск через RPC `match_rag_chunks(...)` (в БД есть, но агентский поиск может быть MVP)
+
+### Договорённости / Action items
+- ✅ `project_commitments` — кто/что/когда/статус + evidence (ссылка на chunk/сообщение).
+- ✅ дедупликация (повторный запуск не должен ломать UX)
+
+### Автоматизации и аудит
+- 🧪 `automation_settings` — правила/флаги (suggestions/auto-safe)
+- 🧪 `automation_jobs` — очередь выполнения действий (задел)
+- ✅ `audit_log` — журнал действий
+
+---
+
+## Функционал продукта (что будет в продукте)
+
+Ниже — полный перечень функций, на которые рассчитана архитектура.
+
+### A) Управление проектами (Telegram)
+- ✅ Список проектов
+- ✅ Создание проекта
+- ✅ Выбор активного проекта
+- ✅ Dashboard активного проекта
+- 🗺️ Привязка/отвязка внешних сущностей (Chatwoot/Attio/Linear) к проекту через UI
+- 🗺️ Сохранение заметок/инсайтов по проекту (с evidence)
+
+### B) Поиск по перепискам (RAG)
+- ✅ Поиск по памяти проекта по текстовому запросу (MVP)
+- 🧪 Показ наиболее релевантных фрагментов с хорошим ранжированием
+- 🗺️ Полноценный embedding‑поиск через `match_rag_chunks` (вместо `ilike`)
+
+### C) Договорённости (Commitments)
+- ✅ Извлечение договорённостей из переписок (кто что должен, сроки)
+- ✅ Список договорённостей по проекту
+- ✅ Разделение по стороне: `client` / `us`
+- ✅ Статусы: `pending` / `done` / `canceled`
+- 🗺️ UI‑управление жизненным циклом: отметить done/cancel, назначить владельца, поставить due
+
+### D) PM (Linear)
+- 🧪 Создание Linear issues из commitments / action items (как сценарий уже проверялось)
+- 🗺️ Обновление статусов/назначение владельцев/сроков из Telegram
+- 🗺️ Weekly report (по проекту): что сделано / что нужно / блокеры
+
+### E) CRM (Attio)
+- 🧪 Автозаполнение Company/Person/Deal фактами из переписок (предложения изменений)
+- 🗺️ Предпросмотр изменений и подтверждение в Telegram (apply patch)
+- 🗺️ Аудит изменений с привязкой к evidence
+
+### F) Ingestion / синхронизация (Chatwoot → Supabase)
+- ✅ Регулярная синхронизация новых разговоров/сообщений
+- ✅ Watermark/курсор (чтобы не дублировать обработку)
+- ✅ Чанкинг сообщений
+- ✅ Построение embeddings пакетами
+- ✅ Ручные эндпоинты `/sync` и `/embed` (Bearer `SYNC_TOKEN`)
+
+### G) Голосовые (опционально)
+- 🧪 Транскрибация voice → текст (если включить ключ и обработчик)
+- 🧪 Прогон через `agent-gw` как обычного текста
+
+---
+
+## Быстрый старт (Cloudflare Workers)
+
+### Воркеры
+В проекте три воркера:
 - `tgbot/src/index.js`
 - `agent-gw/src/index.js`
+- `cw-sync/src/index.js`
 
-### 2) Add Service Binding (IMPORTANT)
-In **tgbot** worker settings:
+### Важное про деплой
+- ✅ деплой выполняется через GitHub Actions + `wrangler`
+- ✅ runtime vars/secrets прокидываются в Cloudflare при деплое (GitHub Environments → Cloudflare)
 
-- Bindings -> Add -> Service
-  - Name: `AGENT_GW`
-  - Service: `agent-gw`
-  - Environment: production
+---
 
-### 3) Env vars / secrets
+## Переменные окружения (Cloudflare runtime)
 
-#### tgbot
-Vars:
-- `ENV=dev`
-- `SUPABASE_URL=https://<ref>.supabase.co`
-- `TELEGRAM_WEBHOOK_PATH=/telegram/webhook/<random>`
+> В CI эти значения берутся из GitHub Environments `dev` / `production`.
 
-Secrets:
-- `TELEGRAM_BOT_TOKEN`
+### Общие (используются несколькими воркерами)
+**Vars:**
+- `SUPABASE_URL`
+- `SUPABASE_PROJECT_REF`
+- `ENV`
+
+**Secrets:**
 - `SUPABASE_SERVICE_ROLE_KEY`
-- `AGENT_GATEWAY_HMAC_SECRET`
-- `OPENAI_API_KEY` (optional, for voice transcription)
-
-#### agent-gw
-Vars:
-- `SUPABASE_URL=https://<ref>.supabase.co`
-
-Secrets:
-- `SUPABASE_SERVICE_ROLE_KEY`
-- `AGENT_GATEWAY_HMAC_SECRET`
 - `OPENAI_API_KEY`
 
-## Supabase
-This project expects existing tables:
-- `projects`, `telegram_users`, `user_project_state`, `user_input_state`
-- `rag_chunks`
-- `project_commitments`
+### `tgbot`
+**Vars:**
+- `TELEGRAM_WEBHOOK_PATH`
+- `PUBLIC_BASE_URL`
+- `AGENT_GATEWAY_URL`
+- `CHATWOOT_BASE_URL`
+- `CHATWOOT_ACCOUNT_ID`
 
-Commitments extraction writes into `project_commitments`.
+**Secrets:**
+- `TELEGRAM_BOT_TOKEN`
+- `CHATWOOT_API_TOKEN`
+- `AGENT_GATEWAY_HMAC_SECRET`
+- `COMPOSIO_API_KEY`
+- `APP_HMAC_SECRET` (если используется)
 
-## Notes
-- Commitments extraction uses OpenAI JSON mode (`response_format: json_object`).
-- Linear issue creation/writeback was prototyped via Composio toolchain in the chat; production wiring can be added to `agent-gw` next.
+Service Binding:
+- ✅ `AGENT_GW` → `agent-gw` (prod)
+- ✅ `AGENT_GW` → `agent-gw-dev` (dev)
+
+### `agent-gw`
+**Vars:**
+- `SUPABASE_URL`
+
+**Secrets:**
+- `SUPABASE_SERVICE_ROLE_KEY`
+- `OPENAI_API_KEY`
+- `AGENT_GATEWAY_HMAC_SECRET`
+- `COMPOSIO_API_KEY` (если используется)
+
+### `cw-sync`
+**Vars:**
+- `CHATWOOT_BASE_URL`
+- `CHATWOOT_ACCOUNT_ID`
+- `SYNC_TABLE` (по умолчанию `rag_chatwoot_sync_state`)
+- `RAG_TABLE` (по умолчанию `rag_chunks`)
+
+**Secrets:**
+- `CHATWOOT_API_TOKEN`
+- `SUPABASE_SERVICE_ROLE_KEY`
+- `OPENAI_API_KEY`
+- `SYNC_TOKEN` (Bearer для ручных запусков)
+
+Эндпоинты:
+- ✅ `GET /health`
+- ✅ `GET /sync` (Authorization: Bearer $SYNC_TOKEN)
+- ✅ `GET /embed` (Authorization: Bearer $SYNC_TOKEN)
+
+---
+
+## GitHub Actions деплой
+
+Workflows:
+- ✅ `Deploy (dev)` — auto на push в `main`, деплоит `tgbot-dev`, `agent-gw-dev`, `cw-sync-dev`
+- ✅ `Deploy (prod)` — manual, деплоит `tgbot`, `agent-gw`, `cw-sync`
+
+---
+
+## Безопасность
+- Не храните реальные ключи в репозитории.
+- Secrets никогда не печатаются в логах CI (но будьте осторожны с `set -x` и echo).
+- `/sync` и `/embed` защищены `SYNC_TOKEN`.
+- `agent-gw` принимает запросы только с валидной подписью HMAC.
+
+---
+
+## Roadmap (кратко)
+- 🗺️ Перевести поиск на `match_rag_chunks` (embedding search)
+- 🗺️ UI управления commitments (done/cancel/assign/due)
+- 🗺️ Авто‑patch для Attio (Company/Deal/People) с подтверждением
+- 🗺️ Weekly PM digest (Linear + commitments + chat insights)
+- 🗺️ Job queue для автоматизаций (`automation_jobs`) + безопасный режим (`auto_safe_enabled`)
