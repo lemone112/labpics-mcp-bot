@@ -1,0 +1,14 @@
+name = "tgbot-dev"
+main = "src/index.js"
+compatibility_date = "2026-02-16"
+
+# Dev binding: tgbot-dev -> agent-gw-dev
+[[services]]
+binding = "AGENT_GW"
+service = "agent-gw-dev"
+
+[vars]
+# Runtime vars should be set in Cloudflare dashboard or injected via CI.
+
+[triggers]
+crons = []
