@@ -22,21 +22,39 @@ const MOBILE_BUSINESS_ITEMS = [
   { key: "offers", label: "Офферы", href: "/control-tower/offers", icon: Sparkles },
 ];
 
+function resolveControlTowerPrefix(pathname) {
+  const path = String(pathname || "");
+  const marker = "/control-tower";
+  const index = path.indexOf(marker);
+  if (index < 0) {
+    return { inControlTower: false, prefix: "" };
+  }
+  return {
+    inControlTower: true,
+    prefix: path.slice(0, index),
+  };
+}
+
+function withPrefix(prefix, href) {
+  return prefix ? `${prefix}${href}` : href;
+}
+
 export function MobileControlTowerTabbar() {
   const pathname = usePathname();
-  const inControlTower = pathname === "/control-tower" || pathname.startsWith("/control-tower/");
+  const { inControlTower, prefix } = resolveControlTowerPrefix(pathname);
   if (!inControlTower) return null;
 
   return (
-    <nav className="fixed inset-x-0 bottom-0 z-40 border-t bg-background/95 pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden">
+    <nav className="fixed inset-x-0 bottom-0 z-[60] border-t bg-background/95 pb-[env(safe-area-inset-bottom)] shadow-lg backdrop-blur md:hidden">
       <div className="grid grid-cols-6">
         {MOBILE_BUSINESS_ITEMS.map((item) => {
           const Icon = item.icon;
-          const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
+          const targetHref = withPrefix(prefix, item.href);
+          const active = pathname === targetHref || pathname.startsWith(`${targetHref}/`);
           return (
             <Link
               key={item.key}
-              href={item.href}
+              href={targetHref}
               aria-label={item.label}
               className={cn(
                 "flex h-14 items-center justify-center text-muted-foreground transition-colors hover:text-foreground",
