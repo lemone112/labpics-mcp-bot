@@ -6,6 +6,8 @@ npm-debug.log*
 .next/
 dist/
 coverage/
+playwright-report/
+test-results/
 
 # Env files
 .env

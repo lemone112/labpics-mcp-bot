@@ -45,13 +45,14 @@ export function PageShell({ title, subtitle, children }) {
       <div className="flex min-w-0 flex-1 overflow-hidden">
         <ProjectSidebar open={projectsSidebarOpen} />
         <Sheet open={mobileProjectsSheetOpen} onOpenChange={setMobileProjectsSheetOpen}>
-          <SheetContent side="left" className="z-[70] w-[18.5rem] border-r bg-sidebar p-0 md:hidden">
+          <SheetContent data-testid="mobile-projects-sheet" side="left" className="z-[70] w-[18.5rem] border-r bg-sidebar p-0 md:hidden">
             <ProjectSidebarPanel onRequestClose={() => setMobileProjectsSheetOpen(false)} />
           </SheetContent>
         </Sheet>
         <main className="flex h-svh min-w-0 flex-1 flex-col overflow-hidden">
           <header className="sticky top-0 z-20 flex h-16 shrink-0 items-center gap-2 border-b bg-background/95 px-4 backdrop-blur">
             <Button
+              data-testid="desktop-projects-toggle"
               type="button"
               variant="ghost"
               size="icon"
@@ -61,7 +62,14 @@ export function PageShell({ title, subtitle, children }) {
               <PanelLeft className="size-4" />
               <span className="sr-only">Переключить список проектов</span>
             </Button>
-            <Button type="button" variant="ghost" size="icon" className="size-7 md:hidden" onClick={() => setMobileProjectsSheetOpen(true)}>
+            <Button
+              data-testid="mobile-projects-open"
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="size-7 md:hidden"
+              onClick={() => setMobileProjectsSheetOpen(true)}
+            >
               <PanelLeft className="size-4" />
               <span className="sr-only">Открыть список проектов</span>
             </Button>

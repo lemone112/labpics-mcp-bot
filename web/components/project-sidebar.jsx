@@ -68,7 +68,7 @@ export function ProjectSidebarPanel({ onRequestClose = null }) {
   }
 
   return (
-    <div className={cn("flex h-full flex-col p-3")}>
+    <div data-testid="project-sidebar-panel" className={cn("flex h-full flex-col p-3")}>
         <div className="space-y-2 pb-3">
           <p className="text-sm font-semibold text-sidebar-foreground">Проекты</p>
           <p className="text-xs text-sidebar-foreground/70">Выбор: {isAllProjects ? "Все проекты" : selectedProject?.name || "-"}</p>
@@ -87,6 +87,7 @@ export function ProjectSidebarPanel({ onRequestClose = null }) {
         <div className="flex-1 space-y-2 overflow-y-auto pr-1">
           {inPortfolio && canSelectAll ? (
             <button
+              data-testid="project-select-all"
               type="button"
               onClick={onSelectAllProjects}
               className={cn(
@@ -129,6 +130,7 @@ export function ProjectSidebarPanel({ onRequestClose = null }) {
               const activating = activatingProjectId === projectId;
               return (
                 <button
+                  data-testid={`project-select-${projectId}`}
                   key={projectId}
                   type="button"
                   onClick={() => onSetActiveProject(projectId)}

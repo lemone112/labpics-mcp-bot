@@ -9,7 +9,8 @@
     "design:audit": "node scripts/design-audit.mjs",
     "ui:consistency": "node scripts/ui-consistency-check.mjs",
     "ui:visual": "node scripts/visual-regression.mjs",
-    "lint": "npm run design:audit && npm run ui:consistency"
+    "lint": "npm run design:audit && npm run ui:consistency",
+    "test:e2e": "playwright test"
   },
   "dependencies": {
     "@radix-ui/react-dialog": "^1.1.15",
@@ -32,6 +33,7 @@
     "tailwindcss-animate": "^1.0.7"
   },
   "devDependencies": {
+    "@playwright/test": "^1.58.2",
     "@tailwindcss/postcss": "^4.1.14",
     "tailwindcss": "^4.1.14"
   }
