@@ -189,7 +189,7 @@ export default function ControlTowerFeaturePage() {
           footer={() => <Button onClick={() => setDrawerItem(null)}>Close</Button>}
         >
           {drawerItem ? (
-            <pre className="overflow-x-auto rounded-[var(--radius-sm)] bg-[var(--surface-soft)] p-3 text-xs">
+            <pre className="overflow-x-auto rounded-md bg-muted/50 p-3 text-xs">
               {JSON.stringify(drawerItem.payload, null, 2)}
             </pre>
           ) : null}

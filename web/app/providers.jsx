@@ -1,11 +1,11 @@
 "use client";
 
-import { HeroUIProvider } from "@heroui/react";
+import { ThemeProvider } from "@/components/theme-provider";
 
 export function Providers({ children }) {
   return (
-    <HeroUIProvider reducedMotion="user" className="min-h-screen">
+    <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
       {children}
-    </HeroUIProvider>
+    </ThemeProvider>
   );
 }

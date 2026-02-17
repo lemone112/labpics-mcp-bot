@@ -59,7 +59,7 @@ export default function JobsFeaturePage() {
             <CardTitle>Select active project first</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
-            <p className="text-sm text-[var(--text-muted)]">
+            <p className="text-sm text-muted-foreground">
               Jobs are strictly project-scoped. Select an active project before running sync or embeddings.
             </p>
             <Link href="/projects">
@@ -77,7 +77,7 @@ export default function JobsFeaturePage() {
         <Card data-motion-item>
           <CardHeader>
             <CardTitle>Run jobs</CardTitle>
-            <p className="text-sm text-[var(--text-muted)]">
+            <p className="text-sm text-muted-foreground">
               Trigger Chatwoot, Attio, Linear, embeddings and scheduler jobs with scoped telemetry.
             </p>
           </CardHeader>
@@ -167,12 +167,12 @@ export default function JobsFeaturePage() {
                     </TableCell>
                     <TableCell>{job.started_at ? new Date(job.started_at).toLocaleString() : "-"}</TableCell>
                     <TableCell>{job.processed_count}</TableCell>
-                    <TableCell className="max-w-[260px] truncate text-[var(--status-danger-fg)]">{job.error || "-"}</TableCell>
+                    <TableCell className="max-w-[260px] truncate text-destructive">{job.error || "-"}</TableCell>
                   </TableRow>
                 ))}
                 {!status?.jobs?.length ? (
                   <TableRow>
-                    <TableCell colSpan={5} className="text-[var(--text-muted)]">
+                    <TableCell colSpan={5} className="text-muted-foreground">
                       No job runs yet.
                     </TableCell>
                   </TableRow>

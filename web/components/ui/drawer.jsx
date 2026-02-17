@@ -1,31 +1,18 @@
 "use client";
 
-import { Modal, ModalBody, ModalContent, ModalFooter, ModalHeader } from "@heroui/react";
+import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 
 export function Drawer({ isOpen, onOpenChange, title, children, footer = null }) {
   return (
-    <Modal
-      isOpen={Boolean(isOpen)}
-      onOpenChange={onOpenChange}
-      placement="right"
-      size="xl"
-      scrollBehavior="inside"
-      classNames={{
-        base: "m-0 ml-auto h-full max-h-screen rounded-none border-l border-[var(--border-subtle)]",
-        body: "p-4",
-        header: "border-b border-[var(--border-subtle)] p-4",
-        footer: "border-t border-[var(--border-subtle)] p-4",
-      }}
-    >
-      <ModalContent>
-        {(onClose) => (
-          <>
-            <ModalHeader>{title}</ModalHeader>
-            <ModalBody>{children}</ModalBody>
-            {footer ? <ModalFooter>{footer({ onClose })}</ModalFooter> : null}
-          </>
-        )}
-      </ModalContent>
-    </Modal>
+    <Sheet open={Boolean(isOpen)} onOpenChange={onOpenChange}>
+      <SheetContent side="right" className="w-full sm:max-w-xl">
+        <SheetHeader>
+          <SheetTitle>{title}</SheetTitle>
+          <SheetDescription className="sr-only">{title}</SheetDescription>
+        </SheetHeader>
+        <div className="mt-4 max-h-[calc(100vh-10rem)] overflow-y-auto pr-1">{children}</div>
+        {footer ? <SheetFooter>{footer({ onClose: () => onOpenChange?.(false) })}</SheetFooter> : null}
+      </SheetContent>
+    </Sheet>
   );
 }

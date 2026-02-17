@@ -10,23 +10,23 @@ export function InboxList({ items = [], className, onSelect = null }) {
         <button
           key={item.id}
           type="button"
-          className="w-full rounded-[var(--radius-sm)] border border-[var(--border-subtle)] bg-white p-2 text-left hover:bg-[var(--surface-soft)]"
+          className="w-full rounded-md border bg-card p-3 text-left transition-colors hover:bg-accent/40"
           onClick={() => onSelect?.(item)}
         >
           <div className="flex items-start justify-between gap-2">
             <div>
-              <div className="text-sm font-medium text-[var(--text-strong)]">{item.title}</div>
+              <div className="text-sm font-medium">{item.title}</div>
               {item.snippet ? (
-                <div className="mt-1 max-h-10 overflow-hidden text-xs text-[var(--text-muted)]">{item.snippet}</div>
+                <div className="mt-1 max-h-10 overflow-hidden text-xs text-muted-foreground">{item.snippet}</div>
               ) : null}
             </div>
             <StatusChip status={item.status || "pending"} />
           </div>
-          <div className="mt-1 text-xs text-[var(--text-subtle)]">{item.meta || ""}</div>
+          <div className="mt-1 text-xs text-muted-foreground">{item.meta || ""}</div>
         </button>
       ))}
       {!items.length ? (
-        <div className="rounded-[var(--radius-sm)] border border-dashed border-[var(--border-subtle)] p-2 text-xs text-[var(--text-muted)]">
+        <div className="rounded-md border border-dashed p-2 text-xs text-muted-foreground">
           Inbox is empty
         </div>
       ) : null}

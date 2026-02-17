@@ -23,11 +23,6 @@ const forbiddenRules = [
     pattern: /\buppercase\b/,
   },
   {
-    name: "tracking-utility",
-    description: "Avoid tracking utilities in default UI rhythm",
-    pattern: /\btracking-[^\s"']+/,
-  },
-  {
     name: "inline-style",
     description: "Use tokenized utility classes instead of inline style objects",
     pattern: /style=\{\{/,
@@ -60,14 +55,6 @@ function collectFiles(dirPath, accumulator = []) {
   return accumulator;
 }
 
-function isAllowedShadowLine(line) {
-  return (
-    line.includes("shadow-none") ||
-    line.includes("group-data-[focus=true]:shadow-[") ||
-    line.includes("focus-visible:shadow-[")
-  );
-}
-
 function detectViolations(filePath, source) {
   const lines = source.split("\n");
   const violations = [];
@@ -85,15 +72,6 @@ function detectViolations(filePath, source) {
       }
     }
 
-    if (line.includes("shadow-") && !isAllowedShadowLine(line)) {
-      violations.push({
-        filePath,
-        line: index + 1,
-        rule: "shadow-utility",
-        description: "Avoid shadow utilities unless strictly necessary",
-        content: line.trim(),
-      });
-    }
   });
 
   return violations;

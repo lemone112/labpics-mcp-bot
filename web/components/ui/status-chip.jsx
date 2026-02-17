@@ -1,135 +1,89 @@
 "use client";
 
-import { Chip } from "@heroui/react";
-
 import { cn } from "@/lib/utils";
+import { Badge } from "@/components/ui/badge";
 
 const statusMap = {
   pending: {
-    color: "default",
     label: "Pending",
-    className:
-      "border-[var(--status-warning-border)] bg-[var(--status-warning-bg)] text-[var(--status-warning-fg)]",
+    className: "border-secondary bg-secondary/40 text-secondary-foreground",
   },
   processing: {
-    color: "default",
     label: "Processing",
-    className:
-      "border-[var(--status-info-border)] bg-[var(--status-info-bg)] text-[var(--status-info-fg)]",
+    className: "border-primary/30 bg-primary/10 text-primary",
   },
   ready: {
-    color: "default",
     label: "Ready",
-    className:
-      "border-[var(--status-success-border)] bg-[var(--status-success-bg)] text-[var(--status-success-fg)]",
+    className: "border-primary/30 bg-primary/10 text-primary",
   },
   completed: {
-    color: "default",
     label: "Completed",
-    className:
-      "border-[var(--status-success-border)] bg-[var(--status-success-bg)] text-[var(--status-success-fg)]",
+    className: "border-primary/30 bg-primary/10 text-primary",
   },
   failed: {
-    color: "default",
     label: "Failed",
-    className:
-      "border-[var(--status-danger-border)] bg-[var(--status-danger-bg)] text-[var(--status-danger-fg)]",
+    className: "border-destructive/40 bg-destructive/10 text-destructive",
   },
   running: {
-    color: "default",
     label: "Running",
-    className:
-      "border-[var(--status-info-border)] bg-[var(--status-info-bg)] text-[var(--status-info-fg)]",
+    className: "border-primary/30 bg-primary/10 text-primary",
   },
   proposed: {
-    color: "default",
     label: "Proposed",
-    className:
-      "border-[var(--status-info-border)] bg-[var(--status-info-bg)] text-[var(--status-info-fg)]",
+    className: "border-primary/30 bg-primary/10 text-primary",
   },
   accepted: {
-    color: "default",
     label: "Accepted",
-    className:
-      "border-[var(--status-success-border)] bg-[var(--status-success-bg)] text-[var(--status-success-fg)]",
+    className: "border-primary/30 bg-primary/10 text-primary",
   },
   dismissed: {
-    color: "default",
     label: "Dismissed",
-    className:
-      "border-[var(--border-subtle)] bg-[var(--surface-soft)] text-[var(--text-muted)]",
+    className: "border-border bg-muted text-muted-foreground",
   },
   done: {
-    color: "default",
     label: "Done",
-    className:
-      "border-[var(--status-success-border)] bg-[var(--status-success-bg)] text-[var(--status-success-fg)]",
+    className: "border-primary/30 bg-primary/10 text-primary",
   },
   cancelled: {
-    color: "default",
     label: "Cancelled",
-    className:
-      "border-[var(--border-subtle)] bg-[var(--surface-soft)] text-[var(--text-muted)]",
+    className: "border-border bg-muted text-muted-foreground",
   },
   draft: {
-    color: "default",
     label: "Draft",
-    className:
-      "border-[var(--status-warning-border)] bg-[var(--status-warning-bg)] text-[var(--status-warning-fg)]",
+    className: "border-secondary bg-secondary/40 text-secondary-foreground",
   },
   approved: {
-    color: "default",
     label: "Approved",
-    className:
-      "border-[var(--status-info-border)] bg-[var(--status-info-bg)] text-[var(--status-info-fg)]",
+    className: "border-primary/30 bg-primary/10 text-primary",
   },
   sent: {
-    color: "default",
     label: "Sent",
-    className:
-      "border-[var(--status-success-border)] bg-[var(--status-success-bg)] text-[var(--status-success-fg)]",
+    className: "border-primary/30 bg-primary/10 text-primary",
   },
   blocked_opt_out: {
-    color: "default",
     label: "Blocked (Opt-out)",
-    className:
-      "border-[var(--status-danger-border)] bg-[var(--status-danger-bg)] text-[var(--status-danger-fg)]",
+    className: "border-destructive/40 bg-destructive/10 text-destructive",
   },
   blocked_stop_on_reply: {
-    color: "default",
     label: "Blocked (Reply)",
-    className:
-      "border-[var(--status-danger-border)] bg-[var(--status-danger-bg)] text-[var(--status-danger-fg)]",
+    className: "border-destructive/40 bg-destructive/10 text-destructive",
   },
   blocked_frequency_cap: {
-    color: "default",
     label: "Blocked (Cap)",
-    className:
-      "border-[var(--status-warning-border)] bg-[var(--status-warning-bg)] text-[var(--status-warning-fg)]",
+    className: "border-secondary bg-secondary/40 text-secondary-foreground",
   },
 };
 
 export function StatusChip({ status, className }) {
   const normalized = String(status || "").toLowerCase();
   const chip = statusMap[normalized] || {
-    color: "default",
     label: status || "Unknown",
-    className: "border-[var(--border-subtle)] bg-[var(--surface-soft)] text-[var(--text-primary)]",
+    className: "border-border bg-muted text-foreground",
   };
 
   return (
-    <Chip
-      size="sm"
-      radius="sm"
-      variant="flat"
-      color={chip.color}
-      className={cn(
-        "border text-xs font-medium",
-        chip.className,
-        className
-      )}
-    >
+    <Badge variant="outline" className={cn("text-xs font-medium", chip.className, className)}>
       {chip.label}
-    </Chip>
+    </Badge>
   );
 }

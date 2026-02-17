@@ -9,6 +9,7 @@ import { cn } from "@/lib/utils";
 import { apiFetch } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { MOTION, motionEnabled } from "@/lib/motion";
+import { ThemeToggle } from "@/components/theme-toggle";
 
 const items = [
   { href: "/projects", label: "Projects" },
@@ -58,13 +59,16 @@ export function AppSidebar() {
   }
 
   return (
-    <aside className="flex w-full max-w-56 shrink-0 flex-col border-r border-[var(--border-subtle)] bg-[var(--surface-2)] p-3">
-      <div className="mb-4 border-b border-[var(--border-subtle)] px-2 pb-3">
-        <h1 className="text-sm font-semibold text-[var(--text-strong)]">Labpics</h1>
-        <p className="mt-0.5 text-xs text-[var(--text-muted)]">Operations workspace</p>
+    <aside className="flex w-full max-w-60 shrink-0 flex-col border-r bg-card/50 p-3">
+      <div className="mb-4 border-b px-2 pb-3">
+        <div className="flex items-center justify-between gap-2">
+          <h1 className="text-sm font-semibold">Labpics</h1>
+          <ThemeToggle />
+        </div>
+        <p className="mt-0.5 text-xs text-muted-foreground">Operations workspace</p>
       </div>
 
-      <p className="mb-2 px-2 text-xs text-[var(--text-subtle)]">Navigation</p>
+      <p className="mb-2 px-2 text-xs text-muted-foreground">Navigation</p>
       <nav ref={navRef} className="space-y-1.5">
         {items.map((item) => {
           const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
@@ -74,10 +78,10 @@ export function AppSidebar() {
               href={item.href}
               data-nav-item
               className={cn(
-                "block rounded-[var(--radius-sm)] border px-2.5 py-1.5 text-sm font-medium transition-colors",
+                "block rounded-md border px-2.5 py-1.5 text-sm font-medium transition-colors",
                 active
-                  ? "border-[var(--border-subtle)] bg-[var(--surface-1)] text-[var(--text-strong)]"
-                  : "border-transparent text-[var(--text-primary)] hover:border-[var(--border-subtle)] hover:bg-[var(--surface-1)]"
+                  ? "border-border bg-background text-foreground shadow-sm"
+                  : "border-transparent text-muted-foreground hover:border-border hover:bg-background hover:text-foreground"
               )}
             >
               {item.label}
@@ -86,7 +90,7 @@ export function AppSidebar() {
         })}
       </nav>
 
-      <div className="mt-auto border-t border-[var(--border-subtle)] px-2 pt-3">
+      <div className="mt-auto border-t px-2 pt-3">
         <Button variant="secondary" className="w-full justify-start" onClick={onLogout}>
           Logout
         </Button>

@@ -13,6 +13,7 @@ import { Kanban } from "@/components/ui/kanban";
 import { Filters } from "@/components/ui/filters";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { apiFetch } from "@/lib/api";
 import { useAuthGuard } from "@/hooks/use-auth-guard";
 
@@ -184,18 +185,18 @@ export default function CrmFeaturePage() {
                 placeholder="Opportunity title"
                 className="md:max-w-sm"
               />
-              <select
-                value={newOpportunityAccountId}
-                onChange={(event) => setNewOpportunityAccountId(event.target.value)}
-                className="h-9 rounded-[var(--radius-md)] border border-[var(--border-subtle)] bg-white px-2 text-sm"
-              >
-                <option value="">Select account</option>
-                {accounts.map((account) => (
-                  <option key={account.id} value={account.id}>
-                    {account.name}
-                  </option>
-                ))}
-              </select>
+              <Select value={newOpportunityAccountId} onValueChange={setNewOpportunityAccountId}>
+                <SelectTrigger className="md:max-w-sm">
+                  <SelectValue placeholder="Select account" />
+                </SelectTrigger>
+                <SelectContent>
+                  {accounts.map((account) => (
+                    <SelectItem key={account.id} value={account.id}>
+                      {account.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
               <Button onClick={createOpportunity}>Create opportunity</Button>
             </div>
           </CardContent>

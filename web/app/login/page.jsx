@@ -37,7 +37,7 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-[var(--app-bg)] p-4">
+    <div className="flex min-h-screen items-center justify-center bg-background p-4">
       <MotionGroup className="w-full max-w-md">
         <Card data-motion-item className="w-full">
           <CardHeader>
@@ -47,12 +47,12 @@ export default function LoginPage() {
           <CardContent>
             <form className="space-y-4" onSubmit={onSubmit}>
               <div className="space-y-1">
-                <label className="text-sm text-[var(--text-muted)]">Username</label>
+                <label className="text-sm text-muted-foreground">Username</label>
                 <Input value={username} onChange={(e) => setUsername(e.target.value)} required />
               </div>
 
               <div className="space-y-1">
-                <label className="text-sm text-[var(--text-muted)]">Password</label>
+                <label className="text-sm text-muted-foreground">Password</label>
                 <Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required />
               </div>
 
