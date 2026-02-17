@@ -102,6 +102,28 @@ export function computeRiskForecastsFromInputs({ signals = [], scores = [], simi
     scope_risk: clamp(0.48 * scopeNorm + 0.18 * stageNorm + 0.14 * waitingNorm + 0.2 * riskScoreNorm, 0, 1),
   };
 
+  if (signalValue(signalMap, "waiting_on_client_days") >= 4) {
+    baselines.client_risk = Math.max(baselines.client_risk, 0.62);
+  }
+  if (signalValue(signalMap, "sentiment_trend") <= -0.25) {
+    baselines.client_risk = Math.max(baselines.client_risk, 0.55);
+  }
+  if (
+    signalValue(signalMap, "blockers_age") >= 5 &&
+    Number(signalMap.blockers_age?.details?.open_blockers || 0) >= 3
+  ) {
+    baselines.delivery_risk = Math.max(baselines.delivery_risk, 0.62);
+  }
+  if (signalValue(signalMap, "stage_overdue") >= 3) {
+    baselines.delivery_risk = Math.max(baselines.delivery_risk, 0.58);
+  }
+  if (signalValue(signalMap, "budget_burn_rate") >= 1.2 || signalValue(signalMap, "margin_risk") >= 0.4) {
+    baselines.finance_risk = Math.max(baselines.finance_risk, 0.62);
+  }
+  if (signalValue(signalMap, "scope_creep_rate") >= 0.35) {
+    baselines.scope_risk = Math.max(baselines.scope_risk, 0.6);
+  }
+
   const riskConfigs = {
     delivery_risk: [
       { key: "blockers_age", value: blockersNorm },
@@ -135,9 +157,11 @@ export function computeRiskForecastsFromInputs({ signals = [], scores = [], simi
   for (const riskType of Object.keys(baselines)) {
     const baseline7d = baselines[riskType];
     const similarCaseScore = extractSimilarOutcomeScore(similarCases, riskType);
-    const probability7d = clamp(0.67 * baseline7d + 0.33 * similarCaseScore, 0, 1);
-    const probability14d = clamp(probability7d + 0.12 * (1 - probability7d), 0, 1);
-    const probability30d = clamp(probability14d + 0.2 * (1 - probability14d), 0, 1);
+    const probability7d = clamp(0.75 * baseline7d + 0.25 * similarCaseScore, 0, 1);
+    const growth14 = 0.12 + 0.18 * similarCaseScore;
+    const growth30 = 0.18 + 0.22 * similarCaseScore;
+    const probability14d = clamp(probability7d + growth14 * (1 - probability7d), 0, 1);
+    const probability30d = clamp(probability14d + growth30 * (1 - probability14d), 0, 1);
     const expectedTime = probability30d < 0.05 ? 60 : clamp((1 - probability30d) * 40 + 2, 2, 60);
     const evidence = collectEvidenceRefs(
       [signalMap.waiting_on_client_days, signalMap.stage_overdue, signalMap.blockers_age, signalMap.scope_creep_rate, signalMap.margin_risk, signalMap.budget_burn_rate, signalMap.sentiment_trend].filter(Boolean),
