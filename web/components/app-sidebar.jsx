@@ -1,90 +1,53 @@
 "use client";
 
-import { useEffect, useRef } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
+  BarChart3,
   BriefcaseBusiness,
+  FileText,
+  FolderKanban,
   LayoutDashboard,
+  ListChecks,
   LogOut,
-  Sparkles,
+  Moon,
+  Newspaper,
+  Radar,
+  Search,
+  Sun,
 } from "lucide-react";
-import { animate, stagger } from "animejs";
+import { useTheme } from "next-themes";
 
 import { apiFetch } from "@/lib/api";
-import { MOTION, motionEnabled } from "@/lib/motion";
+import { Switch } from "@/components/ui/switch";
 import {
   Sidebar,
   SidebarContent,
   SidebarFooter,
   SidebarGroup,
-  SidebarGroupLabel,
   SidebarHeader,
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
-  SidebarMenuSub,
-  SidebarMenuSubButton,
-  SidebarMenuSubItem,
 } from "@/components/ui/sidebar";
 
-const NAV_SECTIONS = [
-  {
-    title: "Workspace",
-    href: "/control-tower",
-    icon: LayoutDashboard,
-    items: [
-      { title: "Control Tower", href: "/control-tower" },
-      { title: "Projects", href: "/projects" },
-      { title: "Jobs", href: "/jobs" },
-      { title: "Search", href: "/search" },
-    ],
-  },
-  {
-    title: "Revenue",
-    href: "/crm",
-    icon: BriefcaseBusiness,
-    items: [
-      { title: "CRM", href: "/crm" },
-      { title: "Signals", href: "/signals" },
-      { title: "Offers", href: "/offers" },
-    ],
-  },
-  {
-    title: "Insights",
-    href: "/digests",
-    icon: Sparkles,
-    items: [
-      { title: "Digests", href: "/digests" },
-      { title: "Analytics", href: "/analytics" },
-    ],
-  },
+const NAV_ITEMS = [
+  { href: "/control-tower", label: "Центр управления", icon: LayoutDashboard },
+  { href: "/projects", label: "Проекты", icon: FolderKanban },
+  { href: "/jobs", label: "Задачи", icon: ListChecks },
+  { href: "/search", label: "Поиск", icon: Search },
+  { href: "/crm", label: "CRM", icon: BriefcaseBusiness },
+  { href: "/signals", label: "Сигналы", icon: Radar },
+  { href: "/offers", label: "Офферы", icon: FileText },
+  { href: "/digests", label: "Дайджесты", icon: Newspaper },
+  { href: "/analytics", label: "Аналитика", icon: BarChart3 },
 ];
 
 export function AppSidebar(props) {
   const pathname = usePathname();
   const router = useRouter();
-  const navRef = useRef(null);
-
-  useEffect(() => {
-    const nav = navRef.current;
-    if (!nav || !motionEnabled()) return undefined;
-
-    const targets = nav.querySelectorAll("[data-nav-item]");
-    if (!targets.length) return undefined;
-
-    const animation = animate(targets, {
-      opacity: [0, 1],
-      translateX: [-8, 0],
-      delay: stagger(MOTION.stagger.fast),
-      duration: MOTION.durations.base,
-      ease: MOTION.easing.standard,
-    });
-
-    return () => {
-      animation.cancel();
-    };
-  }, [pathname]);
+  const { theme, resolvedTheme, setTheme } = useTheme();
+  const darkEnabled = theme === "dark" || (theme === "system" && resolvedTheme === "dark");
 
   async function onLogout() {
     try {
@@ -107,7 +70,7 @@ export function AppSidebar(props) {
                 </div>
                 <div className="flex flex-col gap-0.5 leading-none">
                   <span className="font-semibold">Labpics</span>
-                  <span className="text-xs text-sidebar-foreground/70">Operations workspace</span>
+                  <span className="text-xs text-sidebar-foreground/70">Операционная панель</span>
                 </div>
               </Link>
             </SidebarMenuButton>
@@ -117,32 +80,18 @@ export function AppSidebar(props) {
 
       <SidebarContent>
         <SidebarGroup>
-          <SidebarGroupLabel>Navigation</SidebarGroupLabel>
-          <SidebarMenu ref={navRef} className="gap-2">
-            {NAV_SECTIONS.map((section) => {
-              const Icon = section.icon;
-              const sectionActive = section.items.some((item) => pathname === item.href || pathname.startsWith(`${item.href}/`));
+          <SidebarMenu className="gap-1">
+            {NAV_ITEMS.map((item) => {
+              const Icon = item.icon;
+              const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
               return (
-                <SidebarMenuItem key={section.title}>
-                  <SidebarMenuButton asChild isActive={sectionActive} data-nav-item>
-                    <Link href={section.href} className="font-medium">
+                <SidebarMenuItem key={item.href}>
+                  <SidebarMenuButton asChild isActive={active}>
+                    <Link href={item.href}>
                       <Icon />
-                      <span>{section.title}</span>
+                      <span>{item.label}</span>
                     </Link>
                   </SidebarMenuButton>
-                  <SidebarMenuSub className="ml-0 border-l-0 px-1.5">
-                    {section.items.map((item) => (
-                      <SidebarMenuSubItem key={item.href}>
-                        <SidebarMenuSubButton
-                          asChild
-                          isActive={pathname === item.href || pathname.startsWith(`${item.href}/`)}
-                          data-nav-item
-                        >
-                          <Link href={item.href}>{item.title}</Link>
-                        </SidebarMenuSubButton>
-                      </SidebarMenuSubItem>
-                    ))}
-                  </SidebarMenuSub>
                 </SidebarMenuItem>
               );
             })}
@@ -153,9 +102,23 @@ export function AppSidebar(props) {
       <SidebarFooter>
         <SidebarMenu>
           <SidebarMenuItem>
+            <div className="flex items-center justify-between rounded-md border border-sidebar-border/70 px-2 py-1.5">
+              <div className="flex items-center gap-2 text-xs text-sidebar-foreground/90">
+                {darkEnabled ? <Moon className="size-3.5" /> : <Sun className="size-3.5" />}
+                <span>Тёмная тема</span>
+              </div>
+              <Switch
+                checked={darkEnabled}
+                onCheckedChange={(checked) => setTheme(checked ? "dark" : "light")}
+                aria-label="Переключить тему"
+              />
+            </div>
+            <p className="px-1 pt-1 text-[11px] text-sidebar-foreground/70">По умолчанию используется системная тема.</p>
+          </SidebarMenuItem>
+          <SidebarMenuItem>
             <SidebarMenuButton onClick={onLogout}>
               <LogOut />
-              <span>Logout</span>
+              <span>Выйти</span>
             </SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>
