@@ -55,7 +55,7 @@ export function AppSidebar(props) {
   }
 
   return (
-    <Sidebar collapsible="icon" variant="floating" {...props}>
+    <Sidebar variant="floating" {...props}>
       <SidebarHeader>
         <SidebarMenu>
           <SidebarMenuItem>
@@ -83,7 +83,7 @@ export function AppSidebar(props) {
               const Icon = item.icon;
               return (
                 <SidebarMenuItem key={item.href}>
-                  <SidebarMenuButton asChild isActive={active} tooltip={item.label}>
+                  <SidebarMenuButton asChild isActive={active}>
                     <Link href={item.href}>
                       <Icon />
                       <span>{item.label}</span>
@@ -105,7 +105,7 @@ export function AppSidebar(props) {
             </div>
           </SidebarMenuItem>
           <SidebarMenuItem>
-            <SidebarMenuButton onClick={onLogout} tooltip="Logout">
+            <SidebarMenuButton onClick={onLogout}>
               <ExitIcon />
               <span>Logout</span>
             </SidebarMenuButton>
