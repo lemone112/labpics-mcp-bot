@@ -44,6 +44,10 @@ jobs:
         working-directory: web
         run: npm run build
 
+      - name: Install Playwright browsers
+        working-directory: web
+        run: npx playwright install --with-deps chromium
+
       - name: Web mocked e2e
         working-directory: web
         run: npm run test:e2e
