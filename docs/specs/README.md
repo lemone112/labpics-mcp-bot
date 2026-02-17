@@ -1,33 +1,33 @@
-# Specs (`docs/specs/`)
+# Спеки (`docs/specs/`)
 
-This folder contains **behavior specs** (semantic requirements): what must be true, what users experience, invariants, and acceptance criteria.
+Эта папка — **поведенческие спеки** (семантические требования): что должно быть истинно, как ведёт себя система, инварианты и acceptance criteria.
 
-- Canonical terms: [`docs/glossary.md`](../glossary.md)
-- Writing rules: [`docs/style-guide.md`](../style-guide.md)
-- MVP vs roadmap guardrails: [`docs/mvp-vs-roadmap.md`](../mvp-vs-roadmap.md)
+- Канонические термины: [`docs/glossary.md`](../glossary.md)
+- Правила оформления: [`docs/style-guide.md`](../style-guide.md)
+- Границы MVP vs Roadmap: [`docs/mvp-vs-roadmap.md`](../mvp-vs-roadmap.md)
 
-## Invariants (non-negotiable)
+## Инварианты (не обсуждаются)
 
-1. **No cross-project mixing.** The system must never read/write another project's data.
-2. **Evidence-first.** Any valuable derived entity must reference primary sources.
-3. **Safe-by-default.** If binding is ambiguous, do not auto-act.
-4. **Idempotency.** Re-running jobs must not create duplicates or junk.
-5. **Explainability.** Outputs/actions must show “why” + “based on what”.
+1. **Никакого смешивания проектов.** Система никогда не читает/пишет данные другого проекта.
+2. **Evidence-first.** Любая ценная производная сущность должна ссылаться на первоисточники.
+3. **Safe-by-default.** Если привязка неоднозначна — система не действует автоматически.
+4. **Идемпотентность.** Повторные прогоны джоб не создают дубликаты или мусор.
+5. **Объяснимость.** Любое действие/вывод должны показывать «почему» и «на основании чего».
 
-## How to use specs
+## Как пользоваться спеками
 
-- One spec = one problem and one outcome.
-- Prefer explicit **acceptance criteria**.
-- If something is not in MVP, mark it as **Roadmap** and link to `mvp-vs-roadmap.md`.
+- Одна спека = одна проблема и один измеримый результат.
+- Предпочитай явные **критерии приёмки** (acceptance criteria).
+- Если требование не входит в MVP — помечай как **Roadmap** и ссылайся на `mvp-vs-roadmap.md`.
 
-## Recommended spec structure
+## Рекомендуемая структура спеки
 
-- Status (Draft/Ready/Implemented)
-- Goal
-- Non-goals
-- Definitions (link glossary entries)
-- UX / behavior
-- Data and scope rules (project-scoped)
+- Статус (Draft/Ready/Implemented)
+- Цель
+- Не-цели
+- Определения (со ссылками на глоссарий)
+- UX / поведение
+- Правила данных и скоупа (project-scoped)
 - Failure modes
-- Operational notes
-- Acceptance criteria
+- Операционные заметки
+- Критерии приёмки
