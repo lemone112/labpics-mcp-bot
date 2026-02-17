@@ -75,8 +75,8 @@ Target qualities inspired by Linear / Attio / Plane / ClickUp:
 
 1. **Search scoping risk (critical):** backend `POST /search` is not project-scoped yet.
    - **Resolved in iteration 2:** `rag_chunks` received `project_id`, API now enforces `active_project_id` and scoped search.
-2. **Roadmap entities missing API:** commitments/risks/digest/settings links are not backed by server endpoints yet.
-   - Iteration 1 should expose these sections as roadmap-ready UI, not fake completion.
+2. **Roadmap entities missing API:** risks/digest/settings links are not fully backed by server endpoints yet.
+   - Iteration 2 connected `commitments` with project-scoped API + DB persistence.
 3. **Linking UX incomplete:** no full project-source linking editor in backend yet (spec 0006).
 4. **Audit/privacy surface incomplete:** UI should avoid raw full-text dumps in list views by default (spec 0008).
 

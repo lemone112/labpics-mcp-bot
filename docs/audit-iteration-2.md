@@ -49,4 +49,4 @@ Date: 2026-02-17
 
 1. Chatwoot source-link mapping (`project ↔ inbox`) is not implemented yet (spec 0006).
 2. Legacy unscoped rows (`rag_chunks.project_id IS NULL`) remain and should be phased out with controlled migration policy.
-3. Commitments/Risks/Digest pages are still UI scaffold and need real API + persistence layer.
+3. Risks/Digest pages are still UI scaffold and need real API + persistence layer.

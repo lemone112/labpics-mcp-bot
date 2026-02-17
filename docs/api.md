@@ -17,6 +17,9 @@ Project-scoped endpoints:
 - `GET /contacts`
 - `GET /conversations`
 - `GET /messages`
+- `GET /commitments`
+- `POST /commitments`
+- `PATCH /commitments/:id`
 - `POST /jobs/chatwoot/sync`
 - `POST /jobs/embeddings/run`
 - `GET /jobs/status`
@@ -67,6 +70,36 @@ Body:
 Auth required.
 
 Sets `sessions.active_project_id`.
+
+## Commitments
+
+### `GET /commitments`
+Auth required + active project required.
+
+Query:
+- `status` (optional: `active|proposed|closed|done|cancelled`)
+- `limit` (optional, default 100)
+
+Returns project-scoped commitments.
+
+### `POST /commitments`
+Auth required + active project required.
+
+Body:
+- `title` (required, 3..300 chars)
+- `owner` (optional: `studio|client|unknown`)
+- `due_at` (optional ISO date)
+- `status` (optional)
+- `confidence` (optional: `high|medium|low`)
+- `summary` (optional)
+- `evidence` (optional string array)
+
+Creates commitment for active project.
+
+### `PATCH /commitments/:id`
+Auth required + active project required.
+
+Partial update for commitment in active project.
 
 ## Jobs
 

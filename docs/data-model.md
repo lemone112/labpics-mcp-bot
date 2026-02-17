@@ -115,6 +115,23 @@ Columns:
 - `error text`
 - `meta jsonb not null default '{}'::jsonb`
 
+### `commitments`
+Project-scoped commitments with evidence references.
+
+Columns:
+- `id uuid primary key default gen_random_uuid()`
+- `project_id uuid not null references projects(id) on delete cascade`
+- `title text not null`
+- `owner text not null` (`studio|client|unknown`)
+- `due_at timestamptz`
+- `status text not null` (`active|proposed|closed|done|cancelled`)
+- `confidence text not null` (`high|medium|low`)
+- `summary text`
+- `evidence jsonb not null default '[]'::jsonb`
+- `source text not null default 'manual'`
+- `created_at timestamptz not null default now()`
+- `updated_at timestamptz not null default now()`
+
 ## Indexes
 Created in `0002_indexes.sql`:
 
@@ -133,7 +150,6 @@ Additional indexes are created by later migrations for:
 ## Planned schema additions
 For product roadmap (commitments/risks/digests), extend schema with:
 
-- `commitments` (evidence-backed items)
 - `risks`
 - `digests`
 - `agent_runs` (audit + privacy retention)

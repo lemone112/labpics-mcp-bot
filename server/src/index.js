@@ -40,6 +40,47 @@ function toLimit(value, fallback = 100, max = 500) {
   return Math.max(1, Math.min(parsed, max));
 }
 
+const COMMITMENT_STATUSES = new Set(["active", "proposed", "closed", "done", "cancelled"]);
+const COMMITMENT_OWNERS = new Set(["studio", "client", "unknown"]);
+const COMMITMENT_CONFIDENCE = new Set(["high", "medium", "low"]);
+
+function toTimestampOrNull(value) {
+  if (value == null || value === "") return null;
+  const date = new Date(String(value));
+  if (Number.isNaN(date.getTime())) return null;
+  return date.toISOString();
+}
+
+function toCommitmentStatus(value, fallback = "proposed") {
+  const normalized = String(value || "").trim().toLowerCase();
+  if (!normalized) return fallback;
+  return COMMITMENT_STATUSES.has(normalized) ? normalized : null;
+}
+
+function toCommitmentOwner(value, fallback = "unknown") {
+  const normalized = String(value || "").trim().toLowerCase();
+  if (!normalized) return fallback;
+  return COMMITMENT_OWNERS.has(normalized) ? normalized : null;
+}
+
+function toCommitmentConfidence(value, fallback = "medium") {
+  const normalized = String(value || "").trim().toLowerCase();
+  if (!normalized) return fallback;
+  return COMMITMENT_CONFIDENCE.has(normalized) ? normalized : null;
+}
+
+function toEvidenceList(value, maxItems = 20) {
+  if (!Array.isArray(value)) return [];
+  const result = [];
+  for (const item of value) {
+    const normalized = String(item || "").trim();
+    if (!normalized) continue;
+    result.push(normalized.slice(0, 250));
+    if (result.length >= maxItems) break;
+  }
+  return result;
+}
+
 function requireActiveProject(request, reply) {
   const projectId = String(request.auth?.active_project_id || "").trim();
   if (!projectId) {
@@ -218,6 +259,218 @@ async function main() {
 
     await pool.query("UPDATE sessions SET active_project_id = $2, last_seen_at = now() WHERE session_id = $1", [sid, projectId]);
     return { ok: true, active_project_id: projectId, project: project.rows[0], request_id: request.requestId };
+  });
+
+  app.get("/commitments", async (request, reply) => {
+    const projectId = requireActiveProject(request, reply);
+    if (!projectId) return;
+
+    const limit = toLimit(request.query?.limit, 100, 500);
+    const statusRaw = String(request.query?.status || "").trim().toLowerCase();
+    const statusFilter = statusRaw ? toCommitmentStatus(statusRaw, null) : null;
+    if (statusRaw && !statusFilter) {
+      return reply.code(400).send({ ok: false, error: "invalid_status", request_id: request.requestId });
+    }
+
+    const { rows } = await pool.query(
+      `
+        SELECT
+          id,
+          project_id,
+          title,
+          owner,
+          due_at,
+          status,
+          confidence,
+          summary,
+          evidence,
+          source,
+          created_at,
+          updated_at
+        FROM commitments
+        WHERE project_id = $1::uuid
+          AND ($2::text IS NULL OR status = $2::text)
+        ORDER BY
+          CASE status
+            WHEN 'active' THEN 0
+            WHEN 'proposed' THEN 1
+            WHEN 'done' THEN 2
+            WHEN 'closed' THEN 3
+            ELSE 4
+          END,
+          due_at ASC NULLS LAST,
+          updated_at DESC
+        LIMIT $3
+      `,
+      [projectId, statusFilter, limit]
+    );
+
+    return { ok: true, commitments: rows, request_id: request.requestId };
+  });
+
+  app.post("/commitments", async (request, reply) => {
+    const projectId = requireActiveProject(request, reply);
+    if (!projectId) return;
+
+    const body = request.body && typeof request.body === "object" ? request.body : {};
+    const title = String(body?.title || "").trim();
+    if (title.length < 3 || title.length > 300) {
+      return reply.code(400).send({ ok: false, error: "invalid_title", request_id: request.requestId });
+    }
+
+    const owner = toCommitmentOwner(body?.owner, "unknown");
+    const status = toCommitmentStatus(body?.status, "proposed");
+    const confidence = toCommitmentConfidence(body?.confidence, "medium");
+    if (!owner) return reply.code(400).send({ ok: false, error: "invalid_owner", request_id: request.requestId });
+    if (!status) return reply.code(400).send({ ok: false, error: "invalid_status", request_id: request.requestId });
+    if (!confidence) return reply.code(400).send({ ok: false, error: "invalid_confidence", request_id: request.requestId });
+
+    const dueAtProvided = Object.prototype.hasOwnProperty.call(body, "due_at");
+    const dueAt = toTimestampOrNull(body?.due_at);
+    if (dueAtProvided && body?.due_at && !dueAt) {
+      return reply.code(400).send({ ok: false, error: "invalid_due_at", request_id: request.requestId });
+    }
+
+    if (Object.prototype.hasOwnProperty.call(body, "evidence") && !Array.isArray(body?.evidence)) {
+      return reply.code(400).send({ ok: false, error: "invalid_evidence", request_id: request.requestId });
+    }
+
+    const summaryRaw = body?.summary == null ? "" : String(body.summary);
+    const summary = summaryRaw.trim() ? summaryRaw.trim().slice(0, 2000) : null;
+    const evidence = toEvidenceList(body?.evidence);
+    const source = body?.source ? String(body.source).trim().slice(0, 100) : "manual";
+
+    const { rows } = await pool.query(
+      `
+        INSERT INTO commitments(
+          project_id, title, owner, due_at, status, confidence, summary, evidence, source, created_at, updated_at
+        )
+        VALUES($1::uuid, $2, $3, $4::timestamptz, $5, $6, $7, $8::jsonb, $9, now(), now())
+        RETURNING
+          id,
+          project_id,
+          title,
+          owner,
+          due_at,
+          status,
+          confidence,
+          summary,
+          evidence,
+          source,
+          created_at,
+          updated_at
+      `,
+      [projectId, title, owner, dueAt, status, confidence, summary, JSON.stringify(evidence), source]
+    );
+
+    return { ok: true, commitment: rows[0], request_id: request.requestId };
+  });
+
+  app.patch("/commitments/:id", async (request, reply) => {
+    const projectId = requireActiveProject(request, reply);
+    if (!projectId) return;
+
+    const commitmentId = String(request.params?.id || "").trim();
+    if (!commitmentId) {
+      return reply.code(400).send({ ok: false, error: "invalid_commitment_id", request_id: request.requestId });
+    }
+
+    const existing = await pool.query(
+      `
+        SELECT
+          id,
+          project_id,
+          title,
+          owner,
+          due_at,
+          status,
+          confidence,
+          summary,
+          evidence,
+          source
+        FROM commitments
+        WHERE id = $1::uuid
+          AND project_id = $2::uuid
+        LIMIT 1
+      `,
+      [commitmentId, projectId]
+    );
+    if (!existing.rows[0]) {
+      return reply.code(404).send({ ok: false, error: "commitment_not_found", request_id: request.requestId });
+    }
+
+    const body = request.body && typeof request.body === "object" ? request.body : {};
+    const current = existing.rows[0];
+
+    const hasTitle = Object.prototype.hasOwnProperty.call(body, "title");
+    const hasOwner = Object.prototype.hasOwnProperty.call(body, "owner");
+    const hasStatus = Object.prototype.hasOwnProperty.call(body, "status");
+    const hasConfidence = Object.prototype.hasOwnProperty.call(body, "confidence");
+    const hasSummary = Object.prototype.hasOwnProperty.call(body, "summary");
+    const hasEvidence = Object.prototype.hasOwnProperty.call(body, "evidence");
+    const hasDueAt = Object.prototype.hasOwnProperty.call(body, "due_at");
+
+    const nextTitle = hasTitle ? String(body?.title || "").trim() : current.title;
+    if (!nextTitle || nextTitle.length < 3 || nextTitle.length > 300) {
+      return reply.code(400).send({ ok: false, error: "invalid_title", request_id: request.requestId });
+    }
+
+    const nextOwner = hasOwner ? toCommitmentOwner(body?.owner, null) : current.owner;
+    if (!nextOwner) return reply.code(400).send({ ok: false, error: "invalid_owner", request_id: request.requestId });
+
+    const nextStatus = hasStatus ? toCommitmentStatus(body?.status, null) : current.status;
+    if (!nextStatus) return reply.code(400).send({ ok: false, error: "invalid_status", request_id: request.requestId });
+
+    const nextConfidence = hasConfidence ? toCommitmentConfidence(body?.confidence, null) : current.confidence;
+    if (!nextConfidence) {
+      return reply.code(400).send({ ok: false, error: "invalid_confidence", request_id: request.requestId });
+    }
+
+    const nextDueAt = hasDueAt ? toTimestampOrNull(body?.due_at) : toTimestampOrNull(current.due_at);
+    if (hasDueAt && body?.due_at && !nextDueAt) {
+      return reply.code(400).send({ ok: false, error: "invalid_due_at", request_id: request.requestId });
+    }
+
+    if (hasEvidence && !Array.isArray(body?.evidence)) {
+      return reply.code(400).send({ ok: false, error: "invalid_evidence", request_id: request.requestId });
+    }
+    const nextEvidence = hasEvidence ? toEvidenceList(body?.evidence) : current.evidence;
+    const nextSummary = hasSummary
+      ? (String(body?.summary || "").trim().slice(0, 2000) || null)
+      : current.summary;
+
+    const { rows } = await pool.query(
+      `
+        UPDATE commitments
+        SET
+          title = $3,
+          owner = $4,
+          due_at = $5::timestamptz,
+          status = $6,
+          confidence = $7,
+          summary = $8,
+          evidence = $9::jsonb,
+          updated_at = now()
+        WHERE id = $1::uuid
+          AND project_id = $2::uuid
+        RETURNING
+          id,
+          project_id,
+          title,
+          owner,
+          due_at,
+          status,
+          confidence,
+          summary,
+          evidence,
+          source,
+          created_at,
+          updated_at
+      `,
+      [commitmentId, projectId, nextTitle, nextOwner, nextDueAt, nextStatus, nextConfidence, nextSummary, JSON.stringify(nextEvidence)]
+    );
+
+    return { ok: true, commitment: rows[0], request_id: request.requestId };
   });
 
   app.get("/contacts", async (request, reply) => {

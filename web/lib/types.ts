@@ -98,3 +98,22 @@ export interface SearchResultItem {
   created_at: string;
   distance: number | null;
 }
+
+export type CommitmentStatus = "active" | "proposed" | "closed" | "done" | "cancelled";
+export type CommitmentOwner = "studio" | "client" | "unknown";
+export type CommitmentConfidence = "high" | "medium" | "low";
+
+export interface Commitment {
+  id: string;
+  project_id: string;
+  title: string;
+  owner: CommitmentOwner;
+  due_at: string | null;
+  status: CommitmentStatus;
+  confidence: CommitmentConfidence;
+  summary: string | null;
+  evidence: string[];
+  source: string;
+  created_at: string;
+  updated_at: string;
+}

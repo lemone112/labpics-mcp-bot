@@ -1,4 +1,5 @@
 import type {
+  Commitment,
   Conversation,
   JobsStatusResponse,
   MessageSnippet,
@@ -37,6 +38,13 @@ function humanizeError(errorCode: string) {
     active_project_required: "Select an active project in Projects first.",
     query_required: "Search query is required.",
     invalid_name: "Project name must be 2 to 160 characters long.",
+    invalid_title: "Title must be between 3 and 300 characters.",
+    invalid_status: "Invalid status value.",
+    invalid_owner: "Invalid owner value.",
+    invalid_confidence: "Invalid confidence value.",
+    invalid_due_at: "Invalid due date format.",
+    invalid_evidence: "Evidence must be an array of source IDs.",
+    commitment_not_found: "Commitment not found for selected project.",
     project_not_found: "Project not found.",
   };
   return map[errorCode] || errorCode;
@@ -179,5 +187,35 @@ export function getMessages(limit = 50, conversationGlobalId?: string) {
       limit,
       conversation_global_id: conversationGlobalId,
     },
+  });
+}
+
+interface CommitmentPatch {
+  title?: string;
+  owner?: "studio" | "client" | "unknown";
+  due_at?: string | null;
+  status?: "active" | "proposed" | "closed" | "done" | "cancelled";
+  confidence?: "high" | "medium" | "low";
+  summary?: string | null;
+  evidence?: string[];
+}
+
+export function getCommitments(status?: Commitment["status"], limit = 100) {
+  return apiFetch<{ ok: boolean; commitments: Commitment[]; request_id?: string }>("/commitments", {
+    query: { status, limit },
+  });
+}
+
+export function createCommitment(payload: CommitmentPatch & { title: string }) {
+  return apiFetch<{ ok: boolean; commitment: Commitment; request_id?: string }>("/commitments", {
+    method: "POST",
+    body: payload,
+  });
+}
+
+export function updateCommitment(id: string, payload: CommitmentPatch) {
+  return apiFetch<{ ok: boolean; commitment: Commitment; request_id?: string }>(`/commitments/${id}`, {
+    method: "PATCH",
+    body: payload,
   });
 }
