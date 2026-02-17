@@ -97,6 +97,10 @@ export default function JobsPage() {
     latestSyncMeta && typeof latestSyncMeta.skipped_reason === "string"
       ? latestSyncMeta.skipped_reason
       : null;
+  const skippedBeforeLinkWindow =
+    latestSyncMeta && typeof latestSyncMeta.skipped_before_link_window_messages === "number"
+      ? latestSyncMeta.skipped_before_link_window_messages
+      : 0;
   const canRunSync = Boolean(activeProject?.id) && linkedInboxes > 0;
 
   return (
@@ -154,6 +158,13 @@ export default function JobsPage() {
             <CardContent>
               <p className="text-xs text-amber-200">
                 Last sync was skipped because no linked inboxes were configured.
+              </p>
+            </CardContent>
+          ) : null}
+          {skippedBeforeLinkWindow > 0 ? (
+            <CardContent>
+              <p className="text-xs text-slate-300">
+                Last sync ignored {skippedBeforeLinkWindow} messages created before link activation window.
               </p>
             </CardContent>
           ) : null}

@@ -93,9 +93,13 @@ Body:
 - `source_account_id` (optional, defaults to `CHATWOOT_ACCOUNT_ID`)
 - `source_url` (optional)
 - `metadata` (optional object)
+  - optional `metadata.import_from_ts` (ISO timestamp) to define explicit import window start
 
 If source is already linked to another project, returns:
 - `409 source_already_linked_to_other_project`
+
+For `chatwoot_inbox`, if provided account mismatches configured `CHATWOOT_ACCOUNT_ID`, returns:
+- `400 source_account_mismatch`
 
 ### `DELETE /project-links/:id`
 Auth required + active project required.

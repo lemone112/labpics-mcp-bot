@@ -31,6 +31,7 @@ without explicit project ↔ source linking, the same external data could be ing
   - skips ingestion when no links
   - records explicit skip reason in sync metadata
   - counts skipped unlinked conversations
+  - ignores messages older than link activation window (`import_from_ts`) by default
 - Review endpoints (`/contacts`, `/conversations`, `/messages`) now scope by linked inboxes.
 - Added strict UUID format validation in high-risk route params.
 

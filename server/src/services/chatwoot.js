@@ -201,10 +201,10 @@ async function getWatermark(pool, source) {
   return rows[0] || null;
 }
 
-async function getLinkedInboxIds(pool, projectId, accountId) {
+async function getLinkedInboxRules(pool, projectId, accountId) {
   const { rows } = await pool.query(
     `
-      SELECT source_external_id
+      SELECT source_external_id, metadata, created_at
       FROM project_source_links
       WHERE project_id = $1::uuid
         AND source_type = 'chatwoot_inbox'
@@ -215,13 +215,17 @@ async function getLinkedInboxIds(pool, projectId, accountId) {
     [projectId, String(accountId)]
   );
 
-  const ids = [];
+  const rules = [];
   for (const row of rows) {
     const inboxId = toBigIntOrNull(row.source_external_id);
     if (!Number.isFinite(inboxId)) continue;
-    ids.push(inboxId);
+    const importFrom =
+      toIsoTime(row?.metadata?.import_from_ts) ||
+      toIsoTime(row.created_at) ||
+      new Date().toISOString();
+    rules.push({ inbox_id: inboxId, import_from_ts: importFrom });
   }
-  return ids;
+  return rules;
 }
 
 async function upsertWatermark(pool, source, cursorTs, cursorId, meta) {
@@ -602,10 +606,12 @@ export async function runChatwootSync(pool, projectId, logger = console) {
   const defaultSince = new Date(Date.now() - lookbackDays * 24 * 60 * 60 * 1000).toISOString();
   const since = toIsoTime(previousWatermark?.cursor_ts) || defaultSince;
   const watermarkMessageNumeric = getCursorMessageNumericId(previousWatermark?.cursor_id);
-  const linkedInboxIds = await getLinkedInboxIds(pool, scopedProjectId, accountId);
-  const linkedInboxSet = new Set(linkedInboxIds.map((value) => String(value)));
+  const linkedInboxRules = await getLinkedInboxRules(pool, scopedProjectId, accountId);
+  const linkedInboxImportFrom = new Map(
+    linkedInboxRules.map((rule) => [String(rule.inbox_id), rule.import_from_ts])
+  );
 
-  if (!linkedInboxIds.length) {
+  if (!linkedInboxRules.length) {
     const storage = await getStorageSummary(pool, storageBudgetGb);
     await upsertWatermark(pool, source, previousWatermark?.cursor_ts || since, previousWatermark?.cursor_id || null, {
       processed_conversations: 0,
@@ -614,6 +620,7 @@ export async function runChatwootSync(pool, projectId, logger = console) {
       reembedded_chunks: 0,
       touched_contacts: 0,
       skipped_unlinked_conversations: 0,
+      skipped_before_link_window_messages: 0,
       skipped_reason: "no_linked_inboxes",
       linked_inboxes_count: 0,
       since,
@@ -630,6 +637,7 @@ export async function runChatwootSync(pool, projectId, logger = console) {
       reembedded_chunks: 0,
       touched_contacts: 0,
       skipped_unlinked_conversations: 0,
+      skipped_before_link_window_messages: 0,
       linked_inboxes_count: 0,
       skipped_reason: "no_linked_inboxes",
       cursor_ts: previousWatermark?.cursor_ts || since,
@@ -645,6 +653,7 @@ export async function runChatwootSync(pool, projectId, logger = console) {
   let insertedChunks = 0;
   let reembeddedChunks = 0;
   let skippedUnlinkedConversations = 0;
+  let skippedBeforeLinkWindowMessages = 0;
   let newestTs = toIsoTime(previousWatermark?.cursor_ts) || since;
   let newestMsgId = previousWatermark?.cursor_id || null;
 
@@ -654,8 +663,10 @@ export async function runChatwootSync(pool, projectId, logger = console) {
     const conversationId = toBigIntOrNull(conversation?.id);
     if (!Number.isFinite(conversationId)) continue;
     const inboxId = toBigIntOrNull(conversation?.inbox_id);
-    const isLinkedInbox = Number.isFinite(inboxId) && linkedInboxSet.has(String(inboxId));
-    if (!isLinkedInbox) {
+    const inboxImportFrom = Number.isFinite(inboxId)
+      ? linkedInboxImportFrom.get(String(inboxId))
+      : null;
+    if (!inboxImportFrom) {
       skippedUnlinkedConversations++;
       continue;
     }
@@ -694,6 +705,10 @@ export async function runChatwootSync(pool, projectId, logger = console) {
 
       const createdAt = toIsoTime(message?.created_at || message?.updated_at);
       if (shouldSkipMessage(createdAt, since, messageId, watermarkMessageNumeric)) continue;
+      if (createdAt && createdAt < inboxImportFrom) {
+        skippedBeforeLinkWindowMessages++;
+        continue;
+      }
 
       const updatedAt = toIsoTime(message?.updated_at || message?.created_at) || createdAt;
       const msgGlobalId = messageGlobalId(accountId, messageId);
@@ -781,7 +796,8 @@ export async function runChatwootSync(pool, projectId, logger = console) {
     reembedded_chunks: reembeddedChunks,
     touched_contacts: touchedContacts,
     skipped_unlinked_conversations: skippedUnlinkedConversations,
-    linked_inboxes_count: linkedInboxIds.length,
+    skipped_before_link_window_messages: skippedBeforeLinkWindowMessages,
+    linked_inboxes_count: linkedInboxRules.length,
     since,
     synced_at: new Date().toISOString(),
     storage,
@@ -796,7 +812,8 @@ export async function runChatwootSync(pool, projectId, logger = console) {
     reembedded_chunks: reembeddedChunks,
     touched_contacts: touchedContacts,
     skipped_unlinked_conversations: skippedUnlinkedConversations,
-    linked_inboxes_count: linkedInboxIds.length,
+    skipped_before_link_window_messages: skippedBeforeLinkWindowMessages,
+    linked_inboxes_count: linkedInboxRules.length,
     cursor_ts: newestTs,
     cursor_id: newestMsgId,
     storage,

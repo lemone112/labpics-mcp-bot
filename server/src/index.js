@@ -333,10 +333,62 @@ async function main() {
     if (!sourceAccountId) {
       return reply.code(400).send({ ok: false, error: "invalid_source_account_id", request_id: request.requestId });
     }
+    if (sourceType === "chatwoot_inbox" && !/^\d{1,18}$/.test(sourceAccountId)) {
+      return reply.code(400).send({ ok: false, error: "invalid_source_account_id", request_id: request.requestId });
+    }
+    const configuredChatwootAccount = String(process.env.CHATWOOT_ACCOUNT_ID || "").trim();
+    if (sourceType === "chatwoot_inbox" && configuredChatwootAccount && sourceAccountId !== configuredChatwootAccount) {
+      return reply.code(400).send({ ok: false, error: "source_account_mismatch", request_id: request.requestId });
+    }
 
     const sourceUrlRaw = body?.source_url == null ? "" : String(body.source_url).trim();
     const sourceUrl = sourceUrlRaw ? sourceUrlRaw.slice(0, 400) : null;
-    const metadata = body?.metadata && typeof body.metadata === "object" ? body.metadata : {};
+    const metadataRaw = body?.metadata && typeof body.metadata === "object" ? body.metadata : {};
+    const metadata = { ...metadataRaw };
+    const requestedImportFrom = Object.prototype.hasOwnProperty.call(metadata, "import_from_ts")
+      ? toTimestampOrNull(metadata.import_from_ts)
+      : null;
+    if (Object.prototype.hasOwnProperty.call(metadata, "import_from_ts") && !requestedImportFrom) {
+      return reply.code(400).send({ ok: false, error: "invalid_import_from_ts", request_id: request.requestId });
+    }
+    metadata.import_from_ts = requestedImportFrom || new Date().toISOString();
+
+    const inserted = await pool.query(
+      `
+        INSERT INTO project_source_links(
+          project_id,
+          source_type,
+          source_account_id,
+          source_external_id,
+          source_url,
+          created_by,
+          metadata,
+          is_active,
+          created_at,
+          updated_at
+        )
+        VALUES($1::uuid, $2, $3, $4, $5, $6, $7::jsonb, true, now(), now())
+        ON CONFLICT (source_type, source_account_id, source_external_id)
+        DO NOTHING
+        RETURNING
+          id,
+          project_id,
+          source_type,
+          source_account_id,
+          source_external_id,
+          source_url,
+          created_by,
+          metadata,
+          is_active,
+          created_at,
+          updated_at
+      `,
+      [projectId, sourceType, sourceAccountId, sourceExternalId, sourceUrl, request.auth?.username || null, JSON.stringify(metadata)]
+    );
+
+    if (inserted.rows[0]) {
+      return { ok: true, link: inserted.rows[0], created: true, request_id: request.requestId };
+    }
 
     const existing = await pool.query(
       `
@@ -361,51 +413,16 @@ async function main() {
       [sourceType, sourceAccountId, sourceExternalId]
     );
 
-    if (existing.rows[0]) {
-      if (existing.rows[0].project_id !== projectId) {
-        return reply.code(409).send({
-          ok: false,
-          error: "source_already_linked_to_other_project",
-          linked_project_id: existing.rows[0].project_id,
-          request_id: request.requestId,
-        });
-      }
-
+    if (existing.rows[0] && existing.rows[0].project_id === projectId) {
       return { ok: true, link: existing.rows[0], created: false, request_id: request.requestId };
     }
 
-    const { rows } = await pool.query(
-      `
-        INSERT INTO project_source_links(
-          project_id,
-          source_type,
-          source_account_id,
-          source_external_id,
-          source_url,
-          created_by,
-          metadata,
-          is_active,
-          created_at,
-          updated_at
-        )
-        VALUES($1::uuid, $2, $3, $4, $5, $6, $7::jsonb, true, now(), now())
-        RETURNING
-          id,
-          project_id,
-          source_type,
-          source_account_id,
-          source_external_id,
-          source_url,
-          created_by,
-          metadata,
-          is_active,
-          created_at,
-          updated_at
-      `,
-      [projectId, sourceType, sourceAccountId, sourceExternalId, sourceUrl, request.auth?.username || null, JSON.stringify(metadata)]
-    );
-
-    return { ok: true, link: rows[0], created: true, request_id: request.requestId };
+    return reply.code(409).send({
+      ok: false,
+      error: "source_already_linked_to_other_project",
+      linked_project_id: existing.rows[0]?.project_id || null,
+      request_id: request.requestId,
+    });
   });
 
   app.delete("/project-links/:id", async (request, reply) => {

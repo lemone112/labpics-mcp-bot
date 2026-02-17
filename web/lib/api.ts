@@ -48,6 +48,8 @@ function humanizeError(errorCode: string) {
     invalid_source_type: "Invalid source type.",
     invalid_source_external_id: "Invalid source external ID.",
     invalid_source_account_id: "Invalid source account ID.",
+    source_account_mismatch: "Source account does not match configured Chatwoot account.",
+    invalid_import_from_ts: "Invalid import_from timestamp.",
     invalid_link_id: "Invalid link ID.",
     link_not_found: "Link not found for selected project.",
     source_already_linked_to_other_project: "This source is already linked to another project.",
