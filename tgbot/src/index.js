@@ -17,6 +17,9 @@ import {
 } from "./lib/supabase.js";
 import { hmacSha256Hex } from "./lib/security.js";
 
+const UI_DIVIDER = "<code>━━━━━━━━━━━━━━━━━━━━</code>";
+const UI_VERSION_BADGE = "<code>crypto-ui v2</code>";
+
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
@@ -87,7 +90,7 @@ function isDevEnv(env) {
 
 function safeText(s, maxLen = 1200) {
   const txt = String(s || "");
-  return txt.length > maxLen ? `${txt.slice(0, maxLen - 1)}…` : txt;
+  return txt.length > maxLen ? `${txt.slice(0, maxLen - 1)}...` : txt;
 }
 
 function normalizeWebhookPath(pathValue) {
@@ -116,9 +119,10 @@ async function sendErrorToChat(env, chatId, id, where, e) {
   const debug = isDevEnv(env);
 
   let text =
-    `<b>❌ Ошибка</b>\n` +
+    `<b>🚫 Terminal error</b>\n` +
+    `${UI_DIVIDER}\n` +
     `Не удалось обработать запрос.\n` +
-    `id: <code>${escapeHtml(id)}</code>\n`;
+    `trace: <code>${escapeHtml(id)}</code>\n`;
 
   if (debug) {
     text +=
@@ -128,7 +132,7 @@ async function sendErrorToChat(env, chatId, id, where, e) {
   }
 
   return tgSendMessage(env, chatId, text, {
-    reply_markup: toReplyMarkup([[btn("🏠 Home", "NAV:HOME"), btn("📁 Projects", "NAV:PROJECTS")]]),
+    reply_markup: toReplyMarkup([[btn("💠 Home", "NAV:HOME"), btn("💼 Portfolio", "NAV:PROJECTS")]]),
   });
 }
 
@@ -151,11 +155,15 @@ async function onMessage(message, env, id) {
 
   await upsertTelegramUser(env, from);
 
-  let text = (message.text || "").trim();
+  const text = (message.text || "").trim();
 
   if (text === "/start" || text === "/home") return renderHome(env, chatId, uid);
   if (text === "/projects") return renderProjectsList(env, chatId, uid);
-  if (text === "/help") return tgSendMessage(env, chatId, helpText(), { reply_markup: toReplyMarkup([[btn("🏠 Home", "NAV:HOME")]]) });
+  if (text === "/help") {
+    return tgSendMessage(env, chatId, helpText(), {
+      reply_markup: toReplyMarkup([[btn("💠 Home", "NAV:HOME"), btn("💼 Portfolio", "NAV:PROJECTS")]]),
+    });
+  }
 
   let pending = await getUserPendingInput(env, uid);
   if (pending && isPendingExpired(pending)) {
@@ -164,7 +172,18 @@ async function onMessage(message, env, id) {
   }
 
   if (pending?.kind === "new_project_name") {
-    if (text.length < 2 || text.length > 80) return tgSendMessage(env, chatId, "Введите имя проекта (2–80 символов):", {});
+    if (text.length < 2 || text.length > 80) {
+      return tgSendMessage(
+        env,
+        chatId,
+        `<b>➕ New project</b>\n` +
+          `${UI_DIVIDER}\n` +
+          `Введите имя проекта (2-80 символов).`,
+        {
+          reply_markup: toReplyMarkup([[btn("💠 Home", "NAV:HOME"), btn("💼 Portfolio", "NAV:PROJECTS")]]),
+        }
+      );
+    }
     const pid = await createProject(env, text);
     await setActiveProject(env, uid, pid);
     await clearUserPendingInput(env, uid);
@@ -193,8 +212,13 @@ async function onCallbackQuery(cq, env, id) {
 
     if (data === "NAV:HOME") return renderHome(env, chatId, uid);
     if (data === "NAV:PROJECTS") return renderProjectsList(env, chatId, uid);
+    if (data === "NAV:HELP") {
+      return tgSendMessage(env, chatId, helpText(), {
+        reply_markup: toReplyMarkup([[btn("💠 Home", "NAV:HOME"), btn("💼 Portfolio", "NAV:PROJECTS")]]),
+      });
+    }
 
-    if (data === "NAV:DASH") {
+    if (data === "NAV:DASH" || data === "NAV:REFRESH_DASH") {
       const pid = await getActiveProjectId(env, uid);
       return pid ? renderDashboard(env, chatId, uid, pid) : renderProjectsList(env, chatId, uid);
     }
@@ -209,31 +233,85 @@ async function onCallbackQuery(cq, env, id) {
       const pid = await getActiveProjectId(env, uid);
       if (!pid) return renderProjectsList(env, chatId, uid);
       await setUserPendingInput(env, uid, "search_query", { id }, 600);
-      return tgSendMessage(env, chatId, "<b>🔎 Search</b>\nВведите запрос текстом.", {
-        reply_markup: toReplyMarkup([[btn("🏠 Home", "NAV:HOME")]]),
-      });
+      return tgSendMessage(
+        env,
+        chatId,
+        `<b>🔎 Scout mode</b>\n` +
+          `${UI_DIVIDER}\n` +
+          `Введите поисковый запрос по проекту.\n` +
+          `<code>Пример: что обещал клиент по срокам?</code>`,
+        {
+          reply_markup: toReplyMarkup([[btn("💠 Home", "NAV:HOME"), btn("📈 Pulse", "NAV:DASH")]]),
+        }
+      );
     }
 
-    if (data === "PRJ:NEW") {
+    if (data === "NAV:NEWPROJECT" || data === "PRJ:NEW") {
       await setUserPendingInput(env, uid, "new_project_name", { id }, 600);
-      return tgSendMessage(env, chatId, "<b>Новый проект</b>\nВведите имя:", {
-        reply_markup: toReplyMarkup([[btn("🏠 Home", "NAV:HOME")]]),
-      });
+      return tgSendMessage(
+        env,
+        chatId,
+        `<b>➕ New project</b>\n` +
+          `${UI_DIVIDER}\n` +
+          `Введите имя проекта (2-80 символов).\n` +
+          `<code>Пример: Crypto Landing Q2</code>`,
+        {
+          reply_markup: toReplyMarkup([[btn("💠 Home", "NAV:HOME"), btn("💼 Portfolio", "NAV:PROJECTS")]]),
+        }
+      );
     }
 
-    if (data.startsWith("PRJ:SET:")) {
-      const pid = data.slice("PRJ:SET:".length);
+    if (data === "NAV:REFRESH_PROJECTS") {
+      return renderProjectsList(env, chatId, uid);
+    }
+
+    if (data.startsWith("PRJ:SET:") || data.startsWith("PRJ:PIN:")) {
+      const pid = data.split(":").slice(2).join(":");
       const project = await getProject(env, pid);
       if (!project) {
-        return tgSendMessage(env, chatId, "Проект не найден.", {
-          reply_markup: toReplyMarkup([[btn("📁 Projects", "NAV:PROJECTS"), btn("🏠 Home", "NAV:HOME")]]),
-        });
+        return tgSendMessage(
+          env,
+          chatId,
+          `<b>⚠️ Проект не найден</b>\n` +
+            `${UI_DIVIDER}\n` +
+            `Возможно, проект уже удален или ID устарел.`,
+          {
+            reply_markup: toReplyMarkup([[btn("💼 Portfolio", "NAV:PROJECTS"), btn("💠 Home", "NAV:HOME")]]),
+          }
+        );
       }
       await setActiveProject(env, uid, pid);
+      if (data.startsWith("PRJ:PIN:")) {
+        return tgSendMessage(
+          env,
+          chatId,
+          `<b>✅ Active project updated</b>\n` +
+            `${UI_DIVIDER}\n` +
+            `${projectHeadline(project, pid, true)}`,
+          {
+            reply_markup: toReplyMarkup([
+              [btn("📈 Pulse", "NAV:DASH"), btn("💼 Portfolio", "NAV:PROJECTS")],
+              [btn("💠 Home", "NAV:HOME")],
+            ]),
+          }
+        );
+      }
       return renderDashboard(env, chatId, uid, pid);
     }
 
-    return tgSendMessage(env, chatId, "Неизвестное действие.", { reply_markup: toReplyMarkup([[btn("🏠 Home", "NAV:HOME")]]) });
+    if (data.startsWith("PRJ:OPEN:")) {
+      const pid = data.slice("PRJ:OPEN:".length);
+      const project = await getProject(env, pid);
+      if (!project) return renderProjectsList(env, chatId, uid);
+      return renderDashboard(env, chatId, uid, pid);
+    }
+
+    return tgSendMessage(
+      env,
+      chatId,
+      `<b>⚠️ Unknown action</b>\n${UI_DIVIDER}\nКоманда не распознана.`,
+      { reply_markup: toReplyMarkup([[btn("💠 Home", "NAV:HOME"), btn("💼 Portfolio", "NAV:PROJECTS")]]) }
+    );
   } catch (e) {
     return sendErrorToChat(env, chatId, id, `callback:${data}`, e);
   }
@@ -241,20 +319,23 @@ async function onCallbackQuery(cq, env, id) {
 
 async function renderHome(env, chatId, uid) {
   const pid = await getActiveProjectId(env, uid);
+  const project = pid ? await getProject(env, pid) : null;
 
-  let text = "<b>🏠 Home</b>\n";
-  if (pid) {
-    const p = await getProject(env, pid);
-    text += `\n<b>Active:</b> ${escapeHtml(p?.name || "—")}\n<code>${escapeHtml(pid)}</code>\n`;
-  } else {
-    text += "\n<b>Active:</b> —\n";
-  }
+  const text =
+    `<b>💠 LABPICS CRYPTO CONSOLE</b>\n` +
+    `<code>ops terminal • realtime</code>\n` +
+    `${UI_DIVIDER}\n` +
+    `<b>👤 User:</b> <code>${escapeHtml(shortId(uid, 4, 3))}</code>\n` +
+    `<b>🧩 Active:</b> ${project ? projectHeadline(project, pid, true) : "<i>not selected</i>"}\n` +
+    `<b>🛠 Mode:</b> <code>project intelligence</code>\n` +
+    `${UI_DIVIDER}\n` +
+    `<i>Выберите модуль:</i>`;
 
   return tgSendMessage(env, chatId, text, {
     reply_markup: toReplyMarkup([
-      [btn("📁 Projects", "NAV:PROJECTS"), btn("📊 Dashboard", "NAV:DASH")],
-      [btn("🤝 Договоренности", "NAV:COMMIT"), btn("🔎 Search", "NAV:SEARCH")],
-      [btn("🏠 Home", "NAV:HOME")],
+      [btn("💼 Portfolio", "NAV:PROJECTS"), btn("📈 Pulse", "NAV:DASH")],
+      [btn("🤝 Commits", "NAV:COMMIT"), btn("🔎 Scout", "NAV:SEARCH")],
+      [btn("❓ Help", "NAV:HELP")],
     ]),
   });
 }
@@ -263,21 +344,38 @@ async function renderProjectsList(env, chatId, uid) {
   const projects = await listProjects(env);
   const active = await getActiveProjectId(env, uid);
 
-  const lines = ["<b>📁 Projects</b>"];
+  const lines = [
+    "<b>💼 PORTFOLIO</b>",
+    "<code>select project • set active context</code>",
+    UI_DIVIDER,
+  ];
   const kb = [];
 
   if (!projects.length) {
-    lines.push("\nПока нет проектов.");
+    lines.push("<i>Пока нет проектов.</i>");
+    lines.push("Создайте первый проект и начните сбор памяти.");
   } else {
-    for (const p of projects) {
-      const mark = active === p.project_id ? " <b>(active)</b>" : "";
-      lines.push(`\n• ${escapeHtml(p.name)}${mark}\n<code>${escapeHtml(shortId(p.project_id))}</code>`);
-      kb.push([btn(`Открыть: ${safeText(p.name, 40)}`, `PRJ:SET:${p.project_id}`)]);
+    const shown = projects.slice(0, 12);
+    for (let i = 0; i < shown.length; i++) {
+      const p = shown[i];
+      const isActive = active === p.project_id;
+      const dot = isActive ? "🟢" : "⚪";
+      lines.push(
+        `${dot} <b>${i + 1}.</b> ${escapeHtml(safeText(p.name, 44))}\n` +
+          `   ${statusBadge(p.status)} • <code>${escapeHtml(shortId(p.project_id, 6, 4))}</code>`
+      );
+      kb.push([
+        btn(`${isActive ? "🟢" : "⚪"} ${safeText(p.name, 20)}`, `PRJ:PIN:${p.project_id}`),
+        btn("📈", `PRJ:OPEN:${p.project_id}`),
+      ]);
+    }
+    if (projects.length > shown.length) {
+      lines.push(`\n<i>Показано ${shown.length} из ${projects.length}. Нажмите Refresh.</i>`);
     }
   }
 
-  kb.push([btn("➕ New project", "PRJ:NEW")]);
-  kb.push([btn("🏠 Home", "NAV:HOME")]);
+  kb.push([btn("🔄 Refresh", "NAV:REFRESH_PROJECTS"), btn("➕ New", "NAV:NEWPROJECT")]);
+  kb.push([btn("💠 Home", "NAV:HOME"), btn("❓ Help", "NAV:HELP")]);
 
   return tgSendMessage(env, chatId, lines.join("\n"), { reply_markup: toReplyMarkup(kb) });
 }
@@ -287,21 +385,26 @@ async function renderDashboard(env, chatId, uid, pid) {
   const c = await getLinkCounts(env, pid);
 
   const text =
-    `<b>📊 Dashboard</b>\n\n` +
-    `<b>Project:</b> ${escapeHtml(p?.name || "—")}\n` +
-    `<b>Status:</b> <code>${escapeHtml(p?.status || "—")}</code>\n` +
-    `<b>ID:</b>\n<code>${escapeHtml(pid)}</code>\n\n` +
-    `<b>Linked</b>\n` +
-    `• conv: <code>${c.conversation}</code>\n` +
-    `• people: <code>${c.person}</code>\n` +
-    `• deals: <code>${c.deal}</code>\n` +
-    `• company: <code>${c.company ? "yes" : "no"}</code>\n` +
-    `• linear: <code>${c.linear_project ? "yes" : "no"}</code>\n`;
+    `<b>📈 PULSE BOARD</b>\n` +
+    `<code>project telemetry</code>\n` +
+    `${UI_DIVIDER}\n` +
+    `${projectHeadline(p, pid, true)}\n` +
+    `<b>Status:</b> ${statusBadge(p?.status)}\n` +
+    `<b>ID:</b> <code>${escapeHtml(shortId(pid, 8, 6))}</code>\n` +
+    `${UI_DIVIDER}\n` +
+    `💬 Chats: <code>${c.conversation}</code>\n` +
+    `👥 People: <code>${c.person}</code>\n` +
+    `💼 Deals: <code>${c.deal}</code>\n` +
+    `🏢 Company: ${linkBadge(c.company)}\n` +
+    `🧱 Linear: ${linkBadge(c.linear_project)}\n` +
+    `${UI_DIVIDER}\n` +
+    `<i>Глубокий анализ: Commits / Scout</i>`;
 
   return tgSendMessage(env, chatId, text, {
     reply_markup: toReplyMarkup([
-      [btn("🤝 Договоренности", "NAV:COMMIT"), btn("🔎 Search", "NAV:SEARCH")],
-      [btn("📁 Projects", "NAV:PROJECTS"), btn("🏠 Home", "NAV:HOME")],
+      [btn("🤝 Commits", "NAV:COMMIT"), btn("🔎 Scout", "NAV:SEARCH")],
+      [btn("🔄 Refresh", "NAV:REFRESH_DASH"), btn("💼 Portfolio", "NAV:PROJECTS")],
+      [btn("💠 Home", "NAV:HOME")],
     ]),
   });
 }
@@ -309,9 +412,14 @@ async function renderDashboard(env, chatId, uid, pid) {
 async function runViaGateway(env, chatId, uid, query, id) {
   const pid = await getActiveProjectId(env, uid);
   if (!pid) {
-    return tgSendMessage(env, chatId, "Сначала выберите проект.", {
-      reply_markup: toReplyMarkup([[btn("📁 Projects", "NAV:PROJECTS")]]),
-    });
+    return tgSendMessage(
+      env,
+      chatId,
+      `<b>⚠️ No active project</b>\n` +
+        `${UI_DIVIDER}\n` +
+        `Сначала выберите проект в портфеле.`,
+      { reply_markup: toReplyMarkup([[btn("💼 Portfolio", "NAV:PROJECTS")]]) }
+    );
   }
 
   if (!env.AGENT_GW) throw new Error("Missing service binding AGENT_GW");
@@ -320,9 +428,14 @@ async function runViaGateway(env, chatId, uid, query, id) {
 
   const userText = String(query || "").trim().slice(0, 2000);
   if (!userText) {
-    return tgSendMessage(env, chatId, "Введите запрос текстом.", {
-      reply_markup: toReplyMarkup([[btn("🏠 Home", "NAV:HOME")]]),
-    });
+    return tgSendMessage(
+      env,
+      chatId,
+      `<b>📝 Empty query</b>\n` +
+        `${UI_DIVIDER}\n` +
+        `Введите текстовый запрос для анализа.`,
+      { reply_markup: toReplyMarkup([[btn("💠 Home", "NAV:HOME")]]) }
+    );
   }
 
   const context = await loadProjectContext(env, pid);
@@ -351,7 +464,11 @@ async function runViaGateway(env, chatId, uid, query, id) {
     throw new Error(`Gateway bad response: ${txt}`);
   }
 
-  return tgSendMessage(env, chatId, data.text, { reply_markup: JSON.stringify({ inline_keyboard: data.keyboard }) });
+  const text = data.text.includes("crypto-ui v2")
+    ? data.text
+    : `${data.text}\n\n${UI_DIVIDER}\n${UI_VERSION_BADGE}`;
+
+  return tgSendMessage(env, chatId, text, { reply_markup: JSON.stringify({ inline_keyboard: data.keyboard }) });
 }
 
 function isCommitmentsText(text) {
@@ -361,10 +478,36 @@ function isCommitmentsText(text) {
 
 function helpText() {
   return (
-    "<b>Помощь</b>\n\n" +
-    "• /start — Home\n" +
-    "• /projects — проекты\n\n" +
-    "• 🤝 Договоренности — кто-что-должен по проекту\n" +
-    "• 🔎 Search — поиск\n"
+    "<b>❓ HELP / QUICK COMMANDS</b>\n" +
+    "<code>cryptobot style navigation</code>\n" +
+    `${UI_DIVIDER}\n` +
+    "• <code>/start</code> или <code>/home</code> — открыть консоль\n" +
+    "• <code>/projects</code> — портфель проектов\n" +
+    "• <code>/help</code> — подсказка по командам\n\n" +
+    "<b>Основные модули</b>\n" +
+    "• 🤝 <b>Commits</b> — кто/что/когда по договоренностям\n" +
+    "• 🔎 <b>Scout</b> — поиск по памяти проекта\n" +
+    "• 📈 <b>Pulse</b> — состояние интеграций\n\n" +
+    "<i>Совет: закрепите active проект и работайте через Commits/Scout.</i>"
   );
+}
+
+function statusBadge(status) {
+  const s = String(status || "").toLowerCase();
+  if (!s) return "<code>UNKNOWN</code>";
+  if (s === "open" || s === "active") return "<code>OPEN</code>";
+  if (s === "paused" || s === "hold") return "<code>PAUSED</code>";
+  if (s === "done" || s === "closed") return "<code>CLOSED</code>";
+  return `<code>${escapeHtml(safeText(s, 12).toUpperCase())}</code>`;
+}
+
+function linkBadge(flag) {
+  return flag ? "<code>linked</code>" : "<code>--</code>";
+}
+
+function projectHeadline(project, pid, withStatus = false) {
+  const name = escapeHtml(project?.name || "—");
+  if (!withStatus) return `<b>${name}</b>`;
+  const ref = escapeHtml(shortId(pid || project?.project_id || "", 6, 4));
+  return `<b>${name}</b> ${statusBadge(project?.status)} • <code>${ref}</code>`;
 }

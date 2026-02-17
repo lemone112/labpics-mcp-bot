@@ -64,7 +64,7 @@ export default {
           return json({
             ok: true,
             text: "Нет active_project_id — выберите проект.",
-            keyboard: [[{ text: "📁 Projects", callback_data: "NAV:PROJECTS" }], [{ text: "🏠 Home", callback_data: "NAV:HOME" }]],
+            keyboard: [[{ text: "💼 Portfolio", callback_data: "NAV:PROJECTS" }], [{ text: "💠 Home", callback_data: "NAV:HOME" }]],
           });
         }
 
@@ -76,8 +76,8 @@ export default {
           if (!chunks.length) {
             return json({
               ok: true,
-              text: `🤝 Договоренности\n\nПроект: ${escapeHtml(projectName)}\n\nНет данных (rag_chunks пуст для этого project_id).`,
-              keyboard: [[{ text: "📊 Dashboard", callback_data: "NAV:DASH" }, { text: "🏠 Home", callback_data: "NAV:HOME" }]],
+              text: `🤝 COMMITS BOARD\n\nПроект: ${escapeHtml(projectName)}\n\nНет данных (rag_chunks пуст для этого project_id).`,
+              keyboard: [[{ text: "📈 Pulse", callback_data: "NAV:DASH" }, { text: "💠 Home", callback_data: "NAV:HOME" }]],
             });
           }
 
@@ -89,8 +89,8 @@ export default {
             ok: true,
             text: renderCommitmentsCard(projectName, projectId, top, upserted),
             keyboard: [
-              [{ text: "🔄 Обновить", callback_data: "NAV:COMMIT" }, { text: "📊 Dashboard", callback_data: "NAV:DASH" }],
-              [{ text: "🏠 Home", callback_data: "NAV:HOME" }],
+              [{ text: "🔄 Refresh", callback_data: "NAV:COMMIT" }, { text: "📈 Pulse", callback_data: "NAV:DASH" }],
+              [{ text: "💠 Home", callback_data: "NAV:HOME" }],
             ],
           });
         }
@@ -99,7 +99,7 @@ export default {
         return json({
           ok: true,
           text: renderSearchResults(projectName, userText, matches),
-          keyboard: [[{ text: "🤝 Договоренности", callback_data: "NAV:COMMIT" }, { text: "🏠 Home", callback_data: "NAV:HOME" }]],
+          keyboard: [[{ text: "🤝 Commits", callback_data: "NAV:COMMIT" }, { text: "💠 Home", callback_data: "NAV:HOME" }]],
         });
       } catch (e) {
         const err = (e && typeof e.message === "string") ? e.message : String(e);

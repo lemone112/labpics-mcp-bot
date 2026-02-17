@@ -7,11 +7,12 @@ export function renderCommitmentsCard(projectName, projectId, items, upserted) {
   for (const it of items) bySide[it.side] = (bySide[it.side] || 0) + 1;
 
   const header =
-    `🤝 Договоренности\n\n` +
+    `🤝 COMMITS BOARD\n` +
+    `<code>commitment extraction</code>\n\n` +
     `Проект: ${escapeHtml(projectName)}\n` +
     `ID: <code>${escapeHtml(shortId(projectId))}</code>\n\n` +
     `Сводка: client ${bySide.client} • us ${bySide.us} • unknown ${bySide.unknown}\n` +
-    `Обновлено: +${upserted.ok}/${upserted.attempted}\n\n`;
+    `Updated: +${upserted.ok}/${upserted.attempted}\n\n`;
 
   const lines = items.slice(0, 10).map((it, i) => {
     const side = it.side === "client" ? "[Клиент]" : it.side === "us" ? "[Мы]" : "[?]";
@@ -25,7 +26,8 @@ export function renderCommitmentsCard(projectName, projectId, items, upserted) {
 
 export function renderSearchResults(projectName, query, matches) {
   const header =
-    `🔎 Search\n\n` +
+    `🔎 SCOUT RESULTS\n` +
+    `<code>project memory lookup</code>\n\n` +
     `Проект: ${escapeHtml(projectName)}\n` +
     `Запрос: ${escapeHtml(query || "—")}\n\n`;
   if (!matches.length) return header + "Ничего не найдено.";
