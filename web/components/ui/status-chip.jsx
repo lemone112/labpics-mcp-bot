@@ -8,32 +8,38 @@ const statusMap = {
   pending: {
     color: "default",
     label: "Pending",
-    className: "border-[#f1d49f] bg-[#fff8eb] text-[#9a6b17]",
+    className:
+      "border-[var(--status-warning-border)] bg-[var(--status-warning-bg)] text-[var(--status-warning-fg)]",
   },
   processing: {
     color: "default",
     label: "Processing",
-    className: "border-[#c7d2fe] bg-[#eef2ff] text-[#3f51a4]",
+    className:
+      "border-[var(--status-info-border)] bg-[var(--status-info-bg)] text-[var(--status-info-fg)]",
   },
   ready: {
     color: "default",
     label: "Ready",
-    className: "border-[#bbe7ce] bg-[#edfdf3] text-[#1f7a45]",
+    className:
+      "border-[var(--status-success-border)] bg-[var(--status-success-bg)] text-[var(--status-success-fg)]",
   },
   completed: {
     color: "default",
     label: "Completed",
-    className: "border-[#bbe7ce] bg-[#edfdf3] text-[#1f7a45]",
+    className:
+      "border-[var(--status-success-border)] bg-[var(--status-success-bg)] text-[var(--status-success-fg)]",
   },
   failed: {
     color: "default",
     label: "Failed",
-    className: "border-[#fecdd3] bg-[#fff1f2] text-[#be123c]",
+    className:
+      "border-[var(--status-danger-border)] bg-[var(--status-danger-bg)] text-[var(--status-danger-fg)]",
   },
   running: {
     color: "default",
     label: "Running",
-    className: "border-[#c7d2fe] bg-[#eef2ff] text-[#3f51a4]",
+    className:
+      "border-[var(--status-info-border)] bg-[var(--status-info-bg)] text-[var(--status-info-fg)]",
   },
 };
 

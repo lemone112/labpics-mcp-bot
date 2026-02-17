@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 import { PageShell } from "@/components/page-shell";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { StatTile } from "@/components/ui/stat-tile";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { StatusChip } from "@/components/ui/status-chip";
 import { Toast } from "@/components/ui/toast";
@@ -51,7 +52,7 @@ export default function JobsPage() {
 
   return (
     <PageShell title="Jobs" subtitle="Trigger Chatwoot sync and embeddings jobs">
-      <div className="space-y-6">
+      <div className="space-y-4">
         <Card data-motion-item>
           <CardHeader>
             <CardTitle>Run jobs</CardTitle>
@@ -78,22 +79,10 @@ export default function JobsPage() {
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
-              <div className="app-inset border border-[var(--border-subtle)] bg-[var(--surface-soft)] p-3">
-                <div className="text-xs text-[var(--text-muted)]">Pending</div>
-                <div className="text-xl font-semibold">{status?.rag_counts?.pending ?? 0}</div>
-              </div>
-              <div className="app-inset border border-[var(--border-subtle)] bg-[var(--surface-soft)] p-3">
-                <div className="text-xs text-[var(--text-muted)]">Processing</div>
-                <div className="text-xl font-semibold">{status?.rag_counts?.processing ?? 0}</div>
-              </div>
-              <div className="app-inset border border-[var(--border-subtle)] bg-[var(--surface-soft)] p-3">
-                <div className="text-xs text-[var(--text-muted)]">Ready</div>
-                <div className="text-xl font-semibold">{status?.rag_counts?.ready ?? 0}</div>
-              </div>
-              <div className="app-inset border border-[var(--border-subtle)] bg-[var(--surface-soft)] p-3">
-                <div className="text-xs text-[var(--text-muted)]">Failed</div>
-                <div className="text-xl font-semibold">{status?.rag_counts?.failed ?? 0}</div>
-              </div>
+              <StatTile label="Pending" value={status?.rag_counts?.pending ?? 0} />
+              <StatTile label="Processing" value={status?.rag_counts?.processing ?? 0} />
+              <StatTile label="Ready" value={status?.rag_counts?.ready ?? 0} />
+              <StatTile label="Failed" value={status?.rag_counts?.failed ?? 0} />
             </div>
           </CardContent>
         </Card>
@@ -104,31 +93,22 @@ export default function JobsPage() {
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
-              <div className="app-inset border border-[var(--border-subtle)] bg-[var(--surface-soft)] p-3">
-                <div className="text-xs text-[var(--text-muted)]">Contacts</div>
-                <div className="text-xl font-semibold">{status?.entities?.contacts ?? 0}</div>
-              </div>
-              <div className="app-inset border border-[var(--border-subtle)] bg-[var(--surface-soft)] p-3">
-                <div className="text-xs text-[var(--text-muted)]">Conversations</div>
-                <div className="text-xl font-semibold">{status?.entities?.conversations ?? 0}</div>
-              </div>
-              <div className="app-inset border border-[var(--border-subtle)] bg-[var(--surface-soft)] p-3">
-                <div className="text-xs text-[var(--text-muted)]">Messages</div>
-                <div className="text-xl font-semibold">{status?.entities?.messages ?? 0}</div>
-              </div>
-              <div className="app-inset border border-[var(--border-subtle)] bg-[var(--surface-soft)] p-3">
-                <div className="text-xs text-[var(--text-muted)]">DB size</div>
-                <div className="text-xl font-semibold">
-                  {typeof status?.storage?.database_bytes === "number"
+              <StatTile label="Contacts" value={status?.entities?.contacts ?? 0} />
+              <StatTile label="Conversations" value={status?.entities?.conversations ?? 0} />
+              <StatTile label="Messages" value={status?.entities?.messages ?? 0} />
+              <StatTile
+                label="DB size"
+                value={
+                  typeof status?.storage?.database_bytes === "number"
                     ? `${(status.storage.database_bytes / (1024 ** 3)).toFixed(2)} GB`
-                    : "-"}
-                </div>
-                <div className="mt-1 text-xs text-[var(--text-subtle)]">
-                  {typeof status?.storage?.usage_percent === "number"
+                    : "-"
+                }
+                meta={
+                  typeof status?.storage?.usage_percent === "number"
                     ? `${status.storage.usage_percent}% of budget`
-                    : ""}
-                </div>
-              </div>
+                    : ""
+                }
+              />
             </div>
           </CardContent>
         </Card>
