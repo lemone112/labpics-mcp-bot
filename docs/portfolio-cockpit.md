@@ -29,7 +29,22 @@ This mode adds:
 
 - Icon-only navigation,
 - Tooltip on hover for item names,
-- Keeps body area focused on selected project portfolio.
+- Keeps body area focused on selected project portfolio,
+- Contains **exactly six items** and no extra business menu entries.
+
+Required item set (mapped to `#` sections on `/control-tower`):
+
+1. `dashboard` — **Дашборд с Charts из shadcn**
+2. `messages` — **Переписки (в формате ленты сообщений)**
+3. `agreements` — **Договоренности (карточками, из RAG/Postgres)**
+4. `risks` — **Риски (карточками, паттерны из RAG + history)**
+5. `finance` — **Финансы и юнит-экономика**
+6. `offers` — **Офферы и допродажи**
+
+Notes:
+
+- Logout is not a business nav item and is placed in the second (text) sidebar.
+- The left rail should not include legacy pages (`projects`, `jobs`, `crm`, `signals`, etc.) as primary menu entries.
 
 Implemented in:
 
@@ -73,6 +88,15 @@ Implemented in:
 4. **Risk cards** (risk radar + high severity signals),
 5. **Finance + unit economics**,
 6. **Offers + upsell + Loops status**.
+
+Each block has a stable anchor id for left-rail navigation:
+
+- `#dashboard`
+- `#messages`
+- `#agreements`
+- `#risks`
+- `#finance`
+- `#offers`
 
 Implemented in:
 
@@ -278,6 +302,8 @@ If there is any risk the next implementation pass becomes superficial, **return 
    - selected projects constrained by session `account_scope_id`,
 4. Verify idempotency/safe retries on outbound integrations,
 5. Verify UX consistency with shadcn conventions (no ad-hoc overlays, no visual drift),
+   - left rail has exactly 6 business items,
+   - each rail item maps to a corresponding section anchor on `/control-tower`,
 6. Run validation:
    - `web`: `npm run lint` and `npm run build`,
    - `server`: syntax check for touched files,

@@ -1,7 +1,8 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Check, Circle, Loader2 } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Check, Circle, Loader2, LogOut } from "lucide-react";
 import { useTheme } from "next-themes";
 
 import { apiFetch } from "@/lib/api";
@@ -11,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 export function ProjectSidebar({ open = true }) {
+  const router = useRouter();
   const [activatingId, setActivatingId] = useState("");
   const [updatingSelection, setUpdatingSelection] = useState(false);
   const {
@@ -46,6 +48,15 @@ export function ProjectSidebar({ open = true }) {
       toggleProjectSelection(projectId);
     } finally {
       setTimeout(() => setUpdatingSelection(false), 0);
+    }
+  }
+
+  async function onLogout() {
+    try {
+      await apiFetch("/auth/logout", { method: "POST" });
+    } finally {
+      router.push("/login");
+      router.refresh();
     }
   }
 
@@ -150,6 +161,11 @@ export function ProjectSidebar({ open = true }) {
               </SelectContent>
             </Select>
             <p className="text-[11px] text-sidebar-foreground/70">По умолчанию используется системная тема.</p>
+
+            <Button type="button" variant="outline" size="sm" className="w-full justify-start" onClick={onLogout}>
+              <LogOut className="size-4" />
+              Выйти
+            </Button>
           </div>
         </div>
       </div>

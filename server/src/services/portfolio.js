@@ -271,6 +271,23 @@ export async function getPortfolioOverview(pool, options = {}) {
               AND s.project_id::text = ANY($2::text[])
               AND s.severity >= 4
               AND s.status IN ('proposed', 'accepted')
+
+            UNION ALL
+
+            SELECT
+              rp.id::text AS id,
+              rp.project_id::text AS project_id,
+              COALESCE(p.name, 'Паттерн из истории') AS project_name,
+              rp.title,
+              GREATEST(1, LEAST(5, round(rp.weight * 5)::int)) AS severity,
+              rp.weight AS probability,
+              rp.status,
+              rp.updated_at,
+              'risk_pattern'::text AS source
+            FROM risk_pattern_events AS rp
+            LEFT JOIN projects AS p ON p.id = rp.project_id
+            WHERE rp.account_scope_id = $1
+              AND rp.status = 'open'
           ) AS combined
           ORDER BY severity DESC, updated_at DESC
           LIMIT $3

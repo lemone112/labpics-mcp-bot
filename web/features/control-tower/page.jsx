@@ -106,7 +106,7 @@ export default function ControlTowerFeaturePage() {
   if (!selectedProjectIds.length) {
     return (
       <PageShell title="Control Tower" subtitle="Портфельный обзор по выбранным проектам">
-        <Card data-motion-item>
+        <Card id="dashboard" data-motion-item className="scroll-mt-20">
           <CardContent>
             <EmptyState
               title="Выберите хотя бы один проект"
@@ -129,7 +129,7 @@ export default function ControlTowerFeaturePage() {
   return (
     <PageShell title="Control Tower" subtitle="Портфельный обзор по выбранным проектам">
       <div className="space-y-4">
-        <Card data-motion-item>
+        <Card id="messages" data-motion-item className="scroll-mt-20">
           <CardHeader className="flex-row items-center justify-between">
             <div className="space-y-1">
               <CardTitle>1) Дашборд по выбранным проектам</CardTitle>
@@ -239,9 +239,9 @@ export default function ControlTowerFeaturePage() {
           </CardContent>
         </Card>
 
-        <Card data-motion-item>
+        <Card id="agreements" data-motion-item className="scroll-mt-20">
           <CardHeader>
-            <CardTitle>3) Договорённости (карточки из RAG/evidence)</CardTitle>
+            <CardTitle>3) Договоренности (карточками из RAG/evidence)</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
@@ -257,12 +257,12 @@ export default function ControlTowerFeaturePage() {
                   </p>
                 </div>
               ))}
-              {!agreements.length ? <p className="text-sm text-muted-foreground">Пока нет найденных договорённостей.</p> : null}
+              {!agreements.length ? <p className="text-sm text-muted-foreground">Пока нет найденных договоренностей.</p> : null}
             </div>
           </CardContent>
         </Card>
 
-        <Card data-motion-item>
+        <Card id="risks" data-motion-item className="scroll-mt-20">
           <CardHeader>
             <CardTitle>4) Риски (карточки и паттерны)</CardTitle>
           </CardHeader>
@@ -288,7 +288,7 @@ export default function ControlTowerFeaturePage() {
           </CardContent>
         </Card>
 
-        <Card data-motion-item>
+        <Card id="finance" data-motion-item className="scroll-mt-20">
           <CardHeader>
             <CardTitle>5) Финансы и юнит-экономика</CardTitle>
           </CardHeader>
@@ -319,7 +319,7 @@ export default function ControlTowerFeaturePage() {
           </CardContent>
         </Card>
 
-        <Card data-motion-item>
+        <Card id="offers" data-motion-item className="scroll-mt-20">
           <CardHeader>
             <CardTitle>6) Офферы и допродажи</CardTitle>
           </CardHeader>

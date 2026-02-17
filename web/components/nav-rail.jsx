@@ -1,34 +1,27 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
+import { usePathname } from "next/navigation";
 import {
-  BarChart3,
-  BriefcaseBusiness,
-  FileText,
-  FolderKanban,
   LayoutDashboard,
-  ListChecks,
-  LogOut,
-  Newspaper,
-  Radar,
-  Search,
+  MessageSquareText,
+  Handshake,
+  ShieldAlert,
+  Wallet,
+  Sparkles,
 } from "lucide-react";
 
-import { apiFetch } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
-const NAV_ITEMS = [
-  { href: "/control-tower", label: "Центр управления", icon: LayoutDashboard },
-  { href: "/projects", label: "Проекты", icon: FolderKanban },
-  { href: "/jobs", label: "Задачи", icon: ListChecks },
-  { href: "/search", label: "Поиск", icon: Search },
-  { href: "/crm", label: "CRM", icon: BriefcaseBusiness },
-  { href: "/signals", label: "Сигналы", icon: Radar },
-  { href: "/offers", label: "Офферы", icon: FileText },
-  { href: "/digests", label: "Дайджесты", icon: Newspaper },
-  { href: "/analytics", label: "Аналитика", icon: BarChart3 },
+const SECTION_ITEMS = [
+  { id: "dashboard", label: "Дашборд", icon: LayoutDashboard },
+  { id: "messages", label: "Переписки", icon: MessageSquareText },
+  { id: "agreements", label: "Договоренности", icon: Handshake },
+  { id: "risks", label: "Риски", icon: ShieldAlert },
+  { id: "finance", label: "Финансы и юнит-экономика", icon: Wallet },
+  { id: "offers", label: "Офферы и допродажи", icon: Sparkles },
 ];
 
 function IconButton({ active = false, children }) {
@@ -46,41 +39,35 @@ function IconButton({ active = false, children }) {
 
 export function NavRail() {
   const pathname = usePathname();
-  const router = useRouter();
+  const [activeSection, setActiveSection] = useState("dashboard");
 
-  async function onLogout() {
-    try {
-      await apiFetch("/auth/logout", { method: "POST" });
-    } finally {
-      router.push("/login");
-      router.refresh();
+  useEffect(() => {
+    if (pathname !== "/control-tower") {
+      setActiveSection("");
+      return;
     }
-  }
+    const syncFromHash = () => {
+      const currentHash = String(window.location.hash || "").replace(/^#/, "") || "dashboard";
+      const isKnown = SECTION_ITEMS.some((item) => item.id === currentHash);
+      setActiveSection(isKnown ? currentHash : "dashboard");
+    };
+    syncFromHash();
+    window.addEventListener("hashchange", syncFromHash);
+    return () => window.removeEventListener("hashchange", syncFromHash);
+  }, [pathname]);
 
   return (
     <aside className="flex h-svh w-14 shrink-0 flex-col items-center justify-between border-r bg-sidebar py-3">
       <TooltipProvider delayDuration={50}>
         <div className="flex w-full flex-col items-center gap-1">
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Link href="/control-tower" aria-label="Labpics">
-                <IconButton>
-                  <LayoutDashboard className="size-4" />
-                </IconButton>
-              </Link>
-            </TooltipTrigger>
-            <TooltipContent side="right">Labpics</TooltipContent>
-          </Tooltip>
-
-          <div className="my-1 h-px w-8 bg-sidebar-border" />
-
-          {NAV_ITEMS.map((item) => {
+          {SECTION_ITEMS.map((item) => {
             const Icon = item.icon;
-            const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
+            const href = `/control-tower#${item.id}`;
+            const active = pathname === "/control-tower" && activeSection === item.id;
             return (
-              <Tooltip key={item.href}>
+              <Tooltip key={item.id}>
                 <TooltipTrigger asChild>
-                  <Link href={item.href} aria-label={item.label}>
+                  <Link href={href} aria-label={item.label}>
                     <IconButton active={active}>
                       <Icon className="size-4" />
                     </IconButton>
@@ -90,19 +77,6 @@ export function NavRail() {
               </Tooltip>
             );
           })}
-        </div>
-
-        <div className="flex w-full flex-col items-center gap-1">
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <button type="button" onClick={onLogout} aria-label="Выйти">
-                <IconButton>
-                  <LogOut className="size-4" />
-                </IconButton>
-              </button>
-            </TooltipTrigger>
-            <TooltipContent side="right">Выйти</TooltipContent>
-          </Tooltip>
         </div>
       </TooltipProvider>
     </aside>
