@@ -1,3 +1,36 @@
+async function getStorageStats(pool) {
+  const budgetGbRaw = Number.parseFloat(process.env.STORAGE_BUDGET_GB || "20");
+  const budgetGb = Number.isFinite(budgetGbRaw) && budgetGbRaw > 0 ? budgetGbRaw : 20;
+  const budgetBytes = Math.floor(budgetGb * 1024 * 1024 * 1024);
+
+  const [dbSize, relationSizes] = await Promise.all([
+    pool.query("SELECT pg_database_size(current_database())::bigint AS bytes"),
+    pool.query(
+      `
+        SELECT
+          relname,
+          pg_total_relation_size(c.oid)::bigint AS bytes
+        FROM pg_class AS c
+        WHERE relname = ANY($1::text[])
+      `,
+      [["cw_contacts", "cw_conversations", "cw_messages", "rag_chunks"]]
+    ),
+  ]);
+
+  const tableSizes = {};
+  for (const row of relationSizes.rows) {
+    tableSizes[row.relname] = Number(row.bytes || 0);
+  }
+
+  const databaseBytes = Number(dbSize.rows?.[0]?.bytes || 0);
+  return {
+    database_bytes: databaseBytes,
+    budget_bytes: budgetBytes,
+    usage_percent: Number(((databaseBytes / Math.max(1, budgetBytes)) * 100).toFixed(2)),
+    table_bytes: tableSizes,
+  };
+}
+
 export async function startJob(pool, jobName) {
   const { rows } = await pool.query(
     `
@@ -31,7 +64,7 @@ export async function finishJob(pool, jobId, patch) {
 }
 
 export async function getJobsStatus(pool) {
-  const [latestRuns, statusCounts, watermark] = await Promise.all([
+  const [latestRuns, chunkStatusCounts, watermarks, entityCounts, storage] = await Promise.all([
     pool.query(
       `
         SELECT DISTINCT ON (job_name)
@@ -55,16 +88,33 @@ export async function getJobsStatus(pool) {
         LIMIT 5
       `
     ),
+    pool.query(
+      `
+        SELECT
+          (SELECT count(*)::int FROM cw_contacts) AS contacts,
+          (SELECT count(*)::int FROM cw_conversations) AS conversations,
+          (SELECT count(*)::int FROM cw_messages) AS messages,
+          (SELECT count(*)::int FROM rag_chunks) AS rag_chunks
+      `
+    ),
+    getStorageStats(pool),
   ]);
 
-  const ragCounts = { pending: 0, ready: 0, failed: 0 };
-  for (const row of statusCounts.rows) {
+  const ragCounts = { pending: 0, processing: 0, ready: 0, failed: 0 };
+  for (const row of chunkStatusCounts.rows) {
     ragCounts[row.embedding_status] = row.count;
   }
 
   return {
     jobs: latestRuns.rows,
     rag_counts: ragCounts,
-    watermarks: watermark.rows,
+    entities: entityCounts.rows[0] || {
+      contacts: 0,
+      conversations: 0,
+      messages: 0,
+      rag_chunks: 0,
+    },
+    storage,
+    watermarks: watermarks.rows,
   };
 }

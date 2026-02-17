@@ -34,6 +34,12 @@ function toTopK(value, fallback = 10) {
   return Math.max(1, Math.min(parsed, 50));
 }
 
+function toLimit(value, fallback = 100, max = 500) {
+  const parsed = Number.parseInt(String(value ?? ""), 10);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.max(1, Math.min(parsed, max));
+}
+
 async function main() {
   const databaseUrl = requiredEnv("DATABASE_URL");
   const auth = getAuthConfig();
@@ -203,6 +209,107 @@ async function main() {
 
     await pool.query("UPDATE sessions SET active_project_id = $2, last_seen_at = now() WHERE session_id = $1", [sid, projectId]);
     return { ok: true, active_project_id: projectId, project: project.rows[0], request_id: request.requestId };
+  });
+
+  app.get("/contacts", async (request) => {
+    const limit = toLimit(request.query?.limit, 100, 500);
+    const q = String(request.query?.q || "").trim();
+    const hasFilter = q.length > 0;
+
+    const { rows } = hasFilter
+      ? await pool.query(
+          `
+            SELECT
+              id, account_id, contact_id, name, email, phone_number, identifier, updated_at
+            FROM cw_contacts
+            WHERE
+              name ILIKE $1
+              OR email ILIKE $1
+              OR phone_number ILIKE $1
+            ORDER BY updated_at DESC NULLS LAST
+            LIMIT $2
+          `,
+          [`%${q.replace(/[%_]/g, "\\$&")}%`, limit]
+        )
+      : await pool.query(
+          `
+            SELECT
+              id, account_id, contact_id, name, email, phone_number, identifier, updated_at
+            FROM cw_contacts
+            ORDER BY updated_at DESC NULLS LAST
+            LIMIT $1
+          `,
+          [limit]
+        );
+
+    return { ok: true, contacts: rows, request_id: request.requestId };
+  });
+
+  app.get("/conversations", async (request) => {
+    const limit = toLimit(request.query?.limit, 100, 500);
+    const { rows } = await pool.query(
+      `
+        SELECT
+          id,
+          account_id,
+          conversation_id,
+          contact_global_id,
+          inbox_id,
+          status,
+          assignee_id,
+          updated_at,
+          created_at
+        FROM cw_conversations
+        ORDER BY COALESCE(updated_at, created_at) DESC
+        LIMIT $1
+      `,
+      [limit]
+    );
+    return { ok: true, conversations: rows, request_id: request.requestId };
+  });
+
+  app.get("/messages", async (request) => {
+    const limit = toLimit(request.query?.limit, 100, 500);
+    const conversationGlobalId = String(request.query?.conversation_global_id || "").trim();
+
+    const { rows } = conversationGlobalId
+      ? await pool.query(
+          `
+            SELECT
+              id,
+              conversation_global_id,
+              contact_global_id,
+              sender_type,
+              private,
+              left(content, 300) AS content_snippet,
+              created_at,
+              updated_at
+            FROM cw_messages
+            WHERE conversation_global_id = $1
+            ORDER BY created_at DESC NULLS LAST
+            LIMIT $2
+          `,
+          [conversationGlobalId, limit]
+        )
+      : await pool.query(
+          `
+            SELECT
+              id,
+              conversation_global_id,
+              contact_global_id,
+              sender_type,
+              private,
+              left(content, 300) AS content_snippet,
+              created_at,
+              updated_at
+            FROM cw_messages
+            ORDER BY created_at DESC NULLS LAST
+            LIMIT $1
+          `,
+          [limit]
+        );
+
+    return { ok: true, messages: rows, request_id: request.requestId };
   });
 
   app.post("/jobs/chatwoot/sync", async (request, reply) => {
