@@ -23,6 +23,8 @@ import { applyIdentitySuggestions, listIdentityLinks, listIdentitySuggestions, p
 import { extractSignalsAndNba, getTopNba, listNba, listSignals, updateNbaStatus, updateSignalStatus } from "./services/signals.js";
 import { listUpsellRadar, refreshUpsellRadar, updateUpsellStatus } from "./services/upsell.js";
 import { applyContinuityActions, buildContinuityPreview, listContinuityActions } from "./services/continuity.js";
+import { getPortfolioOverview } from "./services/portfolio.js";
+import { syncLoopsContacts } from "./services/loops.js";
 import {
   generateDailyDigest,
   generateWeeklyDigest,
@@ -87,6 +89,24 @@ function toBoundedInt(value, fallback, min, max) {
   const parsed = Number.parseInt(String(value || ""), 10);
   if (!Number.isFinite(parsed)) return fallback;
   return Math.max(min, Math.min(parsed, max));
+}
+
+function parseProjectIdsInput(value, max = 50) {
+  const rawValues = Array.isArray(value)
+    ? value
+    : typeof value === "string"
+      ? value.split(",")
+      : [];
+  const deduped = [];
+  const seen = new Set();
+  for (const item of rawValues) {
+    const normalized = String(item || "").trim();
+    if (!normalized || seen.has(normalized)) continue;
+    deduped.push(normalized);
+    seen.add(normalized);
+    if (deduped.length >= max) break;
+  }
+  return deduped;
 }
 
 async function main() {
@@ -847,6 +867,22 @@ async function main() {
   registerGet("/control-tower", async (request, reply) => {
     const scope = requireProjectScope(request);
     const payload = await getControlTower(pool, scope);
+    return sendOk(reply, request.requestId, payload);
+  });
+
+  registerGet("/portfolio/overview", async (request, reply) => {
+    const accountScopeId = request.auth?.account_scope_id || null;
+    if (!accountScopeId) {
+      fail(409, "account_scope_required", "Account scope is required");
+    }
+
+    const payload = await getPortfolioOverview(pool, {
+      accountScopeId,
+      activeProjectId: request.auth?.active_project_id || null,
+      projectIds: parseProjectIdsInput(request.query?.project_ids, 100),
+      messageLimit: request.query?.message_limit,
+      cardLimit: request.query?.card_limit,
+    });
     return sendOk(reply, request.requestId, payload);
   });
 
@@ -1813,6 +1849,27 @@ async function main() {
       parseLimit(body?.limit, 20, 200)
     );
     return sendOk(reply, request.requestId, { result });
+  });
+
+  registerPost("/loops/sync", async (request, reply) => {
+    const accountScopeId = request.auth?.account_scope_id || null;
+    if (!accountScopeId) {
+      fail(409, "account_scope_required", "Account scope is required");
+    }
+    const body = request.body && typeof request.body === "object" ? request.body : {};
+    const result = await syncLoopsContacts(
+      pool,
+      {
+        accountScopeId,
+        projectIds: parseProjectIdsInput(body?.project_ids, 100),
+      },
+      {
+        actorUsername: request.auth?.username || null,
+        requestId: request.requestId,
+        limit: body?.limit,
+      }
+    );
+    return sendOk(reply, request.requestId, { loops: result });
   });
 
   app.setErrorHandler((error, request, reply) => {

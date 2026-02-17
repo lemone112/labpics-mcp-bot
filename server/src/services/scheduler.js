@@ -6,6 +6,7 @@ import { runLinearSync } from "./linear.js";
 import { extractSignalsAndNba } from "./signals.js";
 import { refreshUpsellRadar } from "./upsell.js";
 import { generateDailyDigest, generateWeeklyDigest, refreshAnalytics, refreshRiskAndHealth } from "./intelligence.js";
+import { syncLoopsContacts } from "./loops.js";
 
 function toPositiveInt(value, fallback, min = 1, max = 2_592_000) {
   const parsed = Number.parseInt(String(value ?? ""), 10);
@@ -31,6 +32,16 @@ function createHandlers(customHandlers = {}) {
     campaign_scheduler: async ({ pool, scope }) =>
       processDueOutbounds(pool, scope, "scheduler", `scheduler_campaign_${Date.now()}`, 50),
     analytics_aggregates: async ({ pool, scope }) => refreshAnalytics(pool, scope, 30),
+    loops_contacts_sync: async ({ pool, scope }) =>
+      syncLoopsContacts(
+        pool,
+        { accountScopeId: scope.accountScopeId, projectIds: [scope.projectId] },
+        {
+          actorUsername: "scheduler",
+          requestId: `scheduler_loops_${Date.now()}`,
+          limit: 300,
+        }
+      ),
     ...customHandlers,
   };
 }
@@ -48,6 +59,7 @@ export async function ensureDefaultScheduledJobs(pool, scope) {
     { jobType: "weekly_digest", cadenceSeconds: 604800 },
     { jobType: "campaign_scheduler", cadenceSeconds: 300 },
     { jobType: "analytics_aggregates", cadenceSeconds: 1800 },
+    { jobType: "loops_contacts_sync", cadenceSeconds: 3600 },
   ];
 
   for (const item of defaults) {
