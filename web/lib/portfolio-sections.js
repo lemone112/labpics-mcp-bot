@@ -1,5 +1,6 @@
 export const PORTFOLIO_SECTIONS = [
   { key: "dashboard", label: "Дашборд", href: "/control-tower/dashboard" },
+  { key: "recommendations", label: "Рекомендации", href: "/control-tower/recommendations" },
   { key: "messages", label: "Переписки", href: "/control-tower/messages" },
   { key: "agreements", label: "Договоренности", href: "/control-tower/agreements" },
   { key: "risks", label: "Риски", href: "/control-tower/risks" },
@@ -7,7 +8,7 @@ export const PORTFOLIO_SECTIONS = [
   { key: "offers", label: "Офферы и допродажи", href: "/control-tower/offers" },
 ];
 
-const SECTIONS_WITH_ALL_PROJECTS = new Set(["dashboard", "agreements", "risks", "finance", "offers"]);
+const SECTIONS_WITH_ALL_PROJECTS = new Set(["dashboard", "recommendations", "agreements", "risks", "finance", "offers"]);
 
 export function parsePortfolioSectionFromPath(pathname) {
   const path = String(pathname || "");

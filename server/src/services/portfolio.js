@@ -137,6 +137,7 @@ export async function getPortfolioOverview(pool, options = {}) {
             COALESCE(msg.messages_7d, 0)::int AS messages_7d,
             COALESCE(lin.issues_open, 0)::int AS linear_open_issues,
             COALESCE(att.pipeline_amount, 0)::numeric(14,2) AS attio_pipeline_amount,
+            COALESCE(att.expected_revenue, 0)::numeric(14,2) AS attio_expected_revenue,
             COALESCE(crm.pipeline_amount, 0)::numeric(14,2) AS crm_pipeline_amount,
             COALESCE(crm.expected_revenue, 0)::numeric(14,2) AS expected_revenue,
             COALESCE(hs.score, 0)::numeric(6,2) AS health_score,
@@ -155,7 +156,9 @@ export async function getPortfolioOverview(pool, options = {}) {
               AND account_scope_id = $1
           ) AS lin ON TRUE
           LEFT JOIN LATERAL (
-            SELECT COALESCE(sum(amount), 0)::numeric(14,2) AS pipeline_amount
+            SELECT
+              COALESCE(sum(amount), 0)::numeric(14,2) AS pipeline_amount,
+              COALESCE(sum(amount * probability), 0)::numeric(14,2) AS expected_revenue
             FROM attio_opportunities_raw
             WHERE project_id = p.id
               AND account_scope_id = $1
@@ -168,6 +171,7 @@ export async function getPortfolioOverview(pool, options = {}) {
             FROM crm_opportunities
             WHERE project_id = p.id
               AND account_scope_id = $1
+              AND COALESCE(source_system, 'manual') <> 'attio'
               AND stage NOT IN ('won', 'lost')
           ) AS crm ON TRUE
           LEFT JOIN LATERAL (
@@ -322,13 +326,16 @@ export async function getPortfolioOverview(pool, options = {}) {
           SELECT
             p.id::text AS project_id,
             p.name AS project_name,
-            COALESCE(crm.deal_amount, 0)::numeric(14,2) AS deal_amount,
-            COALESCE(crm.pipeline_amount, 0)::numeric(14,2) AS pipeline_amount,
-            COALESCE(crm.expected_revenue, 0)::numeric(14,2) AS expected_revenue,
+            COALESCE(crm.deal_amount, 0)::numeric(14,2) + COALESCE(attio.deal_amount, 0)::numeric(14,2) AS deal_amount,
+            COALESCE(crm.pipeline_amount, 0)::numeric(14,2) + COALESCE(attio.pipeline_amount, 0)::numeric(14,2) AS pipeline_amount,
+            COALESCE(crm.expected_revenue, 0)::numeric(14,2) + COALESCE(attio.expected_revenue, 0)::numeric(14,2) AS expected_revenue,
             COALESCE(o.signed_total, 0)::numeric(14,2) AS signed_total,
             COALESCE(ar.costs_amount, 0)::numeric(14,2) AS costs_amount,
-            COALESCE(ar.gross_margin, COALESCE(crm.expected_revenue, 0) - COALESCE(ar.costs_amount, 0))::numeric(14,2) AS gross_margin,
-            COALESCE(crm.forecast_days, 0)::int AS forecast_days
+            COALESCE(
+              ar.gross_margin,
+              COALESCE(crm.expected_revenue, 0) + COALESCE(attio.expected_revenue, 0) - COALESCE(ar.costs_amount, 0)
+            )::numeric(14,2) AS gross_margin,
+            GREATEST(COALESCE(crm.forecast_days, 0), COALESCE(attio.forecast_days, 0))::int AS forecast_days
           FROM projects AS p
           LEFT JOIN LATERAL (
             SELECT
@@ -339,7 +346,27 @@ export async function getPortfolioOverview(pool, options = {}) {
             FROM crm_opportunities
             WHERE project_id = p.id
               AND account_scope_id = $1
+              AND COALESCE(source_system, 'manual') <> 'attio'
           ) AS crm ON TRUE
+          LEFT JOIN LATERAL (
+            SELECT
+              COALESCE(sum(amount) FILTER (
+                WHERE lower(COALESCE(stage, '')) IN ('won', 'closed-won')
+              ), 0)::numeric(14,2) AS deal_amount,
+              COALESCE(sum(amount) FILTER (
+                WHERE lower(COALESCE(stage, '')) NOT IN ('won', 'lost', 'closed-won', 'closed-lost')
+              ), 0)::numeric(14,2) AS pipeline_amount,
+              COALESCE(sum(amount * probability) FILTER (
+                WHERE lower(COALESCE(stage, '')) NOT IN ('won', 'lost', 'closed-won', 'closed-lost')
+              ), 0)::numeric(14,2) AS expected_revenue,
+              COALESCE(avg(GREATEST(0, expected_close_date - current_date)) FILTER (
+                WHERE lower(COALESCE(stage, '')) NOT IN ('won', 'lost', 'closed-won', 'closed-lost')
+                  AND expected_close_date IS NOT NULL
+              ), 0)::int AS forecast_days
+            FROM attio_opportunities_raw
+            WHERE project_id = p.id
+              AND account_scope_id = $1
+          ) AS attio ON TRUE
           LEFT JOIN LATERAL (
             SELECT COALESCE(sum(total) FILTER (WHERE status = 'signed'), 0)::numeric(14,2) AS signed_total
             FROM offers
@@ -558,10 +585,32 @@ export async function getPortfolioOverview(pool, options = {}) {
           SELECT
             stage,
             count(*)::int AS opportunities,
-            COALESCE(sum(amount_estimate), 0)::numeric(14,2) AS amount
-          FROM crm_opportunities
-          WHERE account_scope_id = $1
-            AND project_id::text = ANY($2::text[])
+            COALESCE(sum(amount), 0)::numeric(14,2) AS amount
+          FROM (
+            SELECT
+              stage,
+              amount_estimate AS amount
+            FROM crm_opportunities
+            WHERE account_scope_id = $1
+              AND project_id::text = ANY($2::text[])
+              AND COALESCE(source_system, 'manual') <> 'attio'
+
+            UNION ALL
+
+            SELECT
+              CASE
+                WHEN lower(COALESCE(stage, '')) IN ('won', 'closed-won') THEN 'won'
+                WHEN lower(COALESCE(stage, '')) IN ('lost', 'closed-lost') THEN 'lost'
+                WHEN lower(COALESCE(stage, '')) IN ('proposal', 'proposal_sent') THEN 'proposal'
+                WHEN lower(COALESCE(stage, '')) IN ('negotiation') THEN 'negotiation'
+                WHEN lower(COALESCE(stage, '')) IN ('qualified') THEN 'qualified'
+                ELSE 'discovery'
+              END AS stage,
+              amount
+            FROM attio_opportunities_raw
+            WHERE account_scope_id = $1
+              AND project_id::text = ANY($2::text[])
+          ) AS stage_source
           GROUP BY stage
           ORDER BY opportunities DESC, amount DESC
           LIMIT 20
@@ -628,8 +677,9 @@ export async function getPortfolioOverview(pool, options = {}) {
 
   const dashboardByProject = dashboardRows.rows.map((row) => {
     const attioPipeline = toNumber(row.attio_pipeline_amount, 0);
+    const attioExpectedRevenue = toNumber(row.attio_expected_revenue, 0);
     const crmPipeline = toNumber(row.crm_pipeline_amount, 0);
-    const expectedRevenue = Math.max(toNumber(row.expected_revenue, 0), attioPipeline + crmPipeline);
+    const expectedRevenue = Math.max(toNumber(row.expected_revenue, 0) + attioExpectedRevenue, attioPipeline + crmPipeline);
     const metrics = {
       project_id: row.project_id,
       project_name: row.project_name,
@@ -637,6 +687,7 @@ export async function getPortfolioOverview(pool, options = {}) {
       linear_open_issues: toNumber(row.linear_open_issues, 0),
       attio_pipeline_amount: attioPipeline,
       crm_pipeline_amount: crmPipeline,
+      attio_expected_revenue: attioExpectedRevenue,
       expected_revenue: expectedRevenue,
       health_score: toNumber(row.health_score, 0),
       risks_open: toNumber(row.risks_open, 0),

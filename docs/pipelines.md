@@ -56,6 +56,12 @@
 3. upsert новых/изменённых записей в raw-таблицы,
 4. фиксация process events в `kag_event_log` (start/finish/error/duration/counters).
 
+Инварианты качества sync:
+
+- **Идемпотентность:** каждый raw-слой пишет через `ON CONFLICT ... DO UPDATE`, повторный sync не создаёт дублей.
+- **Полнота:** для Attio/Linear используется постраничная загрузка (не только `first/limit`), чтобы не терять записи при росте объёма.
+- **Прозрачность режима:** mock-режим явно логируется как `process_warning` (чтобы не спутать с production-данными).
+- **Reconciliation:** после sync Attio считаются coverage-метрики (сколько аккаунтов/сделок дошло до CRM-mirror и где есть разрывы ссылок).
 При ошибках:
 
 - запись в `connector_errors`,
@@ -128,6 +134,11 @@
 1. прогноз (`kag_risk_forecasts`) на 7/14/30 дней,
 2. рекомендации v2 (`recommendations_v2`) с lifecycle/feedback.
 
+В рамках продуктового цикла Iteration 1:
+
+- показ рекомендаций фиксируется как `recommendation_shown` (audit),
+- исполнение действия по рекомендации фиксируется как `recommendation_action_taken`,
+- execution runs пишутся в `recommendation_action_runs` с retry-метаданными.
 Оптимизация токенов:
 
 - LLM-формулировки только для top-N рекомендаций,

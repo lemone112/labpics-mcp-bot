@@ -32,6 +32,10 @@
 10. Операционная эксплуатация:
    - [`docs/runbooks.md`](./runbooks.md)
    - [`docs/deployment.md`](./deployment.md)
+11. Ручные e2e-сценарии:
+   - [`docs/scenarios.md`](./scenarios.md)
+12. Лог итераций и самоанализ:
+   - [`docs/iteration-log.md`](./iteration-log.md)
 
 ## Где что используется
 

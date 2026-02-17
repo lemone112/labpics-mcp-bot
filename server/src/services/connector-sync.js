@@ -71,6 +71,34 @@ export async function runConnectorSync(pool, scope, connector, logger = console)
 
   try {
     const result = await connectorRunner.pull({ pool, scope, logger });
+    if (String(result?.mode || "").toLowerCase() === "mock") {
+      await warnProcess(pool, scope, `sync_${normalizedConnector}`, "Connector is running in mock mode", {
+        payload: {
+          connector: normalizedConnector,
+          mode,
+        },
+      });
+    }
+    if (
+      normalizedConnector === "attio" &&
+      result?.coverage &&
+      (Number(result.coverage.opportunities_without_account_ref || 0) > 0 ||
+        Number(result.coverage.opportunities_unmapped_to_crm_account || 0) > 0)
+    ) {
+      await warnProcess(
+        pool,
+        scope,
+        `sync_${normalizedConnector}`,
+        "Attio sync completed with incomplete account mappings",
+        {
+          payload: {
+            connector: normalizedConnector,
+            mode,
+            coverage: result.coverage,
+          },
+        }
+      );
+    }
     const eventSync = await syncConnectorEventLog(pool, scope, {
       connector: normalizedConnector,
       since_ts: state?.cursor_ts || result?.since || null,

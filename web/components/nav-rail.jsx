@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   LayoutDashboard,
+  Lightbulb,
   MessageSquareText,
   Handshake,
   ShieldAlert,
@@ -17,6 +18,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 
 const SECTION_ICONS = {
   dashboard: LayoutDashboard,
+  recommendations: Lightbulb,
   messages: MessageSquareText,
   agreements: Handshake,
   risks: ShieldAlert,
@@ -41,7 +43,7 @@ export function NavRail() {
   const pathname = usePathname();
 
   return (
-    <aside className="sticky top-0 flex h-svh w-14 shrink-0 flex-col items-center justify-between border-r bg-sidebar py-3">
+    <aside className="sticky top-0 hidden h-svh w-14 shrink-0 flex-col items-center justify-between border-r bg-sidebar py-3 md:flex">
       <TooltipProvider delayDuration={50}>
         <div className="flex w-full flex-col items-center gap-1">
           {PORTFOLIO_SECTIONS.map((item) => {

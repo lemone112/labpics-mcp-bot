@@ -160,7 +160,13 @@
 - `kag_risk_forecasts`
   - вероятности рисков 7/14/30, drivers, similar cases, `publishable`.
 - `recommendations_v2`
-  - рекомендации с lifecycle (`new/acknowledged/done/dismissed`) и feedback.
+  - рекомендации с lifecycle (`new/acknowledged/done/dismissed`) и feedback,
+  - explainability/gating поля: `evidence_count`, `evidence_quality_score`, `evidence_gate_status`, `evidence_gate_reason`,
+  - product telemetry: `shown_count`, `first_shown_at`, `last_shown_at`.
+- `recommendation_action_runs`
+  - лог исполнения действий по рекомендациям,
+  - типы действий: `create_or_update_task`, `send_message`, `set_reminder`,
+  - retry-поля: `attempts`, `max_retries`, `next_retry_at`, `error_message`, `result_payload`.
 
 ---
 

@@ -6,6 +6,8 @@ import { computeScores } from "../src/kag/scoring/index.js";
 import { computeRiskForecastsFromInputs } from "../src/services/forecasting.js";
 import {
   buildLoopsDraftPayloadFromAttioContact,
+  computeEvidenceGate,
+  evidenceGatePolicy,
   generateRecommendationsV2FromInputs,
 } from "../src/services/recommendations-v2.js";
 import { rankSimilarCasesFromSignatures } from "../src/services/similarity.js";
@@ -419,4 +421,40 @@ test("12) forecast output marks rows publishable only with evidence", () => {
     now: new Date("2026-02-17T00:00:00.000Z"),
   });
   assert.ok(forecastsWithEvidence.every((row) => row.publishable === true));
+});
+
+test("13) evidence gate hides weak recommendations", () => {
+  const gate = computeEvidenceGate(
+    [
+      {
+        rag_chunk_id: "chunk-only",
+      },
+    ],
+    {
+      minCount: 2,
+      minQuality: 0.35,
+      requirePrimary: true,
+    }
+  );
+  assert.equal(gate.evidence_gate_status, "hidden");
+  assert.match(String(gate.evidence_gate_reason || ""), /insufficient|missing_primary/i);
+});
+
+test("14) evidence gate shows recommendations with sufficient multi-source evidence", () => {
+  const policy = evidenceGatePolicy();
+  const gate = computeEvidenceGate(
+    [
+      { message_id: "cwmsg:1" },
+      { linear_issue_id: "LIN-101" },
+      { doc_url: "https://docs.example.com/proof" },
+    ],
+    {
+      ...policy,
+      minCount: 2,
+      minQuality: 0.35,
+      requirePrimary: true,
+    }
+  );
+  assert.equal(gate.evidence_gate_status, "visible");
+  assert.ok(Number(gate.evidence_quality_score) >= 0.35);
 });

@@ -16,6 +16,12 @@ function clamp(value, min, max) {
   return Math.max(min, Math.min(max, n));
 }
 
+function toBoolean(value, fallback = false) {
+  const normalized = String(value || "").trim().toLowerCase();
+  if (!normalized) return fallback;
+  return ["1", "true", "yes", "on"].includes(normalized);
+}
+
 function addDaysIso(now, days) {
   const base = now instanceof Date ? now : new Date(now);
   const next = new Date(base.getTime() + days * 24 * 60 * 60 * 1000);
@@ -66,6 +72,69 @@ function evidenceToLinks(evidenceRefs = []) {
   return [...new Set(links)].slice(0, 20);
 }
 
+function evidenceSourceSet(evidenceRefs = []) {
+  const out = new Set();
+  for (const ref of evidenceRefs) {
+    if (!ref || typeof ref !== "object") continue;
+    if (ref.message_id) out.add("message");
+    if (ref.linear_issue_id) out.add("linear");
+    if (ref.attio_record_id) out.add("attio");
+    if (ref.doc_url) out.add("doc");
+    if (ref.rag_chunk_id) out.add("rag");
+  }
+  return out;
+}
+
+export function evidenceGatePolicy() {
+  return {
+    minCount: clampInt(process.env.RECOMMENDATIONS_EVIDENCE_MIN_COUNT, 2, 1, 20),
+    minQuality: clamp(Number(process.env.RECOMMENDATIONS_EVIDENCE_MIN_QUALITY || 0.35), 0, 1),
+    requirePrimary:
+      !toBoolean(process.env.RECOMMENDATIONS_EVIDENCE_ALLOW_SECONDARY_ONLY, false),
+  };
+}
+
+export function computeEvidenceGate(evidenceRefs = [], policy = evidenceGatePolicy()) {
+  const refs = Array.isArray(evidenceRefs) ? evidenceRefs : [];
+  const sourceSet = evidenceSourceSet(refs);
+  const countScore = clamp(refs.length / Math.max(1, policy.minCount * 2), 0, 1);
+  const diversityScore = clamp(sourceSet.size / 3, 0, 1);
+  const primaryPresent = sourceSet.has("message") || sourceSet.has("linear") || sourceSet.has("attio") || sourceSet.has("doc");
+  const primaryScore = primaryPresent ? 1 : 0;
+  const quality = clamp(Number((0.5 * countScore + 0.35 * diversityScore + 0.15 * primaryScore).toFixed(4)), 0, 1);
+
+  if (refs.length < policy.minCount) {
+    return {
+      evidence_count: refs.length,
+      evidence_quality_score: quality,
+      evidence_gate_status: "hidden",
+      evidence_gate_reason: `insufficient_evidence_count_${refs.length}_lt_${policy.minCount}`,
+    };
+  }
+  if (policy.requirePrimary && !primaryPresent) {
+    return {
+      evidence_count: refs.length,
+      evidence_quality_score: quality,
+      evidence_gate_status: "hidden",
+      evidence_gate_reason: "missing_primary_source",
+    };
+  }
+  if (quality < policy.minQuality) {
+    return {
+      evidence_count: refs.length,
+      evidence_quality_score: quality,
+      evidence_gate_status: "hidden",
+      evidence_gate_reason: `low_evidence_quality_${quality}_lt_${policy.minQuality}`,
+    };
+  }
+  return {
+    evidence_count: refs.length,
+    evidence_quality_score: quality,
+    evidence_gate_status: "visible",
+    evidence_gate_reason: null,
+  };
+}
+
 function scoreValue(scoresMap, scoreType) {
   return Number(scoresMap?.[scoreType]?.score || 0);
 }
@@ -100,6 +169,10 @@ function recommendationEnvelope(rec) {
     signal_snapshot: rec.signal_snapshot || {},
     forecast_snapshot: rec.forecast_snapshot || {},
     dedupe_key: rec.dedupe_key,
+    evidence_count: Number(rec.evidence_count || 0),
+    evidence_quality_score: Number(rec.evidence_quality_score || 0),
+    evidence_gate_status: String(rec.evidence_gate_status || "hidden"),
+    evidence_gate_reason: rec.evidence_gate_reason || null,
   };
 }
 
@@ -127,6 +200,7 @@ export async function generateRecommendationsV2FromInputs({
   const signalMap = indexBy(signals, "signal_key");
   const scoreMap = indexBy(scores, "score_type");
   const forecastMap = forecastByType(forecasts);
+  const gatePolicy = evidenceGatePolicy();
   const recs = [];
 
   const waitingSignal = signalMap.waiting_on_client_days;
@@ -168,6 +242,7 @@ export async function generateRecommendationsV2FromInputs({
           waiting_days: signalValue(signalMap, "waiting_on_client_days").toFixed(1),
           p7: Number(clientForecast?.probability_7d || 0).toFixed(2),
         }),
+        ...computeEvidenceGate(waitingEvidence, gatePolicy),
       })
     );
   }
@@ -207,6 +282,7 @@ export async function generateRecommendationsV2FromInputs({
           scope_rate: signalValue(signalMap, "scope_creep_rate").toFixed(2),
           p14: Number(scopeForecast?.probability_14d || 0).toFixed(2),
         }),
+        ...computeEvidenceGate(scopeEvidence, gatePolicy),
       })
     );
   }
@@ -253,6 +329,7 @@ export async function generateRecommendationsV2FromInputs({
           p7: Number(deliveryForecast?.probability_7d || 0).toFixed(2),
           blockers_age: signalValue(signalMap, "blockers_age").toFixed(1),
         }),
+        ...computeEvidenceGate(deliveryEvidence, gatePolicy),
       })
     );
   }
@@ -298,6 +375,7 @@ export async function generateRecommendationsV2FromInputs({
           burn: signalValue(signalMap, "budget_burn_rate").toFixed(2),
           p14: Number(financeForecast?.probability_14d || 0).toFixed(2),
         }),
+        ...computeEvidenceGate(financeEvidence, gatePolicy),
       })
     );
   }
@@ -338,6 +416,7 @@ export async function generateRecommendationsV2FromInputs({
           upsell: upsellSignal.toFixed(1),
           p30: Number(clientForecast?.probability_30d || 0).toFixed(2),
         }),
+        ...computeEvidenceGate(upsellEvidence, gatePolicy),
       })
     );
   }
@@ -374,6 +453,7 @@ export async function generateRecommendationsV2FromInputs({
         dedupe_key: dedupeKey("winback", {
           p14: Number(clientForecast?.probability_14d || 0).toFixed(2),
         }),
+        ...computeEvidenceGate(winbackEvidence, gatePolicy),
       })
     );
   }
@@ -489,6 +569,10 @@ async function upsertRecommendationsV2(pool, scope, recommendations = []) {
     signal_snapshot: item.signal_snapshot || {},
     forecast_snapshot: item.forecast_snapshot || {},
     dedupe_key: String(item.dedupe_key || "").slice(0, 200),
+    evidence_count: clampInt(item.evidence_count, 0, 0, 1000),
+    evidence_quality_score: clamp(Number(item.evidence_quality_score || 0), 0, 1),
+    evidence_gate_status: String(item.evidence_gate_status || "hidden"),
+    evidence_gate_reason: item.evidence_gate_reason ? String(item.evidence_gate_reason).slice(0, 200) : null,
   }));
 
   const result = await pool.query(
@@ -512,6 +596,10 @@ async function upsertRecommendationsV2(pool, scope, recommendations = []) {
         signal_snapshot,
         forecast_snapshot,
         dedupe_key,
+        evidence_count,
+        evidence_quality_score,
+        evidence_gate_status,
+        evidence_gate_reason,
         updated_at
       )
       SELECT
@@ -533,6 +621,10 @@ async function upsertRecommendationsV2(pool, scope, recommendations = []) {
         x.signal_snapshot,
         x.forecast_snapshot,
         x.dedupe_key,
+        x.evidence_count,
+        x.evidence_quality_score,
+        x.evidence_gate_status,
+        x.evidence_gate_reason,
         now()
       FROM jsonb_to_recordset($3::jsonb) AS x(
         category text,
@@ -550,7 +642,11 @@ async function upsertRecommendationsV2(pool, scope, recommendations = []) {
         suggested_template text,
         signal_snapshot jsonb,
         forecast_snapshot jsonb,
-        dedupe_key text
+        dedupe_key text,
+        evidence_count int,
+        evidence_quality_score numeric,
+        evidence_gate_status text,
+        evidence_gate_reason text
       )
       ON CONFLICT (project_id, dedupe_key)
       DO UPDATE SET
@@ -573,6 +669,10 @@ async function upsertRecommendationsV2(pool, scope, recommendations = []) {
         suggested_template = EXCLUDED.suggested_template,
         signal_snapshot = EXCLUDED.signal_snapshot,
         forecast_snapshot = EXCLUDED.forecast_snapshot,
+        evidence_count = EXCLUDED.evidence_count,
+        evidence_quality_score = EXCLUDED.evidence_quality_score,
+        evidence_gate_status = EXCLUDED.evidence_gate_status,
+        evidence_gate_reason = EXCLUDED.evidence_gate_reason,
         updated_at = now()
     `,
     [scope.projectId, scope.accountScopeId, JSON.stringify(payload)]
@@ -648,6 +748,7 @@ export async function listRecommendationsV2(pool, scope, options = {}) {
   const status = String(options.status || "").trim().toLowerCase();
   const limit = clampInt(options.limit, 100, 1, 1000);
   const allProjects = String(options.all_projects || "").trim().toLowerCase() === "true";
+  const includeHidden = String(options.include_hidden || "").trim().toLowerCase() === "true";
 
   if (allProjects) {
     const { rows } = await pool.query(
@@ -673,16 +774,27 @@ export async function listRecommendationsV2(pool, scope, options = {}) {
           r.feedback_note,
           r.signal_snapshot,
           r.forecast_snapshot,
+          r.evidence_count,
+          r.evidence_quality_score,
+          r.evidence_gate_status,
+          r.evidence_gate_reason,
+          r.first_shown_at,
+          r.last_shown_at,
+          r.shown_count,
+          r.acknowledged_at,
+          r.dismissed_at,
+          r.completed_at,
           r.created_at,
           r.updated_at
         FROM recommendations_v2 AS r
         JOIN projects AS p ON p.id = r.project_id
         WHERE r.account_scope_id = $1
           AND ($2 = '' OR r.status = $2)
+          AND ($3::boolean = true OR r.evidence_gate_status = 'visible')
         ORDER BY r.priority DESC, r.updated_at DESC
-        LIMIT $3
+        LIMIT $4
       `,
-      [scope.accountScopeId, status, limit]
+      [scope.accountScopeId, status, includeHidden, limit]
     );
     return rows.map((row) => ({
       ...row,
@@ -712,48 +824,126 @@ export async function listRecommendationsV2(pool, scope, options = {}) {
         feedback_note,
         signal_snapshot,
         forecast_snapshot,
+        evidence_count,
+        evidence_quality_score,
+        evidence_gate_status,
+        evidence_gate_reason,
+        first_shown_at,
+        last_shown_at,
+        shown_count,
+        acknowledged_at,
+        dismissed_at,
+        completed_at,
         created_at,
         updated_at
       FROM recommendations_v2
       WHERE project_id = $1
         AND account_scope_id = $2
         AND ($3 = '' OR status = $3)
+        AND ($4::boolean = true OR evidence_gate_status = 'visible')
       ORDER BY priority DESC, updated_at DESC
-      LIMIT $4
+      LIMIT $5
     `,
-    [scope.projectId, scope.accountScopeId, status, limit]
+    [scope.projectId, scope.accountScopeId, status, includeHidden, limit]
   );
   return rows;
 }
 
-export async function updateRecommendationV2Status(pool, scope, id, status) {
+export async function updateRecommendationV2Status(pool, scope, id, status, options = {}) {
   const normalized = String(status || "").trim().toLowerCase();
+  const allProjects = String(options.all_projects || "").trim().toLowerCase() === "true";
   if (!["new", "acknowledged", "done", "dismissed"].includes(normalized)) {
     throw new Error("invalid_recommendation_v2_status");
   }
   const { rows } = await pool.query(
+    allProjects
+      ? `
+      UPDATE recommendations_v2
+      SET status = $3,
+          acknowledged_at = CASE WHEN $3 = 'acknowledged' THEN now() ELSE acknowledged_at END,
+          completed_at = CASE WHEN $3 = 'done' THEN now() ELSE completed_at END,
+          dismissed_at = CASE WHEN $3 = 'dismissed' THEN now() ELSE dismissed_at END,
+          updated_at = now()
+      WHERE id = $1
+        AND account_scope_id = $2
+      RETURNING *
     `
+      : `
       UPDATE recommendations_v2
       SET status = $4,
+          acknowledged_at = CASE WHEN $4 = 'acknowledged' THEN now() ELSE acknowledged_at END,
           completed_at = CASE WHEN $4 = 'done' THEN now() ELSE completed_at END,
+          dismissed_at = CASE WHEN $4 = 'dismissed' THEN now() ELSE dismissed_at END,
           updated_at = now()
       WHERE id = $1
         AND project_id = $2
         AND account_scope_id = $3
       RETURNING *
     `,
-    [id, scope.projectId, scope.accountScopeId, normalized]
+    allProjects ? [id, scope.accountScopeId, normalized] : [id, scope.projectId, scope.accountScopeId, normalized]
   );
   return rows[0] || null;
 }
 
-export async function updateRecommendationV2Feedback(pool, scope, id, helpful, note) {
+export async function markRecommendationsV2Shown(pool, scope, recommendationIds = [], options = {}) {
+  const allProjects = String(options.all_projects || "").trim().toLowerCase() === "true";
+  const ids = Array.from(
+    new Set(
+      (Array.isArray(recommendationIds) ? recommendationIds : [])
+        .map((id) => String(id || "").trim())
+        .filter(Boolean)
+    )
+  );
+  if (!ids.length) return [];
+
+  const result = await pool.query(
+    allProjects
+      ? `
+        UPDATE recommendations_v2
+        SET
+          shown_count = shown_count + 1,
+          first_shown_at = COALESCE(first_shown_at, now()),
+          last_shown_at = now(),
+          updated_at = now()
+        WHERE account_scope_id = $1
+          AND id = ANY($2::uuid[])
+        RETURNING id, project_id, category, status, shown_count, evidence_refs
+      `
+      : `
+        UPDATE recommendations_v2
+        SET
+          shown_count = shown_count + 1,
+          first_shown_at = COALESCE(first_shown_at, now()),
+          last_shown_at = now(),
+          updated_at = now()
+        WHERE project_id = $1
+          AND account_scope_id = $2
+          AND id = ANY($3::uuid[])
+        RETURNING id, project_id, category, status, shown_count, evidence_refs
+      `,
+    allProjects ? [scope.accountScopeId, ids] : [scope.projectId, scope.accountScopeId, ids]
+  );
+  return result.rows;
+}
+
+export async function updateRecommendationV2Feedback(pool, scope, id, helpful, note, options = {}) {
   const normalizedHelpful = String(helpful || "").trim().toLowerCase();
+  const allProjects = String(options.all_projects || "").trim().toLowerCase() === "true";
   if (!["helpful", "not_helpful", "unknown"].includes(normalizedHelpful)) {
     throw new Error("invalid_recommendation_v2_feedback");
   }
   const { rows } = await pool.query(
+    allProjects
+      ? `
+      UPDATE recommendations_v2
+      SET helpful_feedback = $3,
+          feedback_note = $4,
+          updated_at = now()
+      WHERE id = $1
+        AND account_scope_id = $2
+      RETURNING *
     `
+      : `
       UPDATE recommendations_v2
       SET helpful_feedback = $4,
           feedback_note = $5,
@@ -763,7 +953,9 @@ export async function updateRecommendationV2Feedback(pool, scope, id, helpful, n
         AND account_scope_id = $3
       RETURNING *
     `,
-    [id, scope.projectId, scope.accountScopeId, normalizedHelpful, String(note || "").trim().slice(0, 2000) || null]
+    allProjects
+      ? [id, scope.accountScopeId, normalizedHelpful, String(note || "").trim().slice(0, 2000) || null]
+      : [id, scope.projectId, scope.accountScopeId, normalizedHelpful, String(note || "").trim().slice(0, 2000) || null]
   );
   return rows[0] || null;
 }

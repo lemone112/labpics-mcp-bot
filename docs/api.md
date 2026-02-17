@@ -112,8 +112,22 @@ Public:
 
 - `POST /kag/v2/recommendations/refresh`
 - `GET /kag/v2/recommendations`
+- `POST /kag/v2/recommendations/shown`
 - `POST /kag/v2/recommendations/:id/status`
 - `POST /kag/v2/recommendations/:id/feedback`
+- `GET /kag/v2/recommendations/:id/actions`
+- `POST /kag/v2/recommendations/:id/actions`
+- `POST /kag/v2/recommendations/actions/:actionId/retry`
+
+Дополнительно для explainability/action loop:
+
+- `GET /kag/v2/recommendations?include_hidden=true` — диагностика скрытых рекомендаций (evidence gating).
+- `POST /kag/v2/recommendations/shown` пишет серверный лог `recommendation_shown`.
+- `POST /kag/v2/recommendations/:id/actions` выполняет действие:
+  - `create_or_update_task`
+  - `send_message`
+  - `set_reminder`
+- Любое выполнение/ретрай action пишет серверный лог `recommendation_action_taken`.
 
 ---
 

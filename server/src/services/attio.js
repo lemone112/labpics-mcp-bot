@@ -9,7 +9,9 @@ function asText(value, maxLen = 1000) {
 }
 
 function toAmount(value) {
-  const n = Number(value);
+  if (value == null) return 0;
+  const raw = typeof value === "string" ? value.replace(/[^0-9.,-]/g, "").replace(",", ".") : value;
+  const n = Number(raw);
   if (!Number.isFinite(n)) return 0;
   return Number(n.toFixed(2));
 }
@@ -18,6 +20,105 @@ function boolFromEnv(value, fallback = false) {
   const normalized = String(value || "").trim().toLowerCase();
   if (!normalized) return fallback;
   return normalized === "1" || normalized === "true" || normalized === "yes" || normalized === "on";
+}
+
+function unwrapStructuredValue(value, depth = 0) {
+  if (value == null || depth > 5) return null;
+  if (typeof value === "string") {
+    const text = value.trim();
+    return text ? text : null;
+  }
+  if (typeof value === "number" || typeof value === "boolean") return value;
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const extracted = unwrapStructuredValue(item, depth + 1);
+      if (extracted != null && extracted !== "") return extracted;
+    }
+    return null;
+  }
+  if (typeof value === "object") {
+    const priorityKeys = [
+      "value",
+      "title",
+      "name",
+      "text",
+      "display_value",
+      "displayValue",
+      "domain",
+      "email",
+      "amount",
+      "currency_value",
+      "currencyValue",
+      "number",
+      "date",
+      "id",
+      "record_id",
+      "external_id",
+      "target_record_id",
+    ];
+    for (const key of priorityKeys) {
+      if (Object.prototype.hasOwnProperty.call(value, key)) {
+        const extracted = unwrapStructuredValue(value[key], depth + 1);
+        if (extracted != null && extracted !== "") return extracted;
+      }
+    }
+    for (const nested of Object.values(value)) {
+      const extracted = unwrapStructuredValue(nested, depth + 1);
+      if (extracted != null && extracted !== "") return extracted;
+    }
+  }
+  return null;
+}
+
+function pickRecordField(values, keys = []) {
+  if (!values || typeof values !== "object") return null;
+  for (const key of keys) {
+    if (!Object.prototype.hasOwnProperty.call(values, key)) continue;
+    const extracted = unwrapStructuredValue(values[key]);
+    if (extracted != null && extracted !== "") return extracted;
+  }
+  return null;
+}
+
+function extractRecordData(row) {
+  if (row?.record && typeof row.record === "object") return row.record;
+  if (row?.data && typeof row.data === "object") return row.data;
+  return row || {};
+}
+
+function parseProbability(value) {
+  if (value == null) return null;
+  const n = Number(value);
+  if (!Number.isFinite(n)) return null;
+  if (n > 1 && n <= 100) return Math.max(0, Math.min(1, n / 100));
+  return Math.max(0, Math.min(1, n));
+}
+
+function extractRelationExternalId(raw) {
+  if (raw == null) return null;
+  if (typeof raw === "string" || typeof raw === "number") {
+    return asText(raw, 200);
+  }
+  if (Array.isArray(raw)) {
+    for (const item of raw) {
+      const extracted = extractRelationExternalId(item);
+      if (extracted) return extracted;
+    }
+    return null;
+  }
+  if (typeof raw === "object") {
+    const candidateKeys = ["target_record_id", "record_id", "external_id", "id", "value"];
+    for (const key of candidateKeys) {
+      if (!Object.prototype.hasOwnProperty.call(raw, key)) continue;
+      const extracted = extractRelationExternalId(raw[key]);
+      if (extracted) return extracted;
+    }
+    for (const nested of Object.values(raw)) {
+      const extracted = extractRelationExternalId(nested);
+      if (extracted) return extracted;
+    }
+  }
+  return null;
 }
 
 async function getWatermark(pool, scope, source) {
@@ -60,14 +161,27 @@ function pickArray(payload) {
 }
 
 function normalizeCompany(row, workspaceId) {
-  const record = row?.record || row?.data || row || {};
+  const record = extractRecordData(row);
   const externalId = asText(record?.id || record?.record_id || record?.company_id || row?.id, 200);
   if (!externalId) return null;
   const values = record?.values || record?.attributes || {};
-  const name = asText(values?.name || record?.name || row?.name, 300);
-  const domain = asText(values?.domain || record?.domain || row?.domain, 300);
-  const stage = asText(values?.stage || record?.stage || row?.stage, 100);
-  const annualRevenue = toAmount(values?.annual_revenue || values?.revenue || record?.annual_revenue || row?.annual_revenue);
+  const name = asText(
+    pickRecordField(values, ["name", "company_name", "legal_name"]) || record?.name || row?.name,
+    300
+  );
+  const domain = asText(
+    pickRecordField(values, ["domain", "domains", "website", "company_domain"]) || record?.domain || row?.domain,
+    300
+  );
+  const stage = asText(
+    pickRecordField(values, ["stage", "account_stage", "lifecycle_stage"]) || record?.stage || row?.stage,
+    100
+  );
+  const annualRevenue = toAmount(
+    pickRecordField(values, ["annual_revenue", "revenue", "arr", "acv"]) ||
+      record?.annual_revenue ||
+      row?.annual_revenue
+  );
   const updatedAt = toIsoTime(record?.updated_at || row?.updated_at || record?.created_at || row?.created_at);
   return {
     id: `attioacct:${workspaceId}:${externalId}`,
@@ -83,21 +197,49 @@ function normalizeCompany(row, workspaceId) {
 }
 
 function normalizeOpportunity(row, workspaceId) {
-  const record = row?.record || row?.data || row || {};
+  const record = extractRecordData(row);
   const externalId = asText(record?.id || record?.record_id || record?.deal_id || row?.id, 200);
   if (!externalId) return null;
   const values = record?.values || record?.attributes || {};
-  const title = asText(values?.name || record?.name || row?.name || `Opportunity ${externalId}`, 500);
-  const stage = asText(values?.stage || record?.stage || row?.stage, 120) || "discovery";
-  const amount = toAmount(values?.amount || values?.amount_estimate || record?.amount || row?.amount);
-  const probabilityRaw = Number(values?.probability || record?.probability || row?.probability);
-  const probability = Number.isFinite(probabilityRaw) ? Math.max(0, Math.min(1, probabilityRaw)) : 0.1;
-  const expectedCloseDate = asText(values?.expected_close_date || record?.expected_close_date || row?.expected_close_date, 50);
+  const title = asText(
+    pickRecordField(values, ["name", "title", "deal_name", "opportunity_name"]) ||
+      record?.name ||
+      row?.name ||
+      `Opportunity ${externalId}`,
+    500
+  );
+  const stage = asText(
+    pickRecordField(values, ["stage", "status", "deal_stage"]) || record?.stage || row?.stage,
+    120
+  ) || "discovery";
+  const amount = toAmount(
+    pickRecordField(values, ["amount", "amount_estimate", "value", "deal_value", "acv"]) ||
+      record?.amount ||
+      row?.amount
+  );
+  const probability =
+    parseProbability(
+      pickRecordField(values, ["probability", "win_probability", "likelihood"]) ||
+        record?.probability ||
+        row?.probability
+    ) ?? 0.1;
+  const expectedCloseDate = asText(
+    pickRecordField(values, ["expected_close_date", "close_date", "target_close_date"]) ||
+      record?.expected_close_date ||
+      row?.expected_close_date,
+    50
+  );
   const accountExternalId = asText(
-    values?.account_id || values?.company_id || record?.account_id || row?.account_id || row?.company_id,
+    extractRelationExternalId(
+      pickRecordField(values, ["account_id", "account", "company_id", "company", "organization"])
+    ) ||
+      extractRelationExternalId(record?.account_id || row?.account_id || row?.company_id),
     200
   );
-  const nextStep = asText(values?.next_step || record?.next_step || row?.next_step, 1000);
+  const nextStep = asText(
+    pickRecordField(values, ["next_step", "next_action", "next_task"]) || record?.next_step || row?.next_step,
+    1000
+  );
   const updatedAt = toIsoTime(record?.updated_at || row?.updated_at || record?.created_at || row?.created_at);
   return {
     id: `attiodeal:${workspaceId}:${externalId}`,
@@ -116,7 +258,7 @@ function normalizeOpportunity(row, workspaceId) {
 }
 
 function normalizePerson(row, workspaceId) {
-  const record = row?.record || row?.data || row || {};
+  const record = extractRecordData(row);
   const externalId = asText(record?.id || record?.record_id || record?.person_id || row?.id, 200);
   if (!externalId) return null;
   const values = record?.values || record?.attributes || {};
@@ -124,17 +266,22 @@ function normalizePerson(row, workspaceId) {
     id: `attioperson:${workspaceId}:${externalId}`,
     workspace_id: workspaceId,
     external_id: externalId,
-    account_external_id: asText(values?.company_id || values?.account_id || record?.company_id || row?.company_id, 200),
-    full_name: asText(values?.name || record?.name || row?.name, 300),
-    email: asText(values?.email || record?.email || row?.email, 320),
-    role: asText(values?.role || record?.role || row?.role, 200),
+    account_external_id: asText(
+      extractRelationExternalId(
+        pickRecordField(values, ["company_id", "company", "account_id", "account", "organization"])
+      ) || extractRelationExternalId(record?.company_id || row?.company_id),
+      200
+    ),
+    full_name: asText(pickRecordField(values, ["name", "full_name"]) || record?.name || row?.name, 300),
+    email: asText(pickRecordField(values, ["email", "work_email"]) || record?.email || row?.email, 320),
+    role: asText(pickRecordField(values, ["role", "job_title"]) || record?.role || row?.role, 200),
     data: record,
     updated_at: toIsoTime(record?.updated_at || row?.updated_at || record?.created_at || row?.created_at),
   };
 }
 
 function normalizeActivity(row, workspaceId) {
-  const record = row?.record || row?.data || row || {};
+  const record = extractRecordData(row);
   const externalId = asText(record?.id || record?.record_id || record?.activity_id || row?.id, 220);
   if (!externalId) return null;
   const values = record?.values || record?.attributes || {};
@@ -143,13 +290,23 @@ function normalizeActivity(row, workspaceId) {
     workspace_id: workspaceId,
     external_id: externalId,
     record_external_id: asText(
-      values?.record_id || values?.deal_id || values?.company_id || record?.record_id || row?.record_id,
+      extractRelationExternalId(
+        pickRecordField(values, ["record_id", "record", "deal_id", "deal", "company_id", "company"])
+      ) || extractRelationExternalId(record?.record_id || row?.record_id),
       220
     ),
-    activity_type: asText(values?.type || record?.type || row?.type, 120),
-    note: asText(values?.note || record?.note || row?.note, 4000),
-    actor_name: asText(values?.actor_name || record?.actor_name || row?.actor_name, 250),
-    occurred_at: toIsoTime(values?.occurred_at || record?.occurred_at || row?.occurred_at || row?.created_at),
+    activity_type: asText(pickRecordField(values, ["type", "activity_type"]) || record?.type || row?.type, 120),
+    note: asText(pickRecordField(values, ["note", "summary", "description"]) || record?.note || row?.note, 4000),
+    actor_name: asText(
+      pickRecordField(values, ["actor_name", "actor", "created_by"]) || record?.actor_name || row?.actor_name,
+      250
+    ),
+    occurred_at: toIsoTime(
+      pickRecordField(values, ["occurred_at", "created_at", "logged_at"]) ||
+        record?.occurred_at ||
+        row?.occurred_at ||
+        row?.created_at
+    ),
     data: record,
     updated_at: toIsoTime(record?.updated_at || row?.updated_at || record?.created_at || row?.created_at),
   };
@@ -175,6 +332,63 @@ async function attioGet(baseUrl, token, endpoint, logger) {
   } catch {
     throw new Error(`Attio GET ${endpoint} returned invalid JSON`);
   }
+}
+
+function buildEndpointWithQuery(endpoint, params = {}) {
+  const query = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (value == null || value === "") continue;
+    query.set(key, String(value));
+  }
+  const queryString = query.toString();
+  if (!queryString) return endpoint;
+  return endpoint.includes("?") ? `${endpoint}&${queryString}` : `${endpoint}?${queryString}`;
+}
+
+function readNextCursor(payload) {
+  return (
+    payload?.pagination?.next_cursor ||
+    payload?.pagination?.next ||
+    payload?.meta?.next_cursor ||
+    payload?.meta?.next ||
+    payload?.next_cursor ||
+    payload?.next ||
+    payload?.cursor?.next ||
+    null
+  );
+}
+
+async function attioListPaginated(baseUrl, token, endpoint, limit, logger) {
+  const maxPages = toPositiveInt(process.env.ATTIO_SYNC_MAX_PAGES, 50, 1, 500);
+  const rows = [];
+  const seenRecordIds = new Set();
+  const seenCursors = new Set();
+  let cursor = null;
+
+  for (let page = 1; page <= maxPages; page++) {
+    const payload = await attioGet(
+      baseUrl,
+      token,
+      buildEndpointWithQuery(endpoint, { limit, cursor: cursor || undefined }),
+      logger
+    );
+    const pageRows = pickArray(payload);
+    for (const row of pageRows) {
+      const record = extractRecordData(row);
+      const rawId = asText(record?.id || record?.record_id || row?.id || row?.record_id, 300);
+      const dedupeKey = rawId || JSON.stringify(row);
+      if (seenRecordIds.has(dedupeKey)) continue;
+      seenRecordIds.add(dedupeKey);
+      rows.push(row);
+    }
+    const nextCursor = readNextCursor(payload);
+    if (!nextCursor || !pageRows.length) break;
+    if (seenCursors.has(nextCursor)) break;
+    seenCursors.add(nextCursor);
+    cursor = nextCursor;
+  }
+
+  return rows;
 }
 
 async function loadMockSnapshot(pool, scope, workspaceId) {
@@ -250,53 +464,33 @@ async function loadAttioSnapshot(pool, scope, config, logger) {
     return loadMockSnapshot(pool, scope, config.workspaceId);
   }
 
-  const companiesPayload = await attioGet(
-    config.baseUrl,
-    config.apiToken,
-    `/v2/objects/companies/records?limit=${config.limit}`,
-    logger
-  );
-  const opportunitiesPayload = await attioGet(
-    config.baseUrl,
-    config.apiToken,
-    `/v2/objects/deals/records?limit=${config.limit}`,
-    logger
-  );
-  let peoplePayload = { data: [] };
-  let activitiesPayload = { data: [] };
+  const [companyRows, opportunityRows] = await Promise.all([
+    attioListPaginated(config.baseUrl, config.apiToken, "/v2/objects/companies/records", config.limit, logger),
+    attioListPaginated(config.baseUrl, config.apiToken, "/v2/objects/deals/records", config.limit, logger),
+  ]);
+  let peopleRows = [];
+  let activityRows = [];
   try {
-    peoplePayload = await attioGet(
+    peopleRows = await attioListPaginated(
       config.baseUrl,
       config.apiToken,
-      `/v2/objects/people/records?limit=${config.limit}`,
+      "/v2/objects/people/records",
+      config.limit,
       logger
     );
   } catch (error) {
     logger.warn({ err: String(error?.message || error) }, "attio people endpoint unavailable, continuing");
   }
   try {
-    activitiesPayload = await attioGet(
-      config.baseUrl,
-      config.apiToken,
-      `/v2/activities?limit=${config.limit}`,
-      logger
-    );
+    activityRows = await attioListPaginated(config.baseUrl, config.apiToken, "/v2/activities", config.limit, logger);
   } catch (error) {
     logger.warn({ err: String(error?.message || error) }, "attio activities endpoint unavailable, continuing");
   }
 
-  const companies = pickArray(companiesPayload)
-    .map((row) => normalizeCompany(row, config.workspaceId))
-    .filter(Boolean);
-  const opportunities = pickArray(opportunitiesPayload)
-    .map((row) => normalizeOpportunity(row, config.workspaceId))
-    .filter(Boolean);
-  const people = pickArray(peoplePayload)
-    .map((row) => normalizePerson(row, config.workspaceId))
-    .filter(Boolean);
-  const activities = pickArray(activitiesPayload)
-    .map((row) => normalizeActivity(row, config.workspaceId))
-    .filter(Boolean);
+  const companies = companyRows.map((row) => normalizeCompany(row, config.workspaceId)).filter(Boolean);
+  const opportunities = opportunityRows.map((row) => normalizeOpportunity(row, config.workspaceId)).filter(Boolean);
+  const people = peopleRows.map((row) => normalizePerson(row, config.workspaceId)).filter(Boolean);
+  const activities = activityRows.map((row) => normalizeActivity(row, config.workspaceId)).filter(Boolean);
 
   return {
     companies,
@@ -612,33 +806,176 @@ async function upsertActivities(pool, scope, rows) {
 }
 
 async function mirrorToCrmTables(pool, scope) {
-  await pool.query(
+  const accountUpdateByExternalRef = await pool.query(
     `
-      INSERT INTO crm_accounts(project_id, account_scope_id, name, domain, external_ref, stage, owner_username, updated_at)
+      WITH src AS (
+        SELECT DISTINCT ON (ar.external_id)
+          ar.project_id,
+          ar.account_scope_id,
+          ar.external_id,
+          COALESCE(NULLIF(ar.name, ''), ar.external_id) AS account_name,
+          ar.domain,
+          lower(COALESCE(ar.stage, '')) AS source_stage
+        FROM attio_accounts_raw AS ar
+        WHERE ar.project_id = $1
+          AND ar.account_scope_id = $2
+        ORDER BY ar.external_id, ar.updated_at DESC NULLS LAST
+      )
+      UPDATE crm_accounts AS a
+      SET
+        name = src.account_name,
+        domain = src.domain,
+        stage = CASE
+          WHEN src.source_stage IN ('active', 'customer', 'won', 'closed-won') THEN 'active'
+          WHEN src.source_stage IN ('inactive', 'churned', 'lost', 'closed-lost') THEN 'inactive'
+          ELSE 'prospect'
+        END,
+        source_system = 'attio',
+        updated_at = now()
+      FROM src
+      WHERE a.project_id = src.project_id
+        AND a.account_scope_id = src.account_scope_id
+        AND a.external_ref = src.external_id
+    `,
+    [scope.projectId, scope.accountScopeId]
+  );
+
+  const accountAttachByName = await pool.query(
+    `
+      WITH src AS (
+        SELECT DISTINCT ON (ar.external_id)
+          ar.project_id,
+          ar.account_scope_id,
+          ar.external_id,
+          COALESCE(NULLIF(ar.name, ''), ar.external_id) AS account_name,
+          ar.domain,
+          lower(COALESCE(ar.stage, '')) AS source_stage
+        FROM attio_accounts_raw AS ar
+        WHERE ar.project_id = $1
+          AND ar.account_scope_id = $2
+        ORDER BY ar.external_id, ar.updated_at DESC NULLS LAST
+      )
+      UPDATE crm_accounts AS a
+      SET
+        external_ref = src.external_id,
+        domain = COALESCE(src.domain, a.domain),
+        stage = CASE
+          WHEN src.source_stage IN ('active', 'customer', 'won', 'closed-won') THEN 'active'
+          WHEN src.source_stage IN ('inactive', 'churned', 'lost', 'closed-lost') THEN 'inactive'
+          ELSE 'prospect'
+        END,
+        source_system = 'attio',
+        updated_at = now()
+      FROM src
+      WHERE a.project_id = src.project_id
+        AND a.account_scope_id = src.account_scope_id
+        AND a.external_ref IS NULL
+        AND lower(a.name) = lower(src.account_name)
+        AND NOT EXISTS (
+          SELECT 1
+          FROM crm_accounts AS ax
+          WHERE ax.project_id = a.project_id
+            AND ax.external_ref = src.external_id
+        )
+    `,
+    [scope.projectId, scope.accountScopeId]
+  );
+
+  const accountInsert = await pool.query(
+    `
+      WITH src AS (
+        SELECT DISTINCT ON (ar.external_id)
+          ar.project_id,
+          ar.account_scope_id,
+          ar.external_id,
+          COALESCE(NULLIF(ar.name, ''), ar.external_id) AS account_name,
+          ar.domain,
+          lower(COALESCE(ar.stage, '')) AS source_stage
+        FROM attio_accounts_raw AS ar
+        WHERE ar.project_id = $1
+          AND ar.account_scope_id = $2
+        ORDER BY ar.external_id, ar.updated_at DESC NULLS LAST
+      )
+      INSERT INTO crm_accounts(
+        project_id,
+        account_scope_id,
+        name,
+        domain,
+        external_ref,
+        stage,
+        owner_username,
+        source_system,
+        updated_at
+      )
       SELECT
-        ar.project_id,
-        ar.account_scope_id,
-        COALESCE(ar.name, ar.external_id),
-        ar.domain,
-        ar.external_id,
-        COALESCE(NULLIF(ar.stage, ''), 'prospect'),
+        src.project_id,
+        src.account_scope_id,
+        src.account_name,
+        src.domain,
+        src.external_id,
+        CASE
+          WHEN src.source_stage IN ('active', 'customer', 'won', 'closed-won') THEN 'active'
+          WHEN src.source_stage IN ('inactive', 'churned', 'lost', 'closed-lost') THEN 'inactive'
+          ELSE 'prospect'
+        END,
         NULL,
+        'attio',
         now()
-      FROM attio_accounts_raw AS ar
-      WHERE ar.project_id = $1
-        AND ar.account_scope_id = $2
-      ON CONFLICT (project_id, name)
+      FROM src
+      WHERE NOT EXISTS (
+        SELECT 1
+        FROM crm_accounts AS a
+        WHERE a.project_id = src.project_id
+          AND (a.external_ref = src.external_id OR lower(a.name) = lower(src.account_name))
+      )
+      ON CONFLICT (project_id, external_ref)
       DO UPDATE SET
+        name = EXCLUDED.name,
         domain = EXCLUDED.domain,
-        external_ref = EXCLUDED.external_ref,
         stage = EXCLUDED.stage,
+        source_system = EXCLUDED.source_system,
         updated_at = now()
     `,
     [scope.projectId, scope.accountScopeId]
   );
 
-  await pool.query(
+  const opportunityUpsert = await pool.query(
     `
+      WITH src AS (
+        SELECT DISTINCT ON (o.external_id)
+          o.project_id,
+          o.account_scope_id,
+          o.external_id,
+          o.account_external_id,
+          COALESCE(NULLIF(o.title, ''), o.external_id) AS title,
+          lower(COALESCE(o.stage, '')) AS source_stage,
+          COALESCE(o.amount, 0) AS amount,
+          LEAST(1, GREATEST(0, COALESCE(o.probability, 0.1))) AS probability,
+          o.expected_close_date,
+          COALESCE(NULLIF(o.next_step, ''), 'Review next action') AS next_step
+        FROM attio_opportunities_raw AS o
+        WHERE o.project_id = $1
+          AND o.account_scope_id = $2
+        ORDER BY o.external_id, o.updated_at DESC NULLS LAST
+      ),
+      resolved AS (
+        SELECT
+          src.project_id,
+          src.account_scope_id,
+          a.id AS account_id,
+          src.external_id,
+          src.title,
+          src.source_stage,
+          src.amount,
+          src.probability,
+          src.expected_close_date,
+          src.next_step
+        FROM src
+        JOIN crm_accounts AS a
+          ON a.project_id = src.project_id
+         AND a.account_scope_id = src.account_scope_id
+         AND a.external_ref = src.account_external_id
+      )
       INSERT INTO crm_opportunities(
         project_id,
         account_scope_id,
@@ -651,39 +988,129 @@ async function mirrorToCrmTables(pool, scope) {
         next_step,
         owner_username,
         evidence_refs,
+        external_ref,
+        source_system,
         updated_at
       )
       SELECT
-        o.project_id,
-        o.account_scope_id,
-        a.id,
-        COALESCE(o.title, o.external_id),
+        r.project_id,
+        r.account_scope_id,
+        r.account_id,
+        r.title,
         CASE
-          WHEN lower(COALESCE(o.stage, '')) IN ('won', 'closed-won') THEN 'won'
-          WHEN lower(COALESCE(o.stage, '')) IN ('lost', 'closed-lost') THEN 'lost'
-          WHEN lower(COALESCE(o.stage, '')) IN ('proposal', 'proposal_sent') THEN 'proposal'
-          WHEN lower(COALESCE(o.stage, '')) IN ('negotiation') THEN 'negotiation'
-          WHEN lower(COALESCE(o.stage, '')) IN ('qualified') THEN 'qualified'
+          WHEN r.source_stage IN ('won', 'closed-won') THEN 'won'
+          WHEN r.source_stage IN ('lost', 'closed-lost') THEN 'lost'
+          WHEN r.source_stage IN ('proposal', 'proposal_sent') THEN 'proposal'
+          WHEN r.source_stage IN ('negotiation') THEN 'negotiation'
+          WHEN r.source_stage IN ('qualified') THEN 'qualified'
           ELSE 'discovery'
         END,
-        COALESCE(o.amount, 0),
-        COALESCE(o.probability, 0.1),
-        o.expected_close_date,
-        COALESCE(o.next_step, 'Review next action'),
+        r.amount,
+        r.probability,
+        r.expected_close_date,
+        r.next_step,
         NULL,
         '[]'::jsonb,
+        r.external_id,
+        'attio',
         now()
-      FROM attio_opportunities_raw AS o
-      JOIN crm_accounts AS a
-        ON a.project_id = o.project_id
-       AND a.account_scope_id = o.account_scope_id
-       AND a.external_ref = o.account_external_id
-      WHERE o.project_id = $1
-        AND o.account_scope_id = $2
-      ON CONFLICT DO NOTHING
+      FROM resolved AS r
+      ON CONFLICT (project_id, external_ref)
+      DO UPDATE SET
+        account_id = EXCLUDED.account_id,
+        title = EXCLUDED.title,
+        stage = EXCLUDED.stage,
+        amount_estimate = EXCLUDED.amount_estimate,
+        probability = EXCLUDED.probability,
+        expected_close_date = EXCLUDED.expected_close_date,
+        next_step = EXCLUDED.next_step,
+        source_system = EXCLUDED.source_system,
+        updated_at = now()
     `,
     [scope.projectId, scope.accountScopeId]
   );
+
+  const [coverageRows, gapRows] = await Promise.all([
+    pool.query(
+      `
+        SELECT
+          (SELECT count(*)::int
+            FROM (
+              SELECT DISTINCT external_id
+              FROM attio_accounts_raw
+              WHERE project_id = $1
+                AND account_scope_id = $2
+            ) AS t
+          ) AS total_attio_accounts,
+          (SELECT count(*)::int
+            FROM crm_accounts
+            WHERE project_id = $1
+              AND account_scope_id = $2
+              AND source_system = 'attio'
+              AND external_ref IS NOT NULL
+          ) AS mirrored_accounts,
+          (SELECT count(*)::int
+            FROM (
+              SELECT DISTINCT external_id
+              FROM attio_opportunities_raw
+              WHERE project_id = $1
+                AND account_scope_id = $2
+            ) AS t
+          ) AS total_attio_opportunities,
+          (SELECT count(*)::int
+            FROM crm_opportunities
+            WHERE project_id = $1
+              AND account_scope_id = $2
+              AND source_system = 'attio'
+              AND external_ref IS NOT NULL
+          ) AS mirrored_opportunities
+      `,
+      [scope.projectId, scope.accountScopeId]
+    ),
+    pool.query(
+      `
+        WITH latest_opps AS (
+          SELECT DISTINCT ON (o.external_id)
+            o.external_id,
+            o.account_external_id
+          FROM attio_opportunities_raw AS o
+          WHERE o.project_id = $1
+            AND o.account_scope_id = $2
+          ORDER BY o.external_id, o.updated_at DESC NULLS LAST
+        )
+        SELECT
+          count(*) FILTER (WHERE lo.account_external_id IS NULL)::int AS opportunities_without_account_ref,
+          count(*) FILTER (
+            WHERE lo.account_external_id IS NOT NULL
+              AND a.id IS NULL
+          )::int AS opportunities_unmapped_to_crm_account
+        FROM latest_opps AS lo
+        LEFT JOIN crm_accounts AS a
+          ON a.project_id = $1
+         AND a.account_scope_id = $2
+         AND a.external_ref = lo.account_external_id
+      `,
+      [scope.projectId, scope.accountScopeId]
+    ),
+  ]);
+
+  const coverage = coverageRows.rows[0] || {};
+  const gaps = gapRows.rows[0] || {};
+  return {
+    touched_accounts:
+      (accountUpdateByExternalRef.rowCount || 0) +
+      (accountAttachByName.rowCount || 0) +
+      (accountInsert.rowCount || 0),
+    touched_opportunities: opportunityUpsert.rowCount || 0,
+    coverage: {
+      total_attio_accounts: Number(coverage.total_attio_accounts || 0),
+      mirrored_accounts: Number(coverage.mirrored_accounts || 0),
+      total_attio_opportunities: Number(coverage.total_attio_opportunities || 0),
+      mirrored_opportunities: Number(coverage.mirrored_opportunities || 0),
+      opportunities_without_account_ref: Number(gaps.opportunities_without_account_ref || 0),
+      opportunities_unmapped_to_crm_account: Number(gaps.opportunities_unmapped_to_crm_account || 0),
+    },
+  };
 }
 
 function computeCursor(rows) {
@@ -714,9 +1141,12 @@ export async function runAttioSync(pool, scope, logger = console) {
     workspaceId,
     baseUrl: String(process.env.ATTIO_BASE_URL || "https://api.attio.com").replace(/\/+$/, ""),
     apiToken: String(process.env.ATTIO_API_TOKEN || "").trim(),
-    mockMode: boolFromEnv(process.env.ATTIO_MOCK_MODE, !process.env.ATTIO_API_TOKEN),
+    mockMode: boolFromEnv(process.env.ATTIO_MOCK_MODE, false),
     limit: toPositiveInt(process.env.ATTIO_SYNC_LIMIT, 200, 1, 1000),
   };
+  if (!config.apiToken && !config.mockMode) {
+    throw new Error("attio_api_token_missing_or_enable_mock_mode");
+  }
 
   const previousWatermark = await getWatermark(pool, scope, source);
   const snapshot = await loadAttioSnapshot(pool, scope, config, logger);
@@ -725,7 +1155,7 @@ export async function runAttioSync(pool, scope, logger = console) {
   const touchedOpportunities = await upsertOpportunities(pool, scope, snapshot.opportunities);
   const touchedPeople = await upsertPeople(pool, scope, snapshot.people || []);
   const touchedActivities = await upsertActivities(pool, scope, snapshot.activities || []);
-  await mirrorToCrmTables(pool, scope);
+  const mirrorResult = await mirrorToCrmTables(pool, scope);
 
   const cursor = computeCursor([
     ...snapshot.companies,
@@ -739,6 +1169,9 @@ export async function runAttioSync(pool, scope, logger = console) {
     touched_opportunities: touchedOpportunities,
     touched_people: touchedPeople,
     touched_activities: touchedActivities,
+    mirrored_crm_accounts: mirrorResult.touched_accounts,
+    mirrored_crm_opportunities: mirrorResult.touched_opportunities,
+    coverage: mirrorResult.coverage,
     previous_cursor_ts: previousWatermark?.cursor_ts || null,
     synced_at: new Date().toISOString(),
   });
@@ -752,6 +1185,9 @@ export async function runAttioSync(pool, scope, logger = console) {
     touched_opportunities: touchedOpportunities,
     touched_people: touchedPeople,
     touched_activities: touchedActivities,
+    mirrored_crm_accounts: mirrorResult.touched_accounts,
+    mirrored_crm_opportunities: mirrorResult.touched_opportunities,
+    coverage: mirrorResult.coverage,
     cursor_ts: cursor.cursorTs,
     cursor_id: cursor.cursorId,
   };

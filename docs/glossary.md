@@ -254,7 +254,7 @@ Low-frequency (typically weekly) rebuild of similarity signatures.
 
 ## Control Tower
 
-Portfolio workspace in UI with six sections: `dashboard`, `messages`, `agreements`, `risks`, `finance`, `offers`.
+Portfolio workspace in UI with business sections (`dashboard`, `messages`, `agreements`, `risks`, `finance`, `offers`) and recommendation workflows.
 
 ## Page shell
 
@@ -287,3 +287,23 @@ Accessibility setting (`prefers-reduced-motion`) that disables or minimizes anim
 ## UX state pattern
 
 Consistent handling of loading/empty/error/success states across pages and reusable components.
+
+## Recommendation (v2)
+
+Next-best-action entity in `recommendations_v2` with deterministic rationale, priority, status lifecycle, and mandatory evidence links.
+
+## Evidence gating
+
+Publication rule for recommendations based on evidence sufficiency and quality (`evidence_count`, `evidence_quality_score`, `evidence_gate_status`).
+
+## Recommendation shown
+
+Server-side audit event (`recommendation_shown`) written when a recommendation was displayed in UI.
+
+## Recommendation action
+
+Explicit operator action started from a recommendation card (`create_or_update_task`, `send_message`, `set_reminder`).
+
+## Recommendation action run
+
+Execution log row in `recommendation_action_runs` with status, retries, error/result payload and timestamps.
