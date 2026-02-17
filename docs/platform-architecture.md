@@ -1,40 +1,118 @@
-# Platform architecture (Scope, Audit, Outbox, Worker)
+# Платформенная архитектура и инварианты
 
-This document defines platform-level constraints that all domains must follow.
+Документ фиксирует обязательные правила для всех доменов (RAG, CRM, KAG, forecasting, recommendations).
 
-## Scope (non-negotiable)
+---
 
-- All reads/writes are scoped by `project_id`.
-- When applicable, also scope by `account_scope_id`.
-- API routes require `active_project_id` in the session for protected domains.
+## 1) Scope (необсуждаемо)
 
-## Audit trail
+- Все чтения/записи выполняются в рамках `project_id`.
+- Для мультипроектного режима дополнительно обязателен `account_scope_id`.
+- Protected API работают только при активном проекте в сессии.
+- На уровне БД применяется trigger `enforce_project_scope_match`.
 
-- Critical actions must write an `audit_event`.
-- Audit events must include `request_id` and evidence references.
+Зачем:
 
-## Evidence-first
+- защита от утечек между проектами,
+- предсказуемое поведение в all-projects режимах.
 
-- Derived entities must link back to source evidence.
-- Evidence is shown in UI wherever decisions/actions are taken.
+---
 
-## Outbox + approvals
+## 2) Deterministic intelligence + LLM boundaries
 
-Outbound actions must go through a controlled state machine:
+- Signals / scores / forecasts / recommendation decision logic — только deterministic (rules + stats).
+- LLM разрешён только для:
+  - extraction структур из сообщений,
+  - генерации текстовых шаблонов,
+  - (опционально) summarization.
 
-- `draft → approved → sent`
-- guardrails: opt-out, frequency caps, stop-on-reply
-- idempotency: dedupe/idempotency keys per project
+Зачем:
 
-## Worker & scheduler
+- повторяемость,
+- контролируемая стоимость,
+- минимизация галлюцинаций.
 
-- Jobs can be triggered manually via API.
-- Scheduler tick claims due jobs and records `worker_runs`.
-- Jobs must be idempotent and safe to retry.
+---
 
-## Observability baseline
+## 3) Evidence-first + gating
 
-- Every response includes `request_id`.
-- Job runs expose status + error payload.
+- Любая производная сущность должна иметь evidence links.
+- Snapshot/forecast/recommendation без evidence:
+  - не попадает в primary выдачу (`publishable=false` или фильтрация),
+  - логируется `process_warning` в `kag_event_log`.
 
-> Implementation details (tables, schemas) are documented in `docs/data-model.md`.
+Зачем:
+
+- доверие PM к выводам,
+- объяснимость каждого решения,
+- снижение ложноположительных алертов.
+
+---
+
+## 4) Connector reliability и fault isolation
+
+- Каждому connector соответствует состояние в `connector_sync_state`.
+- Ошибки пишутся в `connector_errors` с backoff и DLQ-статусами.
+- Retry выполняется точечно по конкретному connector и не валит весь цикл.
+
+Зачем:
+
+- устойчивость к нестабильным внешним API,
+- экономный retry без лишней нагрузки.
+
+---
+
+## 5) Event-first observability
+
+Платформа ведёт единый `kag_event_log` для:
+
+- domain events (`message_sent`, `issue_blocked`, `deal_stage_changed`, ...),
+- process events (`process_started`, `process_finished`, `process_failed`, `process_warning`).
+
+Лог содержит:
+
+- длительность,
+- счётчики обработки,
+- источник/ссылки на origin id.
+
+Зачем:
+
+- health-timeline системы,
+- быстрая диагностика,
+- база для UI-мониторинга.
+
+---
+
+## 6) Outbox и контролируемые коммуникации
+
+Для outbound действий обязателен state machine:
+
+- `draft -> approved -> sent`
+
+Guardrails:
+
+- opt-out,
+- frequency caps,
+- stop-on-reply,
+- идемпотентность по dedupe/idempotency ключам.
+
+---
+
+## 7) Scheduler/worker контракт
+
+- scheduler только claim’ит due jobs и фиксирует `worker_runs`;
+- задачи должны быть идемпотентны и безопасны при повторе;
+- каждый цикл должен быть bounded (лимиты/окна обработки).
+
+---
+
+## 8) API observability baseline
+
+- Каждый ответ содержит `request_id` + header `x-request-id`.
+- Критические операции пишут `audit_events`.
+- Ошибки jobs/connectors наблюдаемы через API и таблицы статусов.
+
+---
+
+Детали по таблицам и индексам: [`docs/data-model.md`](./data-model.md)  
+Операционные циклы: [`docs/pipelines.md`](./pipelines.md)
