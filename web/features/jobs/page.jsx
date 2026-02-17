@@ -26,7 +26,7 @@ export default function JobsFeaturePage() {
       const data = await apiFetch("/jobs/status");
       setStatus(data);
     } catch (error) {
-      setToast({ type: "error", message: error?.message || "Failed to load job status" });
+      setToast({ type: "error", message: error?.message || "Ошибка загрузки статуса задач" });
     }
   }, []);
 
@@ -40,10 +40,10 @@ export default function JobsFeaturePage() {
     setBusyJob(name);
     try {
       await apiFetch(path, { method: "POST", timeoutMs: 60_000 });
-      setToast({ type: "success", message: `${name} completed` });
+      setToast({ type: "success", message: `${name} завершена` });
       await loadStatus();
     } catch (error) {
-      setToast({ type: "error", message: error?.message || `${name} failed` });
+      setToast({ type: "error", message: error?.message || `${name} — ошибка` });
     } finally {
       setBusyJob("");
     }
@@ -51,7 +51,7 @@ export default function JobsFeaturePage() {
 
   if (loading || !session || loadingProjects) {
     return (
-      <PageShell title="Jobs" subtitle="Run ingestion, sync and enrichment jobs">
+      <PageShell title="Задачи" subtitle="Запуск задач синхронизации, обогащения и загрузки данных">
         <PageLoadingSkeleton />
       </PageShell>
     );
@@ -59,7 +59,7 @@ export default function JobsFeaturePage() {
 
   if (!hasProject) {
     return (
-      <PageShell title="Jobs" subtitle="Trigger Chatwoot sync and embeddings jobs">
+      <PageShell title="Задачи" subtitle="Синхронизация Chatwoot и задачи по эмбеддингам">
         <ProjectScopeRequired
           title="Сначала выберите активный проект"
           description="Jobs выполняются в контексте проекта. Выберите проект и повторите запуск."
@@ -69,62 +69,62 @@ export default function JobsFeaturePage() {
   }
 
   return (
-    <PageShell title="Jobs" subtitle="Run ingestion, sync and enrichment jobs">
+    <PageShell title="Задачи" subtitle="Запуск задач синхронизации, обогащения и загрузки данных">
       <div className="space-y-4">
         <Card data-motion-item>
           <CardHeader>
-            <CardTitle>Run jobs</CardTitle>
+            <CardTitle>Запуск задач</CardTitle>
             <p className="text-sm text-muted-foreground">
-              Trigger Chatwoot, Attio, Linear, embeddings and scheduler jobs with scoped telemetry.
+              Запуск задач Chatwoot, Attio, Linear, эмбеддингов и планировщика с телеметрией.
             </p>
           </CardHeader>
           <CardContent className="flex flex-wrap gap-3">
             <Button disabled={busyJob.length > 0} onClick={() => runJob("/jobs/chatwoot/sync", "chatwoot_sync")}>
-              {busyJob === "chatwoot_sync" ? "Running..." : "Run Chatwoot Sync"}
+              {busyJob === "chatwoot_sync" ? "Выполняется..." : "Синхронизация Chatwoot"}
             </Button>
             <Button variant="secondary" disabled={busyJob.length > 0} onClick={() => runJob("/jobs/attio/sync", "attio_sync")}>
-              {busyJob === "attio_sync" ? "Running..." : "Run Attio Sync"}
+              {busyJob === "attio_sync" ? "Выполняется..." : "Синхронизация Attio"}
             </Button>
             <Button variant="secondary" disabled={busyJob.length > 0} onClick={() => runJob("/jobs/linear/sync", "linear_sync")}>
-              {busyJob === "linear_sync" ? "Running..." : "Run Linear Sync"}
+              {busyJob === "linear_sync" ? "Выполняется..." : "Синхронизация Linear"}
             </Button>
             <Button variant="secondary" disabled={busyJob.length > 0} onClick={() => runJob("/jobs/embeddings/run", "embeddings_run")}>
-              {busyJob === "embeddings_run" ? "Running..." : "Run Embeddings"}
+              {busyJob === "embeddings_run" ? "Выполняется..." : "Генерация эмбеддингов"}
             </Button>
             <Button variant="outline" disabled={busyJob.length > 0} onClick={() => runJob("/jobs/scheduler/tick", "scheduler_tick")}>
-              {busyJob === "scheduler_tick" ? "Running..." : "Run Scheduler Tick"}
+              {busyJob === "scheduler_tick" ? "Выполняется..." : "Тик планировщика"}
             </Button>
             <Button variant="outline" onClick={loadStatus}>
-              Refresh status
+              Обновить статус
             </Button>
           </CardContent>
         </Card>
 
         <Card data-motion-item>
           <CardHeader>
-            <CardTitle>RAG counts</CardTitle>
+            <CardTitle>Счётчики RAG</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
-              <StatTile label="Pending" value={status?.rag_counts?.pending ?? 0} />
-              <StatTile label="Processing" value={status?.rag_counts?.processing ?? 0} />
-              <StatTile label="Ready" value={status?.rag_counts?.ready ?? 0} />
-              <StatTile label="Failed" value={status?.rag_counts?.failed ?? 0} />
+              <StatTile label="Ожидание" value={status?.rag_counts?.pending ?? 0} />
+              <StatTile label="Обработка" value={status?.rag_counts?.processing ?? 0} />
+              <StatTile label="Готов" value={status?.rag_counts?.ready ?? 0} />
+              <StatTile label="Ошибка" value={status?.rag_counts?.failed ?? 0} />
             </div>
           </CardContent>
         </Card>
 
         <Card data-motion-item>
           <CardHeader>
-            <CardTitle>Data footprint</CardTitle>
+            <CardTitle>Объём данных</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
-              <StatTile label="Contacts" value={status?.entities?.contacts ?? 0} />
-              <StatTile label="Conversations" value={status?.entities?.conversations ?? 0} />
-              <StatTile label="Messages" value={status?.entities?.messages ?? 0} />
+              <StatTile label="Контакты" value={status?.entities?.contacts ?? 0} />
+              <StatTile label="Диалоги" value={status?.entities?.conversations ?? 0} />
+              <StatTile label="Сообщения" value={status?.entities?.messages ?? 0} />
               <StatTile
-                label="DB size"
+                label="Размер БД"
                 value={
                   typeof status?.storage?.database_bytes === "number"
                     ? `${(status.storage.database_bytes / (1024 ** 3)).toFixed(2)} GB`
@@ -132,7 +132,7 @@ export default function JobsFeaturePage() {
                 }
                 meta={
                   typeof status?.storage?.usage_percent === "number"
-                    ? `${status.storage.usage_percent}% of budget`
+                    ? `${status.storage.usage_percent}% от лимита`
                     : ""
                 }
               />
@@ -142,17 +142,17 @@ export default function JobsFeaturePage() {
 
         <Card data-motion-item>
           <CardHeader>
-            <CardTitle>Latest job runs</CardTitle>
+            <CardTitle>Последние запуски</CardTitle>
           </CardHeader>
           <CardContent>
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Job</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Started</TableHead>
-                  <TableHead>Processed</TableHead>
-                  <TableHead>Error</TableHead>
+                  <TableHead>Задача</TableHead>
+                  <TableHead>Статус</TableHead>
+                  <TableHead>Запущена</TableHead>
+                  <TableHead>Обработано</TableHead>
+                  <TableHead>Ошибка</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -170,7 +170,7 @@ export default function JobsFeaturePage() {
                 {!status?.jobs?.length ? (
                   <TableRow>
                     <TableCell colSpan={5} className="text-muted-foreground">
-                      No job runs yet.
+                      Запусков пока нет.
                     </TableCell>
                   </TableRow>
                 ) : null}

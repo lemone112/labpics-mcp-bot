@@ -26,8 +26,8 @@ export function Kanban({ columns = [], className }) {
               </div>
             ))}
             {!column.items?.length ? (
-              <div className="rounded-md border border-dashed p-2 text-xs text-muted-foreground">
-                No items
+              <div className="rounded-xl border bg-muted/30 px-4 py-3 text-xs text-muted-foreground">
+                Нет элементов
               </div>
             ) : null}
           </div>

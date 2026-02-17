@@ -32,7 +32,7 @@ export default function OffersFeaturePage() {
       setOffers(Array.isArray(offersResp?.offers) ? offersResp.offers : []);
       setOutbound(Array.isArray(outboundResp?.outbound) ? outboundResp.outbound : []);
     } catch (error) {
-      setToast({ type: "error", message: error?.message || "Failed to load offers/outbox" });
+      setToast({ type: "error", message: error?.message || "Ошибка загрузки офферов/исходящих" });
     } finally {
       setBusy(false);
     }
@@ -56,30 +56,30 @@ export default function OffersFeaturePage() {
         },
       });
       setForm({ title: "", subtotal: "12000", discount_pct: "0" });
-      setToast({ type: "success", message: "Offer created" });
+      setToast({ type: "success", message: "Оффер создан" });
       await load();
     } catch (error) {
-      setToast({ type: "error", message: error?.message || "Failed to create offer" });
+      setToast({ type: "error", message: error?.message || "Ошибка создания оффера" });
     }
   }
 
   async function approveDiscount(id) {
     try {
       await apiFetch(`/offers/${id}/approve-discount`, { method: "POST", body: {} });
-      setToast({ type: "success", message: "Discount approved" });
+      setToast({ type: "success", message: "Скидка утверждена" });
       await load();
     } catch (error) {
-      setToast({ type: "error", message: error?.message || "Failed to approve discount" });
+      setToast({ type: "error", message: error?.message || "Ошибка утверждения скидки" });
     }
   }
 
   async function approveAndSend(id) {
     try {
       await apiFetch(`/offers/${id}/approve-send`, { method: "POST", body: {} });
-      setToast({ type: "success", message: "Offer marked as sent" });
+      setToast({ type: "success", message: "Оффер помечен как отправленный" });
       await load();
     } catch (error) {
-      setToast({ type: "error", message: error?.message || "Failed to approve send" });
+      setToast({ type: "error", message: error?.message || "Ошибка утверждения отправки" });
     }
   }
 
@@ -94,10 +94,10 @@ export default function OffersFeaturePage() {
           idempotency_key: `offer-draft-${Date.now()}`,
         },
       });
-      setToast({ type: "success", message: "Outbound draft created" });
+      setToast({ type: "success", message: "Черновик исходящего создан" });
       await load();
     } catch (error) {
-      setToast({ type: "error", message: error?.message || "Failed to create outbound draft" });
+      setToast({ type: "error", message: error?.message || "Ошибка создания черновика" });
     }
   }
 
@@ -106,7 +106,7 @@ export default function OffersFeaturePage() {
       await apiFetch(`/outbound/${id}/approve`, { method: "POST", body: {} });
       await load();
     } catch (error) {
-      setToast({ type: "error", message: error?.message || "Outbound approve failed" });
+      setToast({ type: "error", message: error?.message || "Ошибка утверждения исходящего" });
     }
   }
 
@@ -115,13 +115,13 @@ export default function OffersFeaturePage() {
       await apiFetch(`/outbound/${id}/send`, { method: "POST", body: {} });
       await load();
     } catch (error) {
-      setToast({ type: "error", message: error?.message || "Outbound send failed" });
+      setToast({ type: "error", message: error?.message || "Ошибка отправки исходящего" });
     }
   }
 
   if (loading || !session || loadingProjects) {
     return (
-      <PageShell title="Offers + Outbox" subtitle="Draft→approve→send lifecycle with idempotency and rate-limit policies">
+      <PageShell title="Офферы и исходящие" subtitle="Жизненный цикл черновик→утверждение→отправка с идемпотентностью и лимитами">
         <PageLoadingSkeleton />
       </PageShell>
     );
@@ -129,7 +129,7 @@ export default function OffersFeaturePage() {
 
   if (!hasProject) {
     return (
-      <PageShell title="Offers" subtitle="Offer builder + outbound approval pipeline">
+      <PageShell title="Офферы" subtitle="Конструктор офферов и pipeline утверждения исходящих">
         <ProjectScopeRequired
           title="Сначала выберите активный проект"
           description="Offers и Outbox используют project scope для расчётов и политик отправки."
@@ -139,50 +139,50 @@ export default function OffersFeaturePage() {
   }
 
   return (
-    <PageShell title="Offers + Outbox" subtitle="Draft→approve→send lifecycle with idempotency and rate-limit policies">
+    <PageShell title="Офферы и исходящие" subtitle="Жизненный цикл черновик→утверждение→отправка с идемпотентностью и лимитами">
       <div className="space-y-4">
         <Card data-motion-item>
           <CardHeader className="flex-row items-center justify-between">
-            <CardTitle>Create offer</CardTitle>
+            <CardTitle>Создать оффер</CardTitle>
             <Button variant="outline" size="sm" onClick={load} disabled={busy}>
-              {busy ? "Refreshing..." : "Refresh"}
+              {busy ? "Обновление..." : "Обновить"}
             </Button>
           </CardHeader>
           <CardContent className="grid grid-cols-1 gap-2 md:grid-cols-4">
             <Input
               value={form.title}
               onChange={(event) => setForm((prev) => ({ ...prev, title: event.target.value }))}
-              placeholder="Offer title"
+              placeholder="Название оффера"
             />
             <Input
               type="number"
               value={form.subtotal}
               onChange={(event) => setForm((prev) => ({ ...prev, subtotal: event.target.value }))}
-              placeholder="Subtotal"
+              placeholder="Сумма"
             />
             <Input
               type="number"
               value={form.discount_pct}
               onChange={(event) => setForm((prev) => ({ ...prev, discount_pct: event.target.value }))}
-              placeholder="Discount %"
+              placeholder="Скидка %"
             />
-            <Button onClick={createOffer}>Create</Button>
+            <Button onClick={createOffer}>Создать</Button>
           </CardContent>
         </Card>
 
         <Card data-motion-item>
           <CardHeader>
-            <CardTitle>Offers</CardTitle>
+            <CardTitle>Офферы</CardTitle>
           </CardHeader>
           <CardContent>
             <Table aria-label="Offers table">
               <TableHeader>
                 <TableRow>
-                  <TableHead>Title</TableHead>
-                  <TableHead>Price</TableHead>
-                  <TableHead>Discount</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Actions</TableHead>
+                  <TableHead>Название</TableHead>
+                  <TableHead>Цена</TableHead>
+                  <TableHead>Скидка</TableHead>
+                  <TableHead>Статус</TableHead>
+                  <TableHead>Действия</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -197,10 +197,10 @@ export default function OffersFeaturePage() {
                     <TableCell>
                       <div className="flex gap-2">
                         <Button size="sm" variant="secondary" onClick={() => approveDiscount(row.id)}>
-                          Approve discount
+                          Утвердить скидку
                         </Button>
                         <Button size="sm" variant="outline" onClick={() => approveAndSend(row.id)}>
-                          Approve send
+                          Утвердить отправку
                         </Button>
                       </div>
                     </TableCell>
@@ -208,7 +208,7 @@ export default function OffersFeaturePage() {
                 ))}
                 {!offers.length ? (
                   <TableRow>
-                    <TableCell colSpan={5}>No offers yet.</TableCell>
+                    <TableCell colSpan={5} className="text-muted-foreground">Офферов пока нет.</TableCell>
                   </TableRow>
                 ) : null}
               </TableBody>
@@ -218,19 +218,19 @@ export default function OffersFeaturePage() {
 
         <Card data-motion-item>
           <CardHeader className="flex-row items-center justify-between">
-            <CardTitle>Outbox approval queue</CardTitle>
+            <CardTitle>Очередь утверждения исходящих</CardTitle>
             <Button variant="secondary" size="sm" onClick={createOutboundDraft}>
-              New outbound draft
+              Новый черновик
             </Button>
           </CardHeader>
           <CardContent>
             <Table aria-label="Outbox queue">
               <TableHeader>
                 <TableRow>
-                  <TableHead>Recipient</TableHead>
-                  <TableHead>Channel</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Actions</TableHead>
+                  <TableHead>Получатель</TableHead>
+                  <TableHead>Канал</TableHead>
+                  <TableHead>Статус</TableHead>
+                  <TableHead>Действия</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -244,10 +244,10 @@ export default function OffersFeaturePage() {
                     <TableCell>
                       <div className="flex gap-2">
                         <Button size="sm" variant="secondary" onClick={() => approveOutbound(row.id)}>
-                          Approve
+                          Утвердить
                         </Button>
                         <Button size="sm" variant="outline" onClick={() => sendOutbound(row.id)}>
-                          Send
+                          Отправить
                         </Button>
                       </div>
                     </TableCell>
@@ -255,7 +255,7 @@ export default function OffersFeaturePage() {
                 ))}
                 {!outbound.length ? (
                   <TableRow>
-                    <TableCell colSpan={4}>No outbound messages yet.</TableCell>
+                    <TableCell colSpan={4} className="text-muted-foreground">Исходящих сообщений пока нет.</TableCell>
                   </TableRow>
                 ) : null}
               </TableBody>
