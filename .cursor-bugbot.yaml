@@ -1,0 +1,30 @@
+# Cursor Bugbot repository-level behavior
+
+github:
+  events:
+    - pull_request.opened
+    - pull_request.ready_for_review
+    - pull_request.synchronize
+    - pull_request.reopened
+  skip_on_push: true
+  trigger_on_pr_only: true
+
+review:
+  review_changed_files_only: true
+  include_patterns:
+    - "server/**"
+    - "web/**"
+    - ".github/workflows/**"
+    - "docker-compose.yml"
+  skip_patterns:
+    - "**/node_modules/**"
+    - "**/.next/**"
+    - "**/dist/**"
+    - "**/coverage/**"
+    - "**/*.lock"
+    - "**/*.min.*"
+
+quota:
+  max_reviews_per_pr: 5
+  skip_on_low_quota: true
+

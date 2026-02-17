@@ -22,6 +22,7 @@ This folder is the canonical documentation for **Labpics Web Platform (MVP)**.
 - Data model: [`docs/data-model.md`](./data-model.md)
 - RAG: [`docs/rag.md`](./rag.md)
 - Runbooks: [`docs/runbooks.md`](./runbooks.md)
+- Bugbot setup: [`docs/bugbot.md`](./bugbot.md)
 
 ## Repo structure (high level)
 
