@@ -4,6 +4,7 @@ This branch deploys a Docker Compose stack:
 
 - Postgres (pgvector)
 - server (Fastify)
+- worker (scheduler/automation loop)
 - web (Next.js)
 
 ## Local
@@ -21,6 +22,7 @@ This branch deploys a Docker Compose stack:
 - API direct: `GET http://localhost:8080/health`
 - API via web proxy: `GET http://localhost:3000/api/health`
 - UI: `http://localhost:3000/login`
+- Worker logs show periodic `worker_cycle` events
 
 ## Production (VPS)
 
@@ -40,6 +42,15 @@ Recommended approach:
 - `TELEGRAM_WEBHOOK_SECRET` (optional)
 - `SIGNUP_PIN_SECRET` (optional)
 
+### Required runtime vars (security/worker)
+
+- `CSRF_COOKIE_NAME` (default `csrf_token`)
+- `NEXT_PUBLIC_CSRF_COOKIE_NAME` (default `csrf_token`)
+- `LOGIN_RATE_LIMIT_MAX_ATTEMPTS`
+- `LOGIN_RATE_LIMIT_WINDOW_MINUTES`
+- `WORKER_INTERVAL_SECONDS`
+- `WORKER_TICK_LIMIT`
+
 ## Post-deploy checklist
 
 - `GET /health` returns `{ ok: true }`
@@ -48,3 +59,5 @@ Recommended approach:
 - Run Chatwoot sync → creates `cw_*` and `rag_chunks`
 - Run embeddings → moves pending → ready
 - Search returns results
+- `/jobs/scheduler` shows active scheduled jobs
+- Outbound flow works (`draft -> approved -> sent/failed`) with audit events

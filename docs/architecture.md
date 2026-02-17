@@ -21,32 +21,51 @@ Composition is defined in [`/docker-compose.yml`](../docker-compose.yml).
 ### API authentication
 
 - `POST /auth/login` creates a session row in `sessions` and sets cookie.
-- All routes except `/health` and `/auth/*` require a valid session cookie.
+- All routes except `/health`, `/metrics`, and `/auth/*` require a valid session cookie.
+- Protected mutating routes require CSRF header/token match.
 
 ### Project scoping
 
 - Active project is stored on the session row: `sessions.active_project_id`.
 - UI uses `/projects/:id/select` to set the active project.
-- Current MVP retrieval/search SQL is global and does not filter by `active_project_id`.
-- Strict per-project isolation requires adding `project_id` to ingestion/search tables and filtering queries by session project.
+- Ingestion/search/jobs tables carry `(project_id, account_scope_id)`.
+- API SQL filters are scope-aware; cross-scope writes are blocked by DB trigger `enforce_project_scope_match()`.
+- `project_sources` prevents binding one external source to multiple projects.
 
 ## Jobs execution model
 
-Jobs are executed as **API endpoints** (triggered by UI):
+Manual jobs via API:
 
 - `POST /jobs/chatwoot/sync`
 - `POST /jobs/embeddings/run`
 
-Each run is recorded in `job_runs` and surfaced in `/jobs/status`.
+Scheduled jobs via worker tick:
+
+- `GET /jobs/scheduler`
+- `POST /jobs/scheduler/tick`
+
+Worker/scheduler state:
+
+- `scheduled_jobs`
+- `worker_runs`
+- run history in scoped `job_runs`
+
+## Outbound / approval model
+
+- Draft/approval/send lifecycle is stored in `outbound_messages`.
+- Delivery attempts are stored in `outbound_attempts`.
+- Opt-out, stop-on-reply, and frequency caps are stored in `contact_channel_policies`.
+- Critical actions are written to `audit_events` with `evidence_refs`.
 
 ## Design constraints
 
 - **Idempotency**: raw rows use stable string IDs (`cw:<...>`, `cwmsg:<...>`).
 - **Observability**: every response includes `request_id` header/body for tracing.
 - **Evidence-first**: future entities must always refer back to raw or chunk rows.
+- **Safety rails for outbound**: idempotency keys, dedupe keys, approval state machine, opt-out/frequency controls.
 
 ## What is intentionally missing
 
 - Webhooks (polling + jobs only)
-- Queue system (single-process jobs, MVP)
+- Distributed queue system (single-process scheduler tick in MVP)
 - Linear/Attio integrations (planned)

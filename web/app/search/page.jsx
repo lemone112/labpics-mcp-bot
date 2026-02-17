@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 
 import { PageShell } from "@/components/page-shell";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -45,6 +46,26 @@ export default function SearchPage() {
 
   if (loading || !session) {
     return <div className="p-8 text-sm">Loading...</div>;
+  }
+
+  if (!session?.active_project_id) {
+    return (
+      <PageShell title="Search" subtitle="Vector similarity search over ready embeddings">
+        <Card data-motion-item>
+          <CardHeader>
+            <CardTitle>Select active project first</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <p className="text-sm text-[var(--text-muted)]">
+              Search is strictly project-scoped. Choose an active project before querying evidence.
+            </p>
+            <Link href="/projects">
+              <Button>Go to Projects</Button>
+            </Link>
+          </CardContent>
+        </Card>
+      </PageShell>
+    );
   }
 
   return (

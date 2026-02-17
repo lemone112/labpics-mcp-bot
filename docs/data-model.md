@@ -21,6 +21,7 @@ Project registry.
 
 - `id uuid primary key default gen_random_uuid()`
 - `name text not null`
+- `account_scope_id uuid not null references account_scopes(id)`
 - `created_at timestamptz not null default now()`
 
 ### `sessions`
@@ -30,14 +31,39 @@ Cookie-backed sessions.
 - `session_id text primary key`
 - `username text not null`
 - `active_project_id uuid references projects(id) on delete set null`
+- `csrf_token text not null`
 - `created_at timestamptz not null default now()`
 - `last_seen_at timestamptz not null default now()`
+
+### `account_scopes`
+
+Account-level isolation boundary used by projects.
+
+- `id uuid primary key`
+- `scope_key text unique`
+- `name text`
+
+### `project_sources`
+
+External source bindings per project.
+
+- `project_id uuid not null`
+- `account_scope_id uuid not null`
+- `source_kind text` (`chatwoot_account`)
+- `external_id text`
+
+Safety constraints:
+
+- `unique(source_kind, external_id)` to avoid multi-project source binding
+- `unique(project_id, source_kind)`
 
 ### `cw_contacts`
 
 Normalized Chatwoot contacts.
 
-- `id text primary key` (format: `cwc:<account_id>:<contact_id>`)
+- `id text primary key` (format: `cwc:<project_id>:<account_id>:<contact_id>`)
+- `project_id uuid not null`
+- `account_scope_id uuid not null`
 - `account_id bigint not null`
 - `contact_id bigint not null`
 - `name text`
@@ -53,7 +79,9 @@ Normalized Chatwoot contacts.
 
 Raw Chatwoot conversations.
 
-- `id text primary key` (format: `cw:<account_id>:<conversation_id>`)
+- `id text primary key` (format: `cw:<project_id>:<account_id>:<conversation_id>`)
+- `project_id uuid not null`
+- `account_scope_id uuid not null`
 - `account_id bigint`
 - `conversation_id bigint`
 - `contact_global_id text`
@@ -68,7 +96,9 @@ Raw Chatwoot conversations.
 
 Raw Chatwoot messages.
 
-- `id text primary key` (format: `cwmsg:<account_id>:<message_id>`)
+- `id text primary key` (format: `cwmsg:<project_id>:<account_id>:<message_id>`)
+- `project_id uuid not null`
+- `account_scope_id uuid not null`
 - `account_id bigint`
 - `message_id bigint`
 - `conversation_id bigint`
@@ -88,6 +118,8 @@ Raw Chatwoot messages.
 Chunked text and embedding lifecycle.
 
 - `id uuid primary key default gen_random_uuid()`
+- `project_id uuid not null`
+- `account_scope_id uuid not null`
 - `conversation_global_id text`
 - `message_global_id text`
 - `chunk_index int`
@@ -112,7 +144,10 @@ Uniqueness:
 
 Ingestion cursor per source.
 
-- `source text primary key` (e.g. `chatwoot:<account_id>`)
+- primary key: `(project_id, source)`
+- `project_id uuid not null`
+- `account_scope_id uuid not null`
+- `source text` (e.g. `chatwoot:<account_id>`)
 - `cursor_ts timestamptz`
 - `cursor_id text`
 - `meta jsonb not null default '{}'::jsonb`
@@ -123,6 +158,8 @@ Ingestion cursor per source.
 Job execution audit.
 
 - `id bigserial primary key`
+- `project_id uuid not null`
+- `account_scope_id uuid not null`
 - `job_name text not null`
 - `status text not null` (`running|ok|failed`)
 - `started_at timestamptz not null default now()`
@@ -161,6 +198,34 @@ Simple key/value settings store (used for Telegram owner binding).
 - `value text not null`
 - `updated_at timestamptz not null default now()`
 
+## Platform control tables
+
+### `audit_events`
+
+Immutable audit trail for critical actions, with mandatory evidence refs.
+
+### `evidence_items`
+
+Normalized evidence index with FTS search (`search_text`).
+
+### `outbound_messages`, `outbound_attempts`, `contact_channel_policies`
+
+Approval/send/retry pipeline with opt-out and frequency controls.
+
+### `scheduled_jobs`, `worker_runs`
+
+Unified scheduler/worker execution model.
+
+## Roadmap domain tables
+
+- CRM: `crm_accounts`, `crm_account_contacts`, `crm_opportunities`, `crm_opportunity_stage_events`
+- Signals/NBA: `signals`, `next_best_actions`
+- Offers: `offers`, `offer_items`, `offer_approvals`
+- Campaigns: `campaigns`, `campaign_segments`, `campaign_members`, `campaign_events`
+- Health/Risk: `health_scores`, `risk_radar_items`
+- Cases: `case_library_entries`, `case_evidence_refs`
+- Analytics: `analytics_revenue_snapshots`
+
 ## Indexes (current migrations)
 
 - `cw_contacts(account_id, contact_id)` unique
@@ -181,5 +246,5 @@ Simple key/value settings store (used for Telegram owner binding).
 
 ## Notes
 
-- Search currently operates on global `rag_chunks` (`embedding_status='ready'`), not per-project SQL scope.
-- `sessions.active_project_id` is already persisted for navigation context and future strict data isolation.
+- Search/sync/jobs are scoped by `(project_id, account_scope_id)`.
+- DB trigger `enforce_project_scope_match()` blocks cross-scope writes on scoped tables.

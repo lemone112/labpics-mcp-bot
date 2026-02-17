@@ -28,10 +28,11 @@ Each runbook uses the same structure:
 1. Open `/jobs` and inspect latest runs.
    - If there are pending sync runs: complete sync first.
    - If embeddings show `ready = 0`: embeddings are missing.
-2. Confirm data scope assumptions
-   - Current MVP search is global (not strict per-project SQL scope).
-   - Do not expect project isolation unless schema/query scoping is implemented.
-3. Verify environment
+2. Confirm active project is selected in session.
+3. Confirm scoped data exists for selected project:
+   - `cw_messages` rows with matching `project_id`
+   - `rag_chunks` with `embedding_status='ready'` and matching `project_id`
+4. Verify environment
    - `OPENAI_API_KEY` is set on the server.
 
 **Fix**
@@ -73,15 +74,38 @@ Each runbook uses the same structure:
 
 **Checks**
 - Browser devtools: cookie is set and sent.
+- Browser request headers include `x-csrf-token` for protected POST endpoints.
 - Server env: `CORS_ORIGIN` matches UI origin.
 - Reverse proxy: cookies are not stripped.
 
 **Fix**
 - Align `CORS_ORIGIN` and proxy settings, then re-login.
+- If 403 `csrf_invalid`: clear browser cookies and login again.
 
 **Evidence to capture**
 - Response headers
 - Server logs around auth
+
+---
+
+## Runbook: Scheduler tick / worker jobs failing
+
+**Symptom**
+- `POST /jobs/scheduler/tick` returns failures or `worker_runs` show failed status.
+
+**Checks**
+- `GET /jobs/scheduler` for `last_error` and `next_run_at`.
+- `GET /jobs/status` for sync/embeddings backlog.
+- Validate project source bindings (`project_sources`) for Chatwoot jobs.
+
+**Fix**
+- Correct failing dependency (credentials/source binding/rate limits).
+- Re-run manual jobs (`/jobs/chatwoot/sync`, `/jobs/embeddings/run`) then scheduler tick.
+
+**Evidence to capture**
+- Scheduler result payload
+- `worker_runs` latest failed rows
+- Relevant upstream error (Chatwoot/OpenAI/outbound)
 
 ---
 
@@ -129,3 +153,28 @@ Each runbook uses the same structure:
 - `/auth/signup/status` payload
 - Telegram webhook delivery status
 - Backend logs around `/auth/telegram/webhook` and `/auth/signup/start`
+
+---
+
+## Runbook: Outbound delivery blocked or failing
+
+**Symptom**
+- Outbound remains `draft/approved/failed/blocked_opt_out` and does not reach `sent`.
+
+**Checks**
+- `GET /outbound` item status and `last_error`.
+- Verify policy row in `contact_channel_policies`:
+  - `opted_out`
+  - `stop_on_reply`
+  - frequency counters/caps
+- Check `outbound_attempts` history.
+
+**Fix**
+- For `blocked_opt_out`: only explicit opt-in policy change can unlock.
+- For `frequency_cap_reached`: wait for window reset or change cap.
+- For provider errors: fix payload/provider config and retry via `/outbound/process`.
+
+**Evidence to capture**
+- outbound payload + status history
+- policy values for affected contact/channel
+- related `audit_events` (`outbound.*` actions)

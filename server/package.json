@@ -6,7 +6,9 @@
   "scripts": {
     "dev": "node --watch src/index.js",
     "start": "node src/index.js",
-    "migrate": "node db/migrate.js"
+    "migrate": "node db/migrate.js",
+    "worker": "node src/worker.js",
+    "worker:loop": "node src/worker-loop.js"
   },
   "dependencies": {
     "@fastify/cookie": "^11.0.2",

@@ -19,9 +19,10 @@ Minimum loop:
 
 - **Chatwoot → DB sync** (raw conversations + messages)
 - **Chunking + embeddings** stored in Postgres/pgvector
-- **Vector search** over embedded chunks (global scope in current MVP)
+- **Vector search** over embedded chunks (strict project/account scope)
 - **Project selection** stored per session
 - **Jobs UI** for triggering sync/embeddings and observing status
+- **Platform rails**: audit events, outbound approval state machine, scheduler worker tick
 
 ## Evidence-first rule
 

@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
 
 import { PageShell } from "@/components/page-shell";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -48,6 +49,26 @@ export default function JobsPage() {
 
   if (loading || !session) {
     return <div className="p-8 text-sm">Loading...</div>;
+  }
+
+  if (!session?.active_project_id) {
+    return (
+      <PageShell title="Jobs" subtitle="Trigger Chatwoot sync and embeddings jobs">
+        <Card data-motion-item>
+          <CardHeader>
+            <CardTitle>Select active project first</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <p className="text-sm text-[var(--text-muted)]">
+              Jobs are strictly project-scoped. Select an active project before running sync or embeddings.
+            </p>
+            <Link href="/projects">
+              <Button>Go to Projects</Button>
+            </Link>
+          </CardContent>
+        </Card>
+      </PageShell>
+    );
   }
 
   return (

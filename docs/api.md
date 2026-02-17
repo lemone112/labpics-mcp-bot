@@ -4,17 +4,28 @@ Base URL:
 
 - browser/UI: `NEXT_PUBLIC_API_BASE_URL` (default `/api`)
 - direct backend (without Next.js proxy): `http://localhost:8080`
+- versioned alias: every route is available under `/v1/...` too
 
 Every response includes `request_id` in body and `x-request-id` in headers.
 
-## Access model
+## Access and security model
 
 Public routes:
 
 - `GET /health`
+- `GET /metrics`
 - all `"/auth/*"` routes
 
 All other routes require a valid session cookie (`SESSION_COOKIE_NAME`, default `sid`).
+
+### CSRF for protected mutating routes
+
+For authenticated non-GET routes, send:
+
+- cookie: `CSRF_COOKIE_NAME` (default `csrf_token`)
+- header: `x-csrf-token` with matching value
+
+If token is missing/mismatch, API returns `403 csrf_invalid`.
 
 ## Health
 
@@ -32,6 +43,7 @@ Body:
 - `password` (string)
 
 On success sets session cookie.
+Also sets CSRF cookie.
 
 ### `GET /auth/signup/status`
 
@@ -72,7 +84,7 @@ Clears session cookie and deletes session row when cookie is present.
 Returns either:
 
 - `{ authenticated: false }`
-- authenticated session payload (`username`, `active_project_id`, timestamps)
+- authenticated session payload (`username`, `active_project_id`, `account_scope_id`, timestamps)
 
 ## Projects
 
@@ -88,10 +100,13 @@ Returns:
 Body:
 
 - `name` (2..160 chars)
+- `account_scope_key` (optional)
+- `account_scope_name` (optional)
 
 ### `POST /projects/:id/select`
 
-Sets `sessions.active_project_id` for current session.
+Sets `sessions.active_project_id` for current session.  
+All scoped routes below require active project selection.
 
 ## Data review
 
@@ -127,6 +142,11 @@ Runs Chatwoot poll sync. Writes/updates:
 - `rag_chunks` (`pending` for new or changed chunks)
 - `sync_watermarks`
 
+Scope behavior:
+
+- source binding is resolved from `project_sources` (or first bootstrap from env `CHATWOOT_ACCOUNT_ID`)
+- writes are strictly filtered by `(project_id, account_scope_id)`
+
 ### `POST /jobs/embeddings/run`
 
 Processes `rag_chunks` with `embedding_status='pending'`.
@@ -142,6 +162,14 @@ Returns:
 - storage summary (`database_bytes`, `usage_percent`, table sizes)
 - recent `sync_watermarks`
 
+### `GET /jobs/scheduler`
+
+Returns configured scheduled jobs for active project.
+
+### `POST /jobs/scheduler/tick`
+
+Runs due scheduler jobs (worker tick) for active project.
+
 ## Search
 
 ### `POST /search`
@@ -152,5 +180,64 @@ Body:
 - `topK` (int, 1..50, default 10)
 
 Performs cosine-distance vector search over `rag_chunks` with `embedding_status='ready'`.
+Search is strictly filtered by `(project_id, account_scope_id)`.
 
-> Note: current MVP search is not project-scoped in SQL. `active_project_id` is stored in sessions for navigation context and future strict data isolation.
+## Audit & evidence
+
+### `GET /audit`
+
+Returns audit events for active project.
+
+Query params:
+
+- `action` (optional exact filter)
+- `limit`, `offset`
+
+### `GET /evidence/search`
+
+Full-text evidence search in normalized `evidence_items`.
+
+Query params:
+
+- `q` (required for non-empty result)
+- `limit`
+
+## Outbound / approval
+
+### `GET /outbound`
+
+List outbound messages for active project.
+
+### `POST /outbound/draft`
+
+Create or upsert outbound draft with idempotency key.
+
+Body:
+
+- `channel` (`email|chatwoot|telegram`)
+- `recipient_ref`
+- `payload` (object)
+- `idempotency_key` (required)
+- `dedupe_key` (optional)
+- `max_retries` (optional)
+- `evidence_refs` (optional array)
+
+### `POST /outbound/:id/approve`
+
+Move outbound message to `approved`.
+
+### `POST /outbound/:id/send`
+
+Send approved outbound message with policy checks:
+
+- opt-out
+- stop-on-reply
+- frequency cap
+
+### `POST /outbound/opt-out`
+
+Update recipient/channel policy (opt-out, cap, stop-on-reply).
+
+### `POST /outbound/process`
+
+Process due approved/failed outbounds (retry loop).

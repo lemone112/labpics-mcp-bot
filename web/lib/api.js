@@ -1,4 +1,5 @@
 export const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || "/api";
+const CSRF_COOKIE_NAME = process.env.NEXT_PUBLIC_CSRF_COOKIE_NAME || "csrf_token";
 
 function buildRequestId() {
   try {
@@ -19,6 +20,15 @@ export async function apiFetch(path, options = {}) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort("timeout"), timeoutMs);
 
+  const csrfToken =
+    typeof document !== "undefined"
+      ? document.cookie
+          .split(";")
+          .map((row) => row.trim())
+          .find((row) => row.startsWith(`${CSRF_COOKIE_NAME}=`))
+          ?.slice(CSRF_COOKIE_NAME.length + 1) || ""
+      : "";
+
   try {
     const response = await fetch(`${API_BASE}${path}`, {
       method,
@@ -26,6 +36,7 @@ export async function apiFetch(path, options = {}) {
       headers: {
         "content-type": "application/json",
         "x-request-id": buildRequestId(),
+        ...(csrfToken ? { "x-csrf-token": decodeURIComponent(csrfToken) } : {}),
         ...headers,
       },
       body: body ? JSON.stringify(body) : undefined,

@@ -1,12 +1,12 @@
 # Labpics Web Platform (MVP)
 
-Репозиторий полностью переориентирован на **web-сервис**:
+Репозиторий ориентирован на **web-платформу**:
 
-- `server/` — Fastify API + jobs + Postgres/pgvector
+- `server/` — Fastify API + platform layers (scope/audit/outbox/scheduler)
 - `web/` — Next.js UI (login/projects/jobs/search)
 - `docker-compose.yml` — локальный и серверный запуск стека
 
-Legacy bot/worker контур удален из кода и деплоя.
+Worker-контур снова введен как единый scheduler/worker слой (`server/src/worker-loop.js`).
 
 ---
 
@@ -29,6 +29,8 @@ Legacy bot/worker контур удален из кода и деплоя.
 - Jobs:
   - `POST /jobs/chatwoot/sync`
   - `POST /jobs/embeddings/run`
+  - `GET /jobs/scheduler`
+  - `POST /jobs/scheduler/tick`
   - `GET /jobs/status`
 - Search:
   - `POST /search` (vector similarity)
@@ -36,6 +38,15 @@ Legacy bot/worker контур удален из кода и деплоя.
   - `GET /contacts`
   - `GET /conversations`
   - `GET /messages`
+- Audit/Evidence:
+  - `GET /audit`
+  - `GET /evidence/search`
+- Outbound/Approval:
+  - `GET /outbound`
+  - `POST /outbound/draft`
+  - `POST /outbound/:id/approve`
+  - `POST /outbound/:id/send`
+  - `POST /outbound/opt-out`
 
 ### UI (`web`)
 
@@ -160,6 +171,12 @@ docker compose up --build
 - `CORS_ORIGIN`
 - `AUTH_USERNAME`
 - `SESSION_COOKIE_NAME`
+- `CSRF_COOKIE_NAME`
+- `NEXT_PUBLIC_CSRF_COOKIE_NAME`
+- `LOGIN_RATE_LIMIT_MAX_ATTEMPTS`
+- `LOGIN_RATE_LIMIT_WINDOW_MINUTES`
+- `WORKER_INTERVAL_SECONDS`
+- `WORKER_TICK_LIMIT`
 - `SIGNUP_PIN_TTL_MINUTES` (optional, default `10`)
 - `SIGNUP_PIN_MAX_ATTEMPTS` (optional, default `8`)
 - `CHATWOOT_BASE_URL`

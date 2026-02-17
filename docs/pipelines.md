@@ -1,6 +1,9 @@
-# Pipelines & jobs (MVP)
+# Pipelines & jobs (MVP + platform worker)
 
-All automation is exposed as **API-triggered jobs** and recorded in `job_runs`.
+Automation has two layers:
+
+- manual API-triggered jobs (`/jobs/chatwoot/sync`, `/jobs/embeddings/run`)
+- scheduler/worker jobs (`/jobs/scheduler/tick`) with run logs in `worker_runs`
 
 ## 1) Chatwoot sync
 
@@ -23,7 +26,7 @@ Configuration (env):
 
 - `CHATWOOT_BASE_URL`
 - `CHATWOOT_API_TOKEN`
-- `CHATWOOT_ACCOUNT_ID`
+- `CHATWOOT_ACCOUNT_ID` (bootstrap fallback only; canonical binding is `project_sources`)
 - `CHATWOOT_CONVERSATIONS_LIMIT` (default 60)
 - `CHATWOOT_CONVERSATIONS_PER_PAGE` (default 25)
 - `CHATWOOT_PAGES_LIMIT` (default 20)
@@ -70,13 +73,36 @@ Returns:
 - `storage`: DB bytes, budget, usage percent and key table sizes
 - Recent `sync_watermarks`
 
+## 4) Scheduler / worker
+
+Endpoints:
+
+- `GET /jobs/scheduler`
+- `POST /jobs/scheduler/tick`
+
+Default scheduled jobs per project:
+
+- `chatwoot_sync`
+- `embeddings_run`
+- `signals_extraction`
+- `health_scoring`
+- `campaign_scheduler`
+- `analytics_aggregates`
+
+State tables:
+
+- `scheduled_jobs`
+- `worker_runs`
+
 ## Suggested cadence (prod)
 
-MVP has no scheduler.
+Scheduler can be triggered:
 
-Recommended external schedule:
+- by internal API tick (manual or automation)
+- by external cron calling `/jobs/scheduler/tick`
 
-- Chatwoot sync: every **10–15 minutes**
-- Embeddings: every **30–60 minutes** or on demand
+Recommended minimum:
 
-You can implement cron outside the app (GitHub Actions, VPS cron, or managed scheduler) that calls the job endpoints.
+- scheduler tick: every **1–5 minutes**
+- chatwoot sync cadence: **10–15 minutes**
+- embeddings cadence: **20–60 minutes** (depending on backlog)

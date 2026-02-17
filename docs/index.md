@@ -6,6 +6,7 @@ This folder is the canonical documentation for **Labpics Web Platform (MVP)**.
 
 1. Product loop: [`docs/product/overview.md`](./product/overview.md)
 2. Architecture: [`docs/architecture.md`](./architecture.md)
+   - Platform layer (scope/audit/outbox/worker): [`docs/platform-architecture.md`](./platform-architecture.md)
 3. Data and retrieval: [`docs/data-model.md`](./data-model.md) → [`docs/rag.md`](./rag.md)
 4. Operations: [`docs/deployment.md`](./deployment.md) → [`docs/pipelines.md`](./pipelines.md) → [`docs/runbooks.md`](./runbooks.md)
 5. Behavioral requirements (specs): [`docs/specs/README.md`](./specs/README.md)

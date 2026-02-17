@@ -9,7 +9,7 @@ This repository has two documentation layers:
 
 1. **Evidence-first**: any derived statement must link to its source (message, conversation, job run, DB row id, etc.).
 2. **Safe-by-default**: ambiguous actions must not be auto-executed. Prefer explicit user choice.
-3. **Project scope clarity**: always state whether behavior is project-scoped or global. Current MVP stores project context in session, but retrieval/search SQL is global unless explicitly scoped.
+3. **Project/account scope clarity**: always state scope behavior explicitly. Platform defaults to strict `(project_id, account_scope_id)` isolation unless a page explicitly describes cross-scope admin behavior.
 4. **Idempotency**: repeated runs must not create duplicates.
 
 ## Language

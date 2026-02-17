@@ -4,7 +4,10 @@ Canonical terms used across `docs/` and `docs/specs/`.
 
 ## Project
 A top-level workspace context selected per session (`active_project_id`).
-Current MVP stores this context but does not yet enforce strict project-scoped SQL for ingestion/search.
+Current platform enforces project/account scope in SQL and DB triggers.
+
+## Account scope
+An upper isolation boundary attached to projects (`projects.account_scope_id`) and enforced alongside project scope.
 
 ## Evidence-first
 A rule: any valuable output (commitment/risk/digest/proposal) must reference primary sources.
@@ -26,7 +29,7 @@ Vector representations stored in Postgres/pgvector.
 
 ## Vector search
 Similarity search over embeddings (`rag_chunks`) using pgvector distance.
-Current MVP executes search in global scope.
+Current platform filters search by `(project_id, account_scope_id)`.
 
 ## RAG
 Retrieval-augmented generation: generation grounded in retrieved evidence.
