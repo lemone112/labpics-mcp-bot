@@ -59,8 +59,8 @@ jobs:
       EDGE_HTTPS_PORT: ${{ vars.EDGE_HTTPS_PORT }}
       NEXT_PUBLIC_API_BASE_URL: ${{ vars.NEXT_PUBLIC_API_BASE_URL }}
       API_UPSTREAM_URL: ${{ vars.API_UPSTREAM_URL }}
-      CORS_ORIGIN: ${{ vars.CORS_ORIGIN }}
-      DOMAIN: ${{ vars.DOMAIN }}
+      CORS_ORIGIN: https://dev.dashboard.lab.pics
+      DOMAIN: dev.dashboard.lab.pics
       API_UPSTREAM: ${{ vars.API_UPSTREAM }}
       WEB_UPSTREAM: ${{ vars.WEB_UPSTREAM }}
       ENABLE_EDGE_PROXY: ${{ vars.ENABLE_EDGE_PROXY }}
@@ -110,10 +110,10 @@ jobs:
           EDGE_HTTPS_PORT=${EDGE_HTTPS_PORT:-443}
           NEXT_PUBLIC_API_BASE_URL=${NEXT_PUBLIC_API_BASE_URL:-/api}
           API_UPSTREAM_URL=${API_UPSTREAM_URL:-http://server:8080}
-          DOMAIN=${DOMAIN:-dev.dashboard.lab.pics}
+          DOMAIN=${DOMAIN}
           API_UPSTREAM=${API_UPSTREAM:-server:8080}
           WEB_UPSTREAM=${WEB_UPSTREAM:-web:3000}
-          CORS_ORIGIN=${CORS_ORIGIN:-https://dev.dashboard.lab.pics}
+          CORS_ORIGIN=${CORS_ORIGIN}
           ENABLE_EDGE_PROXY=${ENABLE_EDGE_PROXY:-true}
           NODE_ENV=production
           AUTH_USERNAME=${AUTH_USERNAME:-admin}
@@ -177,16 +177,8 @@ jobs:
           wait_for_url "http://127.0.0.1:${api_port}/health"
           wait_for_url "http://127.0.0.1:${web_port}/login"
           if [ "${ENABLE_EDGE_PROXY:-true}" = "true" ]; then
-            domain="${DOMAIN:-dev.dashboard.lab.pics}"
+            domain="${DOMAIN}"
             if ! wait_for_url "https://${domain}/login" 40 3; then
               echo "warning: public edge smoke-check failed for https://${domain}/login (local checks passed)" >&2
             fi
           fi
-
-      - name: Debug edge logs
-        if: always()
-        run: |
-          set -euo pipefail
-          compose_project="${COMPOSE_PROJECT_NAME:-labpics-dev}"
-          COMPOSE_PROJECT_NAME="$compose_project" docker compose --profile edge --env-file .env ps
-          COMPOSE_PROJECT_NAME="$compose_project" docker compose --profile edge --env-file .env logs --tail=120 edge
