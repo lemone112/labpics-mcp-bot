@@ -1,6 +1,14 @@
 name: Deploy (prod)
 
 on:
+  push:
+    branches: [cursor/labpics_dashboard]
+    paths:
+      - "server/**"
+      - "web/**"
+      - "docker-compose.yml"
+      - "infra/caddy/**"
+      - ".github/workflows/deploy-prod.yml"
   workflow_dispatch:
     inputs:
       ref:
@@ -20,7 +28,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.ref }}
+          ref: ${{ inputs.ref || github.ref_name }}
 
       - uses: actions/setup-node@v4
         with:
@@ -94,7 +102,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.ref }}
+          ref: ${{ inputs.ref || github.ref_name }}
 
       - name: Configure SSH key
         run: |
