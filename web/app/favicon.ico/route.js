@@ -1,4 +1,8 @@
-export function GET(request) {
-  const url = new URL("/favicon.svg", request.url);
-  return Response.redirect(url, 307);
+export function GET() {
+  return new Response(null, {
+    status: 307,
+    headers: {
+      location: "/favicon.svg",
+    },
+  });
 }
