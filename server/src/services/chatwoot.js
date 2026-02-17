@@ -510,7 +510,10 @@ async function getStorageSummary(pool, budgetGb) {
           relname,
           pg_total_relation_size(c.oid)::bigint AS bytes
         FROM pg_class AS c
+        JOIN pg_namespace AS n ON n.oid = c.relnamespace
         WHERE relname = ANY($1::text[])
+          AND n.nspname = 'public'
+          AND c.relkind IN ('r', 'p')
       `,
       [["cw_contacts", "cw_conversations", "cw_messages", "rag_chunks"]]
     ),
@@ -553,7 +556,7 @@ export async function runChatwootSync(pool, logger = console) {
 
   const previousWatermark = await getWatermark(pool, source);
   const defaultSince = new Date(Date.now() - lookbackDays * 24 * 60 * 60 * 1000).toISOString();
-  const since = previousWatermark?.cursor_ts ? new Date(previousWatermark.cursor_ts).toISOString() : defaultSince;
+  const since = toIsoTime(previousWatermark?.cursor_ts) || defaultSince;
   const watermarkMessageNumeric = getCursorMessageNumericId(previousWatermark?.cursor_id);
 
   const conversations = await listConversations(baseUrl, apiToken, accountId, maxConversations, logger);
@@ -562,7 +565,7 @@ export async function runChatwootSync(pool, logger = console) {
   let processedMessages = 0;
   let insertedChunks = 0;
   let reembeddedChunks = 0;
-  let newestTs = previousWatermark?.cursor_ts ? new Date(previousWatermark.cursor_ts).toISOString() : since;
+  let newestTs = toIsoTime(previousWatermark?.cursor_ts) || since;
   let newestMsgId = previousWatermark?.cursor_id || null;
 
   const contactsById = new Map();

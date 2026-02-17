@@ -11,7 +11,10 @@ async function getStorageStats(pool) {
           relname,
           pg_total_relation_size(c.oid)::bigint AS bytes
         FROM pg_class AS c
+        JOIN pg_namespace AS n ON n.oid = c.relnamespace
         WHERE relname = ANY($1::text[])
+          AND n.nspname = 'public'
+          AND c.relkind IN ('r', 'p')
       `,
       [["cw_contacts", "cw_conversations", "cw_messages", "rag_chunks"]]
     ),

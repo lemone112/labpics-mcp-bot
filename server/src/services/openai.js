@@ -8,7 +8,8 @@ function requiredEnv(name) {
 }
 
 function sanitizeInput(text) {
-  return String(text || "").replace(/\s+/g, " ").trim().slice(0, 8_000);
+  const normalized = String(text || "").replace(/\s+/g, " ").trim().slice(0, 8_000);
+  return normalized || " ";
 }
 
 function chunkArray(items, size) {
@@ -57,7 +58,7 @@ async function createEmbeddingsBatch({ apiKey, model, inputs, timeoutMs, logger 
 }
 
 export async function createEmbeddings(inputs, logger = console) {
-  const input = Array.isArray(inputs) ? inputs.map(sanitizeInput).filter(Boolean) : [];
+  const input = Array.isArray(inputs) ? inputs.map(sanitizeInput) : [];
   const model = process.env.EMBEDDING_MODEL || "text-embedding-3-small";
   if (!input.length) return { model, embeddings: [] };
 
