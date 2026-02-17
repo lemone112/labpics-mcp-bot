@@ -1,4 +1,4 @@
-# Labpics Web Platform (MVP)
+# Labpics Dashboard (MVP)
 
 Репозиторий ориентирован на **web-платформу**:
 
