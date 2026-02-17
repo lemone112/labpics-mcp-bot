@@ -1,4 +1,5 @@
 import { findSimilarCases } from "./similarity.js";
+import { failProcessRun, finishProcessRun, startProcessRun, warnProcess } from "./kag-process-log.js";
 
 function clamp(value, min, max) {
   const n = Number(value);
@@ -188,6 +189,7 @@ export function computeRiskForecastsFromInputs({ signals = [], scores = [], simi
         why_similar: item.why_similar,
       })),
       evidence_refs: evidence,
+      publishable: evidence.length > 0,
       generated_at: generatedAt,
     });
   }
@@ -233,6 +235,7 @@ async function upsertForecasts(pool, scope, forecasts = []) {
     top_drivers: item.top_drivers || [],
     similar_cases: item.similar_cases || [],
     evidence_refs: item.evidence_refs || [],
+    publishable: Boolean(item.publishable),
     generated_at: item.generated_at || new Date().toISOString(),
   }));
 
@@ -250,6 +253,7 @@ async function upsertForecasts(pool, scope, forecasts = []) {
         top_drivers,
         similar_cases,
         evidence_refs,
+        publishable,
         generated_at,
         updated_at
       )
@@ -265,6 +269,7 @@ async function upsertForecasts(pool, scope, forecasts = []) {
         x.top_drivers,
         x.similar_cases,
         x.evidence_refs,
+        x.publishable,
         x.generated_at::timestamptz,
         now()
       FROM jsonb_to_recordset($3::jsonb) AS x(
@@ -277,6 +282,7 @@ async function upsertForecasts(pool, scope, forecasts = []) {
         top_drivers jsonb,
         similar_cases jsonb,
         evidence_refs jsonb,
+        publishable boolean,
         generated_at text
       )
       ON CONFLICT (project_id, risk_type)
@@ -290,6 +296,7 @@ async function upsertForecasts(pool, scope, forecasts = []) {
         top_drivers = EXCLUDED.top_drivers,
         similar_cases = EXCLUDED.similar_cases,
         evidence_refs = EXCLUDED.evidence_refs,
+        publishable = EXCLUDED.publishable,
         generated_at = EXCLUDED.generated_at,
         updated_at = now()
     `,
@@ -299,6 +306,15 @@ async function upsertForecasts(pool, scope, forecasts = []) {
 }
 
 export async function refreshRiskForecasts(pool, scope, options = {}) {
+  const run = await startProcessRun(pool, scope, "forecast_refresh", {
+    source: "system",
+    payload: {
+      project_id: options.project_id || scope.projectId,
+      window_days: options.window_days || 14,
+      top_k: options.top_k || 5,
+    },
+  });
+  try {
   const [signals, scores, similarCases] = await Promise.all([
     fetchSignals(pool, scope),
     fetchScores(pool, scope),
@@ -315,14 +331,41 @@ export async function refreshRiskForecasts(pool, scope, options = {}) {
     now: options.now || new Date(),
   });
   const touched = await upsertForecasts(pool, scope, forecasts);
-  return {
+  const unpublished = forecasts.filter((item) => !item.publishable);
+  if (unpublished.length > 0) {
+    await warnProcess(pool, scope, "forecast_refresh", "Some forecasts have no evidence and are hidden", {
+      payload: {
+        unpublished_risk_types: unpublished.map((item) => item.risk_type),
+      },
+    });
+  }
+  const result = {
     touched,
     forecasts,
     similar_cases_top3: similarCases.slice(0, 3),
   };
+  await finishProcessRun(pool, scope, run, {
+    counters: {
+      signals: signals.length,
+      scores: scores.length,
+      similar_cases: similarCases.length,
+      forecasts: forecasts.length,
+      publishable_forecasts: forecasts.length - unpublished.length,
+      unpublished_forecasts: unpublished.length,
+    },
+    payload: {
+      touched,
+    },
+  });
+  return result;
+  } catch (error) {
+    await failProcessRun(pool, scope, run, error, {});
+    throw error;
+  }
 }
 
-export async function listRiskForecasts(pool, scope) {
+export async function listRiskForecasts(pool, scope, options = {}) {
+  const includeUnpublished = String(options.include_unpublished || "").trim().toLowerCase() === "true";
   const { rows } = await pool.query(
     `
       SELECT
@@ -335,14 +378,16 @@ export async function listRiskForecasts(pool, scope) {
         top_drivers,
         similar_cases,
         evidence_refs,
+        publishable,
         generated_at,
         updated_at
       FROM kag_risk_forecasts
       WHERE project_id = $1
         AND account_scope_id = $2
+        AND ($3::boolean = true OR publishable = true)
       ORDER BY risk_type ASC
     `,
-    [scope.projectId, scope.accountScopeId]
+    [scope.projectId, scope.accountScopeId, includeUnpublished]
   );
   return rows;
 }

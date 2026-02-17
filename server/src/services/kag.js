@@ -434,17 +434,17 @@ export async function runKagRecommendationRefresh(pool, scope, options = {}) {
   }
 
   let snapshotResult = null;
-  if (envFlag("KAG_SNAPSHOTS_ENABLED", true)) {
+  if (envFlag("KAG_SNAPSHOTS_ENABLED", false)) {
     snapshotResult = await buildProjectSnapshot(pool, scope, { snapshot_date: now });
   }
 
   let forecastResult = null;
-  if (envFlag("KAG_FORECASTING_ENABLED", true)) {
+  if (envFlag("KAG_FORECASTING_ENABLED", false)) {
     forecastResult = await refreshRiskForecasts(pool, scope, { now });
   }
 
   let recommendationsV2Result = null;
-  if (recommendationsEnabled && envFlag("KAG_RECOMMENDATIONS_V2_ENABLED", true)) {
+  if (recommendationsEnabled && envFlag("KAG_RECOMMENDATIONS_V2_ENABLED", false)) {
     recommendationsV2Result = await refreshRecommendationsV2(pool, scope, { now });
   }
 

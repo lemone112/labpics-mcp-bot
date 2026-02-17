@@ -249,6 +249,28 @@ Evidence fields:
 
 ---
 
+## Operational cadence (recommended defaults)
+
+- каждые **15 минут**: `connectors_sync_cycle`
+  - общий инкрементальный sync Chatwoot/Linear/Attio
+  - обновление `connector_sync_state`
+  - запись process start/finish/error в `kag_event_log`
+- каждые **5 минут**: `connector_errors_retry`
+  - retry только due-записей из `connector_errors` (backoff-aware)
+- раз в **сутки**: `kag_daily_pipeline`
+  - snapshot -> forecast -> recommendations v2
+- раз в **неделю**: `case_signatures_refresh`
+  - пересборка similarity signatures
+
+Все значимые процессы логируются в `kag_event_log` как:
+
+- `process_started`
+- `process_finished`
+- `process_failed`
+- `process_warning`
+
+---
+
 ## Troubleshooting
 
 1. **Connector API fails (401/429/5xx)**

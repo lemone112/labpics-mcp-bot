@@ -352,3 +352,71 @@ test("10) feature flags off -> KAG pipeline does not break existing API path", a
   assert.equal(result.skipped, "kag_disabled");
   process.env.KAG_ENABLED = previous;
 });
+
+test("11) evidence gating marks snapshot payload unpublished without references", () => {
+  const snapshot = composeSnapshotPayloadFromRows(
+    [
+      {
+        signal_key: "waiting_on_client_days",
+        value: 4,
+        status: "critical",
+        threshold_warn: 2,
+        threshold_critical: 4,
+        details: {},
+        evidence_refs: [],
+        computed_at: new Date().toISOString(),
+      },
+    ],
+    [
+      {
+        score_type: "risk",
+        score: 80,
+        level: "high",
+        factors: [],
+        evidence_refs: [],
+        computed_at: new Date().toISOString(),
+      },
+    ],
+    { events: { events_7d: 0 } }
+  );
+  assert.equal(snapshot.publishable, false);
+  assert.equal(snapshot.evidence_refs.length, 0);
+});
+
+test("12) forecast output marks rows publishable only with evidence", () => {
+  const forecastsNoEvidence = computeRiskForecastsFromInputs({
+    signals: [
+      { signal_key: "waiting_on_client_days", value: 5, evidence_refs: [] },
+      { signal_key: "stage_overdue", value: 4, evidence_refs: [] },
+      { signal_key: "blockers_age", value: 6, evidence_refs: [] },
+      { signal_key: "scope_creep_rate", value: 0.4, evidence_refs: [] },
+      { signal_key: "budget_burn_rate", value: 1.3, evidence_refs: [] },
+      { signal_key: "margin_risk", value: 0.5, evidence_refs: [] },
+      { signal_key: "sentiment_trend", value: -0.3, evidence_refs: [] },
+      { signal_key: "activity_drop", value: 0.6, evidence_refs: [] },
+      { signal_key: "response_time_avg", value: 500, evidence_refs: [] },
+    ],
+    scores: [{ score_type: "risk", score: 85 }],
+    similarCases: [],
+    now: new Date("2026-02-17T00:00:00.000Z"),
+  });
+  assert.ok(forecastsNoEvidence.every((row) => row.publishable === false));
+
+  const forecastsWithEvidence = computeRiskForecastsFromInputs({
+    signals: [
+      { signal_key: "waiting_on_client_days", value: 5, evidence_refs: [ref({ message_id: "m1" })] },
+      { signal_key: "stage_overdue", value: 4, evidence_refs: [ref({ linear_issue_id: "L-1" })] },
+      { signal_key: "blockers_age", value: 6, details: { open_blockers: 4 }, evidence_refs: [ref({ linear_issue_id: "L-2" })] },
+      { signal_key: "scope_creep_rate", value: 0.4, evidence_refs: [ref({ message_id: "m2" })] },
+      { signal_key: "budget_burn_rate", value: 1.3, evidence_refs: [ref({ attio_record_id: "D-1" })] },
+      { signal_key: "margin_risk", value: 0.5, evidence_refs: [ref({ attio_record_id: "D-2" })] },
+      { signal_key: "sentiment_trend", value: -0.3, evidence_refs: [ref({ message_id: "m3" })] },
+      { signal_key: "activity_drop", value: 0.6, evidence_refs: [ref({ message_id: "m4" })] },
+      { signal_key: "response_time_avg", value: 500, evidence_refs: [ref({ message_id: "m5" })] },
+    ],
+    scores: [{ score_type: "risk", score: 85 }],
+    similarCases: [],
+    now: new Date("2026-02-17T00:00:00.000Z"),
+  });
+  assert.ok(forecastsWithEvidence.every((row) => row.publishable === true));
+});

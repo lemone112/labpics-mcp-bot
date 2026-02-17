@@ -1,4 +1,5 @@
 import crypto from "node:crypto";
+import { failProcessRun, finishProcessRun, startProcessRun, warnProcess } from "./kag-process-log.js";
 
 function clamp(value, min, max) {
   const n = Number(value);
@@ -62,6 +63,22 @@ function signalByKey(signals) {
     map[item.signal_key] = item;
   }
   return map;
+}
+
+function collectEvidenceRefs(signalRows = [], scoreRows = [], limit = 80) {
+  const merged = [];
+  const seen = new Set();
+  for (const row of [...signalRows, ...scoreRows]) {
+    for (const ref of row?.evidence_refs || []) {
+      if (!ref || typeof ref !== "object") continue;
+      const key = JSON.stringify(ref);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      merged.push(ref);
+      if (merged.length >= limit) return merged;
+    }
+  }
+  return merged;
 }
 
 function outcomeFromSignals(snapshotDate, signalMap, scoreMap) {
@@ -225,7 +242,17 @@ async function fetchKeyAggregates(pool, scope) {
   };
 }
 
-async function upsertSnapshot(pool, scope, snapshotDate, signals, normalizedSignals, scores, keyAggregates) {
+async function upsertSnapshot(
+  pool,
+  scope,
+  snapshotDate,
+  signals,
+  normalizedSignals,
+  scores,
+  keyAggregates,
+  evidenceRefs,
+  publishable
+) {
   await pool.query(
     `
       INSERT INTO project_snapshots(
@@ -236,9 +263,11 @@ async function upsertSnapshot(pool, scope, snapshotDate, signals, normalizedSign
         normalized_signals_json,
         scores_json,
         key_aggregates_json,
+        evidence_refs,
+        publishable,
         created_at
       )
-      VALUES ($1, $2, $3, $4::jsonb, $5::jsonb, $6::jsonb, $7::jsonb, now())
+      VALUES ($1, $2, $3, $4::jsonb, $5::jsonb, $6::jsonb, $7::jsonb, $8::jsonb, $9, now())
       ON CONFLICT (project_id, snapshot_date)
       DO UPDATE SET
         account_scope_id = EXCLUDED.account_scope_id,
@@ -246,6 +275,8 @@ async function upsertSnapshot(pool, scope, snapshotDate, signals, normalizedSign
         normalized_signals_json = EXCLUDED.normalized_signals_json,
         scores_json = EXCLUDED.scores_json,
         key_aggregates_json = EXCLUDED.key_aggregates_json,
+        evidence_refs = EXCLUDED.evidence_refs,
+        publishable = EXCLUDED.publishable,
         created_at = now()
     `,
     [
@@ -256,6 +287,8 @@ async function upsertSnapshot(pool, scope, snapshotDate, signals, normalizedSign
       JSON.stringify(normalizedSignals),
       JSON.stringify(scores),
       JSON.stringify(keyAggregates),
+      JSON.stringify(evidenceRefs || []),
+      Boolean(publishable),
     ]
   );
 }
@@ -387,15 +420,30 @@ export function composeSnapshotPayloadFromRows(signalRows = [], scoreRows = [], 
     };
   }
 
+  const evidenceRefs = collectEvidenceRefs(signalRows, scoreRows, 80);
+  const publishable = evidenceRefs.length > 0;
   return {
     signals_json: signalsObject,
     normalized_signals_json: normalizedSignals,
     scores_json: scoresObject,
-    key_aggregates_json: keyAggregates || {},
+    key_aggregates_json: {
+      ...(keyAggregates || {}),
+      evidence_refs_count: evidenceRefs.length,
+      publishable,
+    },
+    evidence_refs: evidenceRefs,
+    publishable,
   };
 }
 
 export async function buildProjectSnapshot(pool, scope, options = {}) {
+  const run = await startProcessRun(pool, scope, "snapshot_refresh", {
+    source: "system",
+    payload: {
+      snapshot_date: options.snapshot_date || null,
+    },
+  });
+  try {
   const snapshotDate = toSnapshotDate(options.snapshot_date || new Date());
   const [signalRows, scoreRows, aggregates] = await Promise.all([
     fetchSignalRows(pool, scope),
@@ -411,8 +459,18 @@ export async function buildProjectSnapshot(pool, scope, options = {}) {
     snapshotPayload.signals_json,
     snapshotPayload.normalized_signals_json,
     snapshotPayload.scores_json,
-    snapshotPayload.key_aggregates_json
+    snapshotPayload.key_aggregates_json,
+    snapshotPayload.evidence_refs,
+    snapshotPayload.publishable
   );
+
+  if (!snapshotPayload.publishable) {
+    await warnProcess(pool, scope, "snapshot_refresh", "Snapshot has no evidence and is hidden from primary feed", {
+      payload: {
+        snapshot_date: snapshotDate,
+      },
+    });
+  }
 
   const signalMap = signalByKey(signalRows);
   const scoreMap = scoreByType(scoreRows);
@@ -423,18 +481,36 @@ export async function buildProjectSnapshot(pool, scope, options = {}) {
   const dealOutcomes = await deriveDealStageOutcomes(pool, scope, snapshotDate);
   const outcomesInserted = await upsertOutcomes(pool, scope, [...inferredOutcomes, ...dealOutcomes]);
 
-  return {
+  const result = {
     snapshot_date: snapshotDate,
     signals_count: signalRows.length,
     scores_count: scoreRows.length,
     outcomes_touched: outcomesInserted,
     key_aggregates: aggregates,
+    publishable: snapshotPayload.publishable,
+    evidence_refs_count: snapshotPayload.evidence_refs.length,
+  };
+  await finishProcessRun(pool, scope, run, {
+    counters: {
+      signals: signalRows.length,
+      scores: scoreRows.length,
+      outcomes: outcomesInserted,
+      evidence_refs: snapshotPayload.evidence_refs.length,
+      publishable: snapshotPayload.publishable ? 1 : 0,
+    },
+    payload: result,
+  });
+  return result;
+  } catch (error) {
+    await failProcessRun(pool, scope, run, error, {});
+    throw error;
   };
 }
 
 export async function listProjectSnapshots(pool, scope, options = {}) {
   const limitRaw = Number.parseInt(String(options.limit || "30"), 10);
   const limit = Number.isFinite(limitRaw) ? Math.max(1, Math.min(limitRaw, 365)) : 30;
+  const includeUnpublished = String(options.include_unpublished || "").trim().toLowerCase() === "true";
   const { rows } = await pool.query(
     `
       SELECT
@@ -444,14 +520,17 @@ export async function listProjectSnapshots(pool, scope, options = {}) {
         normalized_signals_json,
         scores_json,
         key_aggregates_json,
+        evidence_refs,
+        publishable,
         created_at
       FROM project_snapshots
       WHERE project_id = $1
         AND account_scope_id = $2
+        AND ($4::boolean = true OR publishable = true)
       ORDER BY snapshot_date DESC
       LIMIT $3
     `,
-    [scope.projectId, scope.accountScopeId, limit]
+    [scope.projectId, scope.accountScopeId, limit, includeUnpublished]
   );
   return rows;
 }

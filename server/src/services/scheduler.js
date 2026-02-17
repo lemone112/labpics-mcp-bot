@@ -5,7 +5,7 @@ import { refreshUpsellRadar } from "./upsell.js";
 import { generateDailyDigest, generateWeeklyDigest, refreshAnalytics, refreshRiskAndHealth } from "./intelligence.js";
 import { syncLoopsContacts } from "./loops.js";
 import { runKagRecommendationRefresh } from "./kag.js";
-import { runConnectorSync } from "./connector-sync.js";
+import { retryConnectorErrors, runAllConnectorsSync, runConnectorSync } from "./connector-sync.js";
 import { buildProjectSnapshot } from "./snapshots.js";
 import { rebuildCaseSignatures } from "./similarity.js";
 import { refreshRiskForecasts } from "./forecasting.js";
@@ -26,6 +26,8 @@ function createHandlers(customHandlers = {}) {
     chatwoot_sync: async ({ pool, scope, logger }) => runConnectorSync(pool, scope, "chatwoot", logger),
     attio_sync: async ({ pool, scope, logger }) => runConnectorSync(pool, scope, "attio", logger),
     linear_sync: async ({ pool, scope, logger }) => runConnectorSync(pool, scope, "linear", logger),
+    connectors_sync_cycle: async ({ pool, scope, logger }) => runAllConnectorsSync(pool, scope, logger),
+    connector_errors_retry: async ({ pool, scope, logger }) => retryConnectorErrors(pool, scope, { logger }),
     embeddings_run: async ({ pool, scope, logger }) => runEmbeddings(pool, scope, logger),
     signals_extraction: async ({ pool, scope }) => extractSignalsAndNba(pool, scope),
     health_scoring: async ({ pool, scope }) => refreshRiskAndHealth(pool, scope),
@@ -39,6 +41,16 @@ function createHandlers(customHandlers = {}) {
     case_signatures_refresh: async ({ pool, scope }) => rebuildCaseSignatures(pool, scope, {}),
     kag_v2_forecast_refresh: async ({ pool, scope }) => refreshRiskForecasts(pool, scope, {}),
     kag_v2_recommendations_refresh: async ({ pool, scope }) => refreshRecommendationsV2(pool, scope, {}),
+    kag_daily_pipeline: async ({ pool, scope }) => {
+      const snapshot = await buildProjectSnapshot(pool, scope, {});
+      const forecast = await refreshRiskForecasts(pool, scope, {});
+      const recommendations = await refreshRecommendationsV2(pool, scope, {});
+      return {
+        snapshot,
+        forecast,
+        recommendations,
+      };
+    },
     loops_contacts_sync: async ({ pool, scope }) =>
       syncLoopsContacts(
         pool,
@@ -56,9 +68,8 @@ function createHandlers(customHandlers = {}) {
 
 export async function ensureDefaultScheduledJobs(pool, scope) {
   const defaults = [
-    { jobType: "chatwoot_sync", cadenceSeconds: 900 },
-    { jobType: "attio_sync", cadenceSeconds: 1800 },
-    { jobType: "linear_sync", cadenceSeconds: 1800 },
+    { jobType: "connectors_sync_cycle", cadenceSeconds: 900 },
+    { jobType: "connector_errors_retry", cadenceSeconds: 300 },
     { jobType: "embeddings_run", cadenceSeconds: 1200 },
     { jobType: "signals_extraction", cadenceSeconds: 900 },
     { jobType: "health_scoring", cadenceSeconds: 1800 },
@@ -67,10 +78,8 @@ export async function ensureDefaultScheduledJobs(pool, scope) {
     { jobType: "weekly_digest", cadenceSeconds: 604800 },
     { jobType: "campaign_scheduler", cadenceSeconds: 300 },
     { jobType: "analytics_aggregates", cadenceSeconds: 1800 },
-    { jobType: "project_snapshot_daily", cadenceSeconds: 86400 },
-    { jobType: "case_signatures_refresh", cadenceSeconds: 21600 },
-    { jobType: "kag_v2_forecast_refresh", cadenceSeconds: 1800 },
-    { jobType: "kag_v2_recommendations_refresh", cadenceSeconds: 1800 },
+    { jobType: "case_signatures_refresh", cadenceSeconds: 604800 },
+    { jobType: "kag_daily_pipeline", cadenceSeconds: 86400 },
     { jobType: "loops_contacts_sync", cadenceSeconds: 3600 },
     { jobType: "kag_recommendations_refresh", cadenceSeconds: 900 },
   ];

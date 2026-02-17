@@ -2,6 +2,7 @@ import crypto from "node:crypto";
 
 import { KAG_TEMPLATE_KEYS, buildSuggestedTemplate, generateTemplate } from "../kag/templates/index.js";
 import { findSimilarCases } from "./similarity.js";
+import { failProcessRun, finishProcessRun, startProcessRun, warnProcess } from "./kag-process-log.js";
 
 function clampInt(value, fallback, min = 1, max = 500) {
   const parsed = Number.parseInt(String(value ?? ""), 10);
@@ -102,6 +103,17 @@ function recommendationEnvelope(rec) {
   };
 }
 
+function buildTopNTemplateGenerator(llmGenerateTemplate, topN = 3) {
+  if (typeof llmGenerateTemplate !== "function") return null;
+  let used = 0;
+  const safeTopN = clampInt(topN, 3, 0, 50);
+  return async ({ templateKey, variables = {}, fallback = "" }) => {
+    if (used >= safeTopN) return fallback;
+    used += 1;
+    return llmGenerateTemplate({ templateKey, variables, fallback });
+  };
+}
+
 export async function generateRecommendationsV2FromInputs({
   signals = [],
   scores = [],
@@ -110,6 +122,7 @@ export async function generateRecommendationsV2FromInputs({
   now = new Date(),
   llmGenerateTemplate = null,
   context = {},
+  return_meta = false,
 }) {
   const signalMap = indexBy(signals, "signal_key");
   const scoreMap = indexBy(scores, "score_type");
@@ -365,9 +378,17 @@ export async function generateRecommendationsV2FromInputs({
     );
   }
 
-  return recs
+  const publishable = recs
     .filter((item) => Array.isArray(item.evidence_refs) && item.evidence_refs.length > 0)
     .sort((a, b) => b.priority - a.priority);
+  if (return_meta) {
+    return {
+      recommendations: publishable,
+      dropped_without_evidence: Math.max(0, recs.length - publishable.length),
+      generated_total: recs.length,
+    };
+  }
+  return publishable;
 }
 
 async function fetchSignals(pool, scope) {
@@ -413,6 +434,7 @@ async function fetchForecasts(pool, scope) {
       FROM kag_risk_forecasts
       WHERE project_id = $1
         AND account_scope_id = $2
+        AND publishable = true
     `,
     [scope.projectId, scope.accountScopeId]
   );
@@ -559,6 +581,13 @@ async function upsertRecommendationsV2(pool, scope, recommendations = []) {
 }
 
 export async function refreshRecommendationsV2(pool, scope, options = {}) {
+  const run = await startProcessRun(pool, scope, "recommendations_refresh", {
+    source: "system",
+    payload: {
+      project_id: scope.projectId,
+    },
+  });
+  try {
   const [signals, scores, forecasts, similarCases, context] = await Promise.all([
     fetchSignals(pool, scope),
     fetchScores(pool, scope),
@@ -566,22 +595,53 @@ export async function refreshRecommendationsV2(pool, scope, options = {}) {
     findSimilarCases(pool, scope, { project_id: scope.projectId, window_days: 14, top_k: 5 }),
     fetchProjectContext(pool, scope),
   ]);
-  const recommendations = await generateRecommendationsV2FromInputs({
+  const llmTopN = clampInt(process.env.RECOMMENDATIONS_V2_LLM_TOP_N, 3, 0, 20);
+  const llmTemplateGenerator = buildTopNTemplateGenerator(options.llmGenerateTemplate || null, llmTopN);
+  const generation = await generateRecommendationsV2FromInputs({
     signals,
     scores,
     forecasts,
     similarCases,
     now: options.now || new Date(),
-    llmGenerateTemplate: options.llmGenerateTemplate || null,
+    llmGenerateTemplate: llmTemplateGenerator,
     context,
+    return_meta: true,
   });
+  const recommendations = generation.recommendations;
   const touched = await upsertRecommendationsV2(pool, scope, recommendations);
-  return {
+  if (generation.dropped_without_evidence > 0) {
+    await warnProcess(pool, scope, "recommendations_refresh", "Recommendations dropped by evidence gating", {
+      payload: {
+        dropped_without_evidence: generation.dropped_without_evidence,
+      },
+    });
+  }
+  const result = {
     touched,
     generated: recommendations.length,
     recommendations,
     similar_cases_top3: similarCases.slice(0, 3),
+    dropped_without_evidence: generation.dropped_without_evidence,
   };
+  await finishProcessRun(pool, scope, run, {
+    counters: {
+      signals: signals.length,
+      scores: scores.length,
+      forecasts: forecasts.length,
+      generated_total: generation.generated_total,
+      published: recommendations.length,
+      dropped_without_evidence: generation.dropped_without_evidence,
+      llm_top_n: llmTopN,
+    },
+    payload: {
+      touched,
+    },
+  });
+  return result;
+  } catch (error) {
+    await failProcessRun(pool, scope, run, error, {});
+    throw error;
+  }
 }
 
 export async function listRecommendationsV2(pool, scope, options = {}) {

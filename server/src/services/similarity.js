@@ -1,4 +1,5 @@
 import crypto from "node:crypto";
+import { failProcessRun, finishProcessRun, startProcessRun, warnProcess } from "./kag-process-log.js";
 
 function clamp(value, min, max) {
   const n = Number(value);
@@ -329,6 +330,14 @@ export async function buildCaseSignature(pool, scope, options = {}) {
 }
 
 export async function rebuildCaseSignatures(pool, scope, options = {}) {
+  const run = await startProcessRun(pool, scope, "similarity_rebuild", {
+    source: "system",
+    payload: {
+      project_id: options.project_id || scope.projectId,
+      window_days: options.window_days || null,
+    },
+  });
+  try {
   const projectId = options.project_id ? String(options.project_id) : scope.projectId;
   const windows = options.window_days ? [Number(options.window_days)] : [7, 14, 30];
   const results = [];
@@ -340,7 +349,27 @@ export async function rebuildCaseSignatures(pool, scope, options = {}) {
       })
     );
   }
+  const skipped = results.filter((item) => item?.skipped).length;
+  if (skipped > 0) {
+    await warnProcess(pool, scope, "similarity_rebuild", "Some windows skipped due to missing snapshots", {
+      payload: {
+        skipped,
+      },
+    });
+  }
+  await finishProcessRun(pool, scope, run, {
+    counters: {
+      windows: windows.length,
+      completed: results.length - skipped,
+      skipped,
+    },
+    payload: { results },
+  });
   return results;
+  } catch (error) {
+    await failProcessRun(pool, scope, run, error, {});
+    throw error;
+  }
 }
 
 async function loadSignatureRow(pool, projectId, accountScopeId, windowDays) {
