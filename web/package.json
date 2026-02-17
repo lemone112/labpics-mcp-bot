@@ -10,7 +10,8 @@
     "ui:consistency": "node scripts/ui-consistency-check.mjs",
     "ui:visual": "node scripts/visual-regression.mjs",
     "lint": "npm run design:audit && npm run ui:consistency",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "test:e2e:integration": "node scripts/run-e2e-integration.mjs"
   },
   "dependencies": {
     "@radix-ui/react-dialog": "^1.1.15",

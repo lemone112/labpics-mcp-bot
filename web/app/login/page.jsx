@@ -48,15 +48,26 @@ export default function LoginPage() {
             <form className="space-y-4" onSubmit={onSubmit}>
               <div className="space-y-1">
                 <label className="text-sm text-muted-foreground">Username</label>
-                <Input value={username} onChange={(e) => setUsername(e.target.value)} required />
+                <Input
+                  data-testid="login-username"
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                  required
+                />
               </div>
 
               <div className="space-y-1">
                 <label className="text-sm text-muted-foreground">Password</label>
-                <Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required />
+                <Input
+                  data-testid="login-password"
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                />
               </div>
 
-              <Button type="submit" className="w-full" disabled={loading}>
+              <Button data-testid="login-submit" type="submit" className="w-full" disabled={loading}>
                 {loading ? "Signing in..." : "Sign in"}
               </Button>
             </form>
