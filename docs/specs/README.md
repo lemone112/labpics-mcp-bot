@@ -52,3 +52,4 @@
 - [0003 — Risks v1](./0003-risks-v1.md)
 - [0004 — Weekly digest v1](./0004-weekly-digest-v1.md)
 - [0005 — Интеграции Linear/Attio: preview/apply](./0005-integrations-linear-attio-preview.md)
+- [0006 — Проекты, клиенты и связывание идентичностей](./0006-projects-clients-and-links.md)
