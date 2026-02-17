@@ -20,22 +20,14 @@
 - **Ready** — согласованный контракт; можно реализовывать.
 - **Implemented** — есть реализация в коде; любые изменения — через PR и миграции/контракты.
 
-> Примечание по текущей реализации: auth/login+sessions и базовые project scoping guardrails уже реализованы; также присутствуют jobs-эндпойнты для sync/embeddings и scheduler tick.
-
-## Как пользоваться спеками
-
-- Одна спека = одна проблема и один измеримый результат.
-- Предпочитай явные **критерии приёмки** (acceptance criteria).
-- Если требование не входит в MVP — помечай как **Roadmap** и ссылайся на `mvp-vs-roadmap.md`.
-
 ## Индекс (MVP — сейчас)
 
-- [0001 — Мультипроектная изоляция памяти (RAG)](./0001-multiproject-rag-scope.md) — **Ready/Partial** (вводится через scope layer)
-- [0006 — Проекты, клиенты и связывание идентичностей](./0006-projects-clients-and-links.md) — **Draft**
-- [0007 — Jobs cadence и контроль стоимости](./0007-jobs-cadence-and-cost-control.md) — **Ready** (есть scheduler cadence фиксы)
-- [0008 — Аудит, приватность и retention](./0008-audit-privacy-retention.md) — **Draft/Partial**
-- [0009 — Web IA: страницы и навигация](./0009-web-ia-pages-navigation.md) — **Draft** (UI активно меняется)
-- [0017 — Auth v1: логин/пароль, сессии](./0017-auth-login-password-sessions.md) — **Implemented**
+- [0001 — Мультипроектная изоляция памяти (RAG)](./0001-multiproject-rag-scope.md)
+- [0006 — Проекты, клиенты и связывание идентичностей](./0006-projects-clients-and-links.md)
+- [0007 — Jobs cadence и контроль стоимости](./0007-jobs-cadence-and-cost-control.md)
+- [0008 — Аудит, приватность и retention](./0008-audit-privacy-retention.md)
+- [0009 — Web IA: страницы и навигация](./0009-web-ia-pages-navigation.md)
+- [0017 — Auth v1: логин/пароль, сессии](./0017-auth-login-password-sessions.md)
 
 ## Индекс (Roadmap CRM/PM/Sales)
 
@@ -52,4 +44,4 @@
 
 ## Примечание по UI
 
-Фронтенд сейчас активно мигрируется на **shadcn/ui** (см. коммиты `feat(web): migrate UI to shadcn...`, `feat(web): apply sidebar-04...`). Поэтому спека 0009 остаётся Draft до стабилизации навигации/роутинга.
+UI shell для MVP фиксирован: **shadcn/ui sidebar-04** (`npx shadcn@latest add sidebar-04`).
