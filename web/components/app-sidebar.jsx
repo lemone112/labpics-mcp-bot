@@ -102,7 +102,7 @@ export function AppSidebar(props) {
       <SidebarFooter>
         <SidebarMenu>
           <SidebarMenuItem>
-            <div className="flex items-center justify-between rounded-md border border-sidebar-border/70 px-2 py-1.5">
+            <div className="flex items-center justify-between rounded-md border border-sidebar-border px-2 py-1.5">
               <div className="flex items-center gap-2 text-xs text-sidebar-foreground/90">
                 {darkEnabled ? <Moon className="size-3.5" /> : <Sun className="size-3.5" />}
                 <span>Тёмная тема</span>
@@ -113,7 +113,7 @@ export function AppSidebar(props) {
                 aria-label="Переключить тему"
               />
             </div>
-            <p className="px-1 pt-1 text-[11px] text-sidebar-foreground/70">По умолчанию используется системная тема.</p>
+            <p className="px-1 pt-1 text-xs text-sidebar-foreground/70">По умолчанию используется системная тема.</p>
           </SidebarMenuItem>
           <SidebarMenuItem>
             <SidebarMenuButton onClick={onLogout}>
