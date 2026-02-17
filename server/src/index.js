@@ -451,15 +451,24 @@ async function main() {
       return { ok: true, request_id: request.requestId };
     }
 
+    const normalizedText = text.toLowerCase();
+    const wantsBind = normalizedText.startsWith("/bind");
     const ownerUserId = await getAppSetting("telegram_owner_user_id");
-    if (!ownerUserId) {
+    if (!ownerUserId || wantsBind) {
       await setAppSetting("telegram_owner_user_id", String(userId));
       await setAppSetting("telegram_owner_chat_id", String(chatId));
-      await sendTelegramMessage(
-        chatId,
-        `Owner bound successfully.\nuser_id: ${userId}\nchat_id: ${chatId}\n\nUse /whoami to see this again.`,
-        request.log
-      );
+      try {
+        await sendTelegramMessage(
+          chatId,
+          `Owner bound successfully.\nuser_id: ${userId}\nchat_id: ${chatId}\n\nUse /whoami to see this again.`,
+          request.log
+        );
+      } catch (error) {
+        request.log.warn(
+          { err: String(error?.message || error), request_id: request.requestId },
+          "telegram bind confirmation send failed"
+        );
+      }
       return { ok: true, owner_bound: true, request_id: request.requestId };
     }
 
@@ -468,11 +477,15 @@ async function main() {
     }
 
     await setAppSetting("telegram_owner_chat_id", String(chatId));
-    const normalizedText = text.toLowerCase();
     if (normalizedText.startsWith("/whoami")) {
-      await sendTelegramMessage(chatId, `user_id: ${userId}\nchat_id: ${chatId}`, request.log);
-    } else if (normalizedText.startsWith("/bind")) {
-      await sendTelegramMessage(chatId, "Binding refreshed for this chat.", request.log);
+      try {
+        await sendTelegramMessage(chatId, `user_id: ${userId}\nchat_id: ${chatId}`, request.log);
+      } catch (error) {
+        request.log.warn(
+          { err: String(error?.message || error), request_id: request.requestId },
+          "telegram whoami response failed"
+        );
+      }
     }
 
     return { ok: true, request_id: request.requestId };
