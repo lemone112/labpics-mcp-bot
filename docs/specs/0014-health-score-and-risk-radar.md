@@ -1,32 +1,53 @@
-# Спека 0014 — Health Score & Risk Radar (DRAFT)
+# Спека 0014 — Health Score & Risk Radar
 
 Статус: **draft**
 
+Дата: 2026-02-17
+
+> Roadmap: CRM/PM/Sales
+
+
 ## Цель
 
-Сделать “панель здоровья” аккаунта/проекта:
+Дать PM/Owner объяснимый health score для Account и Project и радар рисков.
 
-- health score (объяснимый)
-- прогноз рисков delivery
-- рекомендации mitigation
+## Сущности
 
-## Сигналы для health
+### health_snapshot
+- `id`
+- `scope_type` (account|project)
+- `scope_id`
+- `score` (0..100)
+- `factors[]`: {name, weight, value, explanation, evidence_refs[]}
+- `created_at`
 
-- задержки ответов
-- рост правок
-- негативная тональность
-- расхождение обещаний и плана
+### risk_item
+- `id`, `scope`
+- `type` (schedule|scope|relationship|finance)
+- `severity`, `confidence`
+- `summary`, `evidence_refs`
+- `recommended_actions`
 
-## Объект данных
+## Факторы (v1)
 
-- HealthSnapshot(scope, score, factors[], evidence[])
+- Response latency клиента
+- Кол-во правок/повторных правок
+- Негативная тональность
+- Частота “срочно/переделать/не то”
+- Отклонение от baseline scope (из 0012)
+
+## Объяснимость
+
+- Любой score обязан иметь factors с весами.
+- Нельзя показывать “чёрный ящик”.
 
 ## UX
 
-- health badge на Account/Project
-- drill-down: почему такой score
+- Health badge на Account/Project
+- Drill-down: факторы + evidence
+- Top risks this week
 
 ## Критерии приёмки
 
-- Health score считается и объясняется факторами.
-- Есть список top risks + suggested actions.
+- Score считается и объясняется.
+- Риски показываются с NBA.

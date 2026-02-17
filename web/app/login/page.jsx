@@ -7,6 +7,7 @@ import { apiFetch } from "@/lib/api";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { MotionGroup } from "@/components/ui/motion-group";
 import { Toast } from "@/components/ui/toast";
 
 export default function LoginPage() {
@@ -122,117 +123,119 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-slate-950 p-4">
-      <Card className="w-full max-w-md">
-        <CardHeader>
-          <CardTitle>Login</CardTitle>
-          <CardDescription>Sign in or create account with Telegram PIN verification.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="mb-4 grid grid-cols-2 gap-2">
-            <Button
-              type="button"
-              variant={mode === "login" ? "default" : "secondary"}
-              onClick={() => setMode("login")}
-            >
-              Sign in
-            </Button>
-            <Button
-              type="button"
-              variant={mode === "signup" ? "default" : "secondary"}
-              onClick={() => {
-                setMode("signup");
-                setToast({ type: "info", message: "" });
-              }}
-              disabled={!signupStatus.enabled}
-            >
-              Create account
-            </Button>
-          </div>
-
-          {mode === "login" ? (
-            <form className="space-y-4" onSubmit={onLoginSubmit}>
-              <div className="space-y-1">
-                <label className="text-xs uppercase tracking-wide text-slate-400">Username</label>
-                <Input value={loginUsername} onChange={(e) => setLoginUsername(e.target.value)} required />
-              </div>
-
-              <div className="space-y-1">
-                <label className="text-xs uppercase tracking-wide text-slate-400">Password</label>
-                <Input type="password" value={loginPassword} onChange={(e) => setLoginPassword(e.target.value)} required />
-              </div>
-
-              <Button type="submit" className="w-full" disabled={loading}>
-                {loading ? "Signing in..." : "Sign in"}
+    <div className="flex min-h-screen items-center justify-center bg-[var(--app-bg)] p-4">
+      <MotionGroup className="w-full max-w-md">
+        <Card data-motion-item className="w-full">
+          <CardHeader>
+            <CardTitle className="text-[20px]">Sign in</CardTitle>
+            <CardDescription>Use credentials or create account with Telegram PIN verification.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="mb-4 grid grid-cols-2 gap-2">
+              <Button
+                type="button"
+                variant={mode === "login" ? "default" : "secondary"}
+                onClick={() => setMode("login")}
+              >
+                Sign in
               </Button>
-            </form>
-          ) : (
-            <div className="space-y-4">
-              {!signupStatus.enabled ? (
-                <div className="rounded-md border border-slate-700 bg-slate-900/60 p-3 text-sm text-slate-300">
-                  {!signupStatus.loaded
-                    ? "Checking signup availability..."
-                    : signupStatus.hasTelegramToken
-                      ? "Signup is waiting for owner bind. Send /bind to the Telegram bot first."
-                      : "Signup is disabled because Telegram token is not configured."}
-                </div>
-              ) : null}
-
-              {!signupRequestId ? (
-                <form className="space-y-4" onSubmit={onSignupStart}>
-                  <div className="space-y-1">
-                    <label className="text-xs uppercase tracking-wide text-slate-400">New username</label>
-                    <Input
-                      value={signupUsername}
-                      onChange={(e) => setSignupUsername(e.target.value)}
-                      placeholder="lowercase, 3-32 chars"
-                      required
-                    />
-                  </div>
-
-                  <div className="space-y-1">
-                    <label className="text-xs uppercase tracking-wide text-slate-400">New password</label>
-                    <Input
-                      type="password"
-                      value={signupPassword}
-                      onChange={(e) => setSignupPassword(e.target.value)}
-                      placeholder="min 8 chars"
-                      required
-                    />
-                  </div>
-
-                  <Button type="submit" className="w-full" disabled={loading || !signupStatus.enabled}>
-                    {loading ? "Sending PIN..." : "Send PIN"}
-                  </Button>
-                </form>
-              ) : (
-                <form className="space-y-4" onSubmit={onSignupConfirm}>
-                  <div className="space-y-1">
-                    <label className="text-xs uppercase tracking-wide text-slate-400">6-digit PIN</label>
-                    <Input
-                      value={signupPin}
-                      onChange={(e) => setSignupPin(e.target.value)}
-                      inputMode="numeric"
-                      maxLength={6}
-                      placeholder="123456"
-                      required
-                    />
-                  </div>
-
-                  <Button type="submit" className="w-full" disabled={loading}>
-                    {loading ? "Creating account..." : "Create account"}
-                  </Button>
-                  <Button type="button" variant="secondary" className="w-full" onClick={resetSignupFlow} disabled={loading}>
-                    Request new PIN
-                  </Button>
-                </form>
-              )}
+              <Button
+                type="button"
+                variant={mode === "signup" ? "default" : "secondary"}
+                onClick={() => {
+                  setMode("signup");
+                  setToast({ type: "info", message: "" });
+                }}
+                disabled={!signupStatus.enabled}
+              >
+                Create account
+              </Button>
             </div>
-          )}
 
-          <Toast className="mt-4" type={toast.type} message={toast.message} />
-        </CardContent>
-      </Card>
+            {mode === "login" ? (
+              <form className="space-y-4" onSubmit={onLoginSubmit}>
+                <div className="space-y-1">
+                  <label className="text-xs uppercase tracking-[0.09em] text-[var(--text-muted)]">Username</label>
+                  <Input value={loginUsername} onChange={(e) => setLoginUsername(e.target.value)} required />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-xs uppercase tracking-[0.09em] text-[var(--text-muted)]">Password</label>
+                  <Input type="password" value={loginPassword} onChange={(e) => setLoginPassword(e.target.value)} required />
+                </div>
+
+                <Button type="submit" className="w-full" disabled={loading}>
+                  {loading ? "Signing in..." : "Sign in"}
+                </Button>
+              </form>
+            ) : (
+              <div className="space-y-4">
+                {!signupStatus.enabled ? (
+                  <div className="rounded-md border border-slate-700 bg-slate-900/60 p-3 text-sm text-slate-300">
+                    {!signupStatus.loaded
+                      ? "Checking signup availability..."
+                      : signupStatus.hasTelegramToken
+                        ? "Signup is waiting for owner bind. Send /bind to the Telegram bot first."
+                        : "Signup is disabled because Telegram token is not configured."}
+                  </div>
+                ) : null}
+
+                {!signupRequestId ? (
+                  <form className="space-y-4" onSubmit={onSignupStart}>
+                    <div className="space-y-1">
+                      <label className="text-xs uppercase tracking-[0.09em] text-[var(--text-muted)]">New username</label>
+                      <Input
+                        value={signupUsername}
+                        onChange={(e) => setSignupUsername(e.target.value)}
+                        placeholder="lowercase, 3-32 chars"
+                        required
+                      />
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-xs uppercase tracking-[0.09em] text-[var(--text-muted)]">New password</label>
+                      <Input
+                        type="password"
+                        value={signupPassword}
+                        onChange={(e) => setSignupPassword(e.target.value)}
+                        placeholder="min 8 chars"
+                        required
+                      />
+                    </div>
+
+                    <Button type="submit" className="w-full" disabled={loading || !signupStatus.enabled}>
+                      {loading ? "Sending PIN..." : "Send PIN"}
+                    </Button>
+                  </form>
+                ) : (
+                  <form className="space-y-4" onSubmit={onSignupConfirm}>
+                    <div className="space-y-1">
+                      <label className="text-xs uppercase tracking-[0.09em] text-[var(--text-muted)]">6-digit PIN</label>
+                      <Input
+                        value={signupPin}
+                        onChange={(e) => setSignupPin(e.target.value)}
+                        inputMode="numeric"
+                        maxLength={6}
+                        placeholder="123456"
+                        required
+                      />
+                    </div>
+
+                    <Button type="submit" className="w-full" disabled={loading}>
+                      {loading ? "Creating account..." : "Create account"}
+                    </Button>
+                    <Button type="button" variant="secondary" className="w-full" onClick={resetSignupFlow} disabled={loading}>
+                      Request new PIN
+                    </Button>
+                  </form>
+                )}
+              </div>
+            )}
+
+            <Toast className="mt-4" type={toast.type} message={toast.message} />
+          </CardContent>
+        </Card>
+      </MotionGroup>
     </div>
   );
 }

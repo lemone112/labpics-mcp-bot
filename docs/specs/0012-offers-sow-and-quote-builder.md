@@ -1,48 +1,90 @@
-# Спека 0012 — Offers / SOW / Quote Builder (DRAFT)
+# Спека 0012 — Offers / SOW / Quote Builder
 
 Статус: **draft**
 
+Дата: 2026-02-17
+
+> Roadmap: CRM/PM/Sales
+
+
 ## Цель
 
-Сократить time-to-quote и поднять средний чек:
+Ускорить коммерческий цикл и увеличить средний чек:
 
-- Каталог пакетов услуг (productized services)
-- Сборка коммерческого (SOW/Quote) из блоков
-- Опции: upsell/cross-sell/fast-track/retainer
+- Service catalog (пакеты/аддоны)
+- Offer builder (сборка предложения)
+- SOW/Quote generator (черновик)
+- Approval (скидки/отправка)
 
-## Объекты данных
+## Не-цели (v1)
 
-### Service Package
+- Электронная подпись и полный legal workflow.
+- Автоматическая отправка без approve.
+
+## Сущности
+
+### service_packages
 - `id`, `name`
-- `price_from`, `price_to` (или фикс)
-- `duration_days_range`
-- `includes` / `excludes`
-- `add_ons` (список)
-- `ideal_for` (сегменты/сценарии)
+- `price_type` (fixed|range|custom)
+- `price_from`, `price_to`
+- `currency`
+- `duration_days_from`, `duration_days_to`
+- `includes` (markdown)
+- `excludes` (markdown)
+- `ideal_for` (text[])
+- `status` (active|deprecated)
 
-### Offer
+### add_ons
+- `id`, `name`, `price`, `currency`, `notes`
+
+### offers
 - `id`, `account_id`, `opportunity_id`
-- `packages_selected`
-- `add_ons_selected`
-- `assumptions` (явно)
-- `price_total`
-- `timeline`
-- `status`: draft / approved / sent / accepted / rejected
-- `evidence` (почему эти пакеты)
+- `selected_packages` (jsonb)
+- `selected_add_ons` (jsonb)
+- `assumptions` (markdown)
+- `timeline` (markdown)
+- `discount` (numeric, nullable)
+- `discount_reason` (text, nullable)
+- `total_price` (numeric)
+- `status` (draft|approved|sent|accepted|rejected)
+- `evidence_refs` (jsonb[])
+- `created_at`, `updated_at`
+
+### offer_events (audit)
+- changes + actor + evidence
+
+## Политика скидок (v1)
+
+- Любая скидка > 0 требует:
+  - `discount_reason`
+  - approve ролью Owner/BD
+  - audit event
+
+## Генерация SOW
+
+SOW должен включать:
+
+- Контекст и цель
+- Scope (что делаем)
+- Out of scope (что не делаем)
+- Таймлайн
+- Роли и ответственность
+- Процесс изменений (change requests)
+- Допущения
 
 ## UX
 
-- Offer builder: выбор пакета → аддоны → таймлайн → допущения
-- Генерация текста коммерческого (черновик)
-- Approval
+- Offer builder: packages → add-ons → assumptions → preview SOW
+- Approve → Send
 
-## Safe-by-default
+## Связь с сигналами
 
-- Любая скидка или изменение прайса — только с явным подтверждением.
+- Offer может ссылаться на signal_id (почему возник upsell/fast-track).
 
 ## Критерии приёмки
 
 - Есть каталог пакетов.
-- Можно создать Offer по Opportunity.
-- Можно сгенерировать черновик SOW.
-- Есть статус approval.
+- Offer создаётся из Opportunity.
+- SOW генерируется как черновик.
+- Discount требует approve.
+- Отправка требует approve.

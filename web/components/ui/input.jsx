@@ -1,15 +1,23 @@
 "use client";
 
+import { Input as HeroInput } from "@heroui/react";
+
 import { cn } from "@/lib/utils";
 
-export function Input({ className, type = "text", ...props }) {
+export function Input({ className, classNames, type = "text", ...props }) {
   return (
-    <input
+    <HeroInput
       type={type}
-      className={cn(
-        "flex h-10 w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500 disabled:cursor-not-allowed disabled:opacity-50",
-        className
-      )}
+      variant="bordered"
+      radius="md"
+      size="md"
+      className={cn("w-full", className)}
+      classNames={{
+        inputWrapper:
+          "min-h-9 border border-[var(--border-subtle)] bg-white shadow-none transition-colors group-data-[focus=true]:border-[var(--border-accent)] group-data-[focus=true]:bg-white group-data-[focus=true]:shadow-[0_0_0_3px_rgba(47,109,246,0.12)] group-data-[hover=true]:border-[var(--border-strong)]",
+        input: "text-[13px] text-[var(--text-primary)] placeholder:text-[var(--text-muted)]",
+        ...classNames,
+      }}
       {...props}
     />
   );
