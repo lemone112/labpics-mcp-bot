@@ -1,40 +1,40 @@
 # Documentation style guide
 
-This repository has two documentation layers:
+This repository uses two documentation layers:
 
-- `docs/` — **operator+builder docs** for the current MVP: how to run, deploy, operate, and understand the system.
-- `docs/specs/` — **behavior specs** (semantic requirements): what must be true, what users experience, invariants, and acceptance criteria.
-
-## Writing principles
-
-1. **Evidence-first**: any derived statement must link to its source (message, conversation, job run, DB row id, etc.).
-2. **Safe-by-default**: ambiguous actions must not be auto-executed. Prefer explicit user choice.
-3. **Project/account scope clarity**: always state scope behavior explicitly. Platform defaults to strict `(project_id, account_scope_id)` isolation unless a page explicitly describes cross-scope admin behavior.
-4. **Idempotency**: repeated runs must not create duplicates.
+- `docs/` — operator/builder docs for the current MVP (how it works, how to run it)
+- `docs/specs/` — behavioral requirements (invariants + acceptance criteria)
 
 ## Language
 
-- Prefer short sentences.
-- Use the terms from the glossary: [`docs/glossary.md`](./glossary.md).
-- If a term is introduced in a page, link to the glossary entry on first use.
+- Prefer **English** for `docs/` so the repo stays readable for tooling and future contributors.
+- Specs may be bilingual, but the **status line** must be consistent.
 
-## Page structure (recommended)
+## Status markers
 
-- **Purpose** (1–2 paragraphs)
-- **How it works** (bullets)
-- **Operational notes** (what breaks, where to look)
-- **Links** (to specs / runbooks / code)
+In specs, include a status line near the top:
 
-## UI documentation additions (platform era)
+- `Статус: **draft**`
+- `Статус: **ready**`
+- `Статус: **implemented**`
 
-When documenting UI or UX behavior, include:
+If a spec is mostly roadmap, keep it as `draft`.
 
-- module scope (`Projects`, `Jobs`, `Search`, `CRM`, `Signals`, `Offers`, `Digests`, `Analytics`, `Control Tower`)
-- component primitive used (`Table`, `Kanban`, `InboxList`, `Drawer`, etc.)
-- state model (loading / empty / error / optimistic)
-- animation behavior only if it affects user comprehension
+## Links
 
-Refer to:
+- Use relative links inside the repo.
+- Prefer linking to canonical docs instead of duplicating content.
 
-- `web/DESIGN_SYSTEM_2026.md`
-- `web/MOTION_GUIDELINES.md`
+## What belongs where
+
+- Put *how-to-run* and *what exists today* into `docs/`.
+- Put *what must be true* into `docs/specs/`.
+
+## Required invariants vocabulary
+
+When writing requirements, explicitly call out:
+
+- scope: `project_id`, `account_scope_id`, `active_project_id`
+- evidence-first: a derived thing must reference sources
+- idempotency: safe retries, dedupe keys
+- safe-by-default: preview→apply, approvals for outbound
