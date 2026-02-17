@@ -182,3 +182,11 @@ jobs:
               echo "warning: public edge smoke-check failed for https://${domain}/login (local checks passed)" >&2
             fi
           fi
+
+      - name: Debug edge logs
+        if: always()
+        run: |
+          set -euo pipefail
+          compose_project="${COMPOSE_PROJECT_NAME:-labpics-dev}"
+          COMPOSE_PROJECT_NAME="$compose_project" docker compose --profile edge --env-file .env ps
+          COMPOSE_PROJECT_NAME="$compose_project" docker compose --profile edge --env-file .env logs --tail=120 edge
