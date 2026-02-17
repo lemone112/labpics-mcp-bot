@@ -9,25 +9,25 @@ const variantConfig = {
     variant: "solid",
     color: "primary",
     className:
-      "border border-[var(--brand-600)] bg-[var(--brand-500)] text-white hover:bg-[var(--brand-600)] focus-visible:ring-2 focus-visible:ring-[var(--brand-300)] focus-visible:ring-offset-1",
+      "border border-[var(--brand-600)] bg-[var(--brand-500)] text-white hover:bg-[var(--brand-600)] focus-visible:ring-2 focus-visible:ring-[var(--brand-300)] focus-visible:ring-offset-1 focus-visible:ring-offset-white",
   },
   secondary: {
     variant: "flat",
     color: "default",
     className:
-      "border border-[var(--border-subtle)] bg-white text-[var(--text-primary)] hover:bg-[var(--surface-soft)] focus-visible:ring-2 focus-visible:ring-[var(--brand-300)] focus-visible:ring-offset-1",
+      "border border-[var(--border-subtle)] bg-white text-[var(--text-primary)] hover:bg-[var(--surface-soft)] focus-visible:ring-2 focus-visible:ring-[var(--brand-300)] focus-visible:ring-offset-1 focus-visible:ring-offset-white",
   },
   outline: {
     variant: "bordered",
     color: "default",
     className:
-      "border-[var(--border-subtle)] bg-transparent text-[var(--text-primary)] hover:bg-[var(--surface-soft)] focus-visible:ring-2 focus-visible:ring-[var(--brand-300)] focus-visible:ring-offset-1",
+      "border-[var(--border-subtle)] bg-transparent text-[var(--text-primary)] hover:bg-[var(--surface-soft)] focus-visible:ring-2 focus-visible:ring-[var(--brand-300)] focus-visible:ring-offset-1 focus-visible:ring-offset-white",
   },
   danger: {
     variant: "solid",
     color: "danger",
     className:
-      "bg-[var(--danger-500)] text-white hover:brightness-[1.03] focus-visible:ring-2 focus-visible:ring-rose-200 focus-visible:ring-offset-1",
+      "bg-[var(--danger-500)] text-white hover:brightness-[1.03] focus-visible:ring-2 focus-visible:ring-[var(--status-danger-border)] focus-visible:ring-offset-1 focus-visible:ring-offset-white",
   },
 };
 

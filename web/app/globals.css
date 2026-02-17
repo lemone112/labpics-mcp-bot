@@ -38,6 +38,9 @@
   --status-danger-bg: #fff1f2;
   --status-danger-border: #fecdd3;
   --status-danger-fg: #be123c;
+  --focus-ring-soft: rgba(47, 109, 246, 0.12);
+  --selection-bg: rgba(47, 109, 246, 0.18);
+  --table-row-hover: rgba(15, 23, 42, 0.02);
 
   --radius-sm: 8px;
   --radius-md: 10px;
@@ -67,7 +70,7 @@ body {
 }
 
 ::selection {
-  background: rgba(47, 109, 246, 0.18);
+  background: var(--selection-bg);
   color: var(--text-strong);
 }
 

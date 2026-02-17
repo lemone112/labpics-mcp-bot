@@ -137,7 +137,7 @@ export default function JobsPage() {
                     </TableCell>
                     <TableCell>{job.started_at ? new Date(job.started_at).toLocaleString() : "-"}</TableCell>
                     <TableCell>{job.processed_count}</TableCell>
-                    <TableCell className="max-w-[260px] truncate text-rose-600">{job.error || "-"}</TableCell>
+                    <TableCell className="max-w-[260px] truncate text-[var(--status-danger-fg)]">{job.error || "-"}</TableCell>
                   </TableRow>
                 ))}
                 {!status?.jobs?.length ? (

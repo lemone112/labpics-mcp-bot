@@ -68,3 +68,4 @@ Every UI change must pass this checklist:
 - [ ] Hover/focus/disabled states are consistent
 - [ ] Mobile overflow is safe
 - [ ] Build succeeds
+- [ ] `npm run design:audit` succeeds
