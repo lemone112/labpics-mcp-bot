@@ -15,6 +15,6 @@ This folder is the canonical documentation for **Labpics Dashboard**.
 
 ## Conventions
 
-- **MVP vs roadmap** boundaries: [`docs/mvp-vs-roadmap.md`](./mvp-vs-roadmap.md)
+- MVP vs roadmap: [`docs/mvp-vs-roadmap.md`](./mvp-vs-roadmap.md)
 - Terms: [`docs/glossary.md`](./glossary.md)
 - Writing rules: [`docs/style-guide.md`](./style-guide.md)
