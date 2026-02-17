@@ -3,171 +3,139 @@ name: Deploy (prod)
 on:
   workflow_dispatch:
     inputs:
-      target:
-        description: "Which worker(s) to deploy"
-        required: true
-        type: choice
-        options:
-          - all
-          - tgbot
-          - agent-gw
-          - cw-sync
+      ref:
+        description: "Git ref to deploy (branch or tag)"
+        required: false
+        default: "main"
 
 concurrency:
-  group: cf-workers-prod
+  group: web-prod-deploy
   cancel-in-progress: false
 
 jobs:
-  deploy-prod:
+  validate:
     runs-on: ubuntu-latest
-    environment: production
     permissions:
       contents: read
-
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
 
-      - name: Install Wrangler
-        run: npm i -g wrangler@3
-
-      # -----------------
-      # tgbot (prod)
-      # -----------------
-      - name: Configure secrets (tgbot)
-        if: ${{ inputs.target == 'all' || inputs.target == 'tgbot' }}
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          CHATWOOT_API_TOKEN: ${{ secrets.CHATWOOT_API_TOKEN }}
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          AGENT_GATEWAY_HMAC_SECRET: ${{ secrets.AGENT_GATEWAY_HMAC_SECRET }}
-          COMPOSIO_API_KEY: ${{ secrets.COMPOSIO_API_KEY }}
-          APP_HMAC_SECRET: ${{ secrets.APP_HMAC_SECRET }}
+      - name: Validate server
+        working-directory: server
         run: |
           set -euo pipefail
-          for kv in \
-            "TELEGRAM_BOT_TOKEN=$TELEGRAM_BOT_TOKEN" \
-            "CHATWOOT_API_TOKEN=$CHATWOOT_API_TOKEN" \
-            "SUPABASE_SERVICE_ROLE_KEY=$SUPABASE_SERVICE_ROLE_KEY" \
-            "OPENAI_API_KEY=$OPENAI_API_KEY" \
-            "AGENT_GATEWAY_HMAC_SECRET=$AGENT_GATEWAY_HMAC_SECRET" \
-            "COMPOSIO_API_KEY=$COMPOSIO_API_KEY" \
-            "APP_HMAC_SECRET=$APP_HMAC_SECRET"; do
-              name="${kv%%=*}"
-              val="${kv#*=}"
-              printf "%s" "$val" | wrangler secret put "$name" --name tgbot
-              echo "set secret $name (tgbot)"
-          done
+          npm ci
+          node --check src/index.js
 
-      - name: Deploy tgbot (prod)
-        if: ${{ inputs.target == 'all' || inputs.target == 'tgbot' }}
-        working-directory: tgbot
+      - name: Validate web
+        working-directory: web
         env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          ENV: ${{ vars.ENV }}
-          SUPABASE_URL: ${{ vars.SUPABASE_URL }}
-          TELEGRAM_WEBHOOK_PATH: ${{ vars.TELEGRAM_WEBHOOK_PATH }}
-          PUBLIC_BASE_URL: ${{ vars.PUBLIC_BASE_URL }}
-          AGENT_GATEWAY_URL: ${{ vars.AGENT_GATEWAY_URL }}
-          CHATWOOT_BASE_URL: ${{ vars.CHATWOOT_BASE_URL }}
-          CHATWOOT_ACCOUNT_ID: ${{ vars.CHATWOOT_ACCOUNT_ID }}
-          SUPABASE_PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF }}
+          NEXT_PUBLIC_API_BASE_URL: ${{ vars.NEXT_PUBLIC_API_BASE_URL }}
         run: |
           set -euo pipefail
-          wrangler deploy --name tgbot \
-            --var ENV:$ENV \
-            --var SUPABASE_URL:$SUPABASE_URL \
-            --var TELEGRAM_WEBHOOK_PATH:$TELEGRAM_WEBHOOK_PATH \
-            --var PUBLIC_BASE_URL:$PUBLIC_BASE_URL \
-            --var AGENT_GATEWAY_URL:$AGENT_GATEWAY_URL \
-            --var CHATWOOT_BASE_URL:$CHATWOOT_BASE_URL \
-            --var CHATWOOT_ACCOUNT_ID:$CHATWOOT_ACCOUNT_ID \
-            --var SUPABASE_PROJECT_REF:$SUPABASE_PROJECT_REF
+          npm ci
+          npm run build
 
-      # -----------------
-      # agent-gw (prod)
-      # -----------------
-      - name: Configure secrets (agent-gw)
-        if: ${{ inputs.target == 'all' || inputs.target == 'agent-gw' }}
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          AGENT_GATEWAY_HMAC_SECRET: ${{ secrets.AGENT_GATEWAY_HMAC_SECRET }}
-          COMPOSIO_API_KEY: ${{ secrets.COMPOSIO_API_KEY }}
+  deploy-prod:
+    runs-on: ubuntu-latest
+    environment: production
+    needs: validate
+    permissions:
+      contents: read
+    env:
+      SSH_HOST: ${{ secrets.SSH_HOST }}
+      SSH_USER: ${{ secrets.SSH_USER }}
+      SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+      DEPLOY_PATH: ${{ vars.DEPLOY_PATH }}
+      COMPOSE_PROJECT_NAME: ${{ vars.COMPOSE_PROJECT_NAME }}
+      POSTGRES_DB: ${{ vars.POSTGRES_DB }}
+      POSTGRES_USER: ${{ vars.POSTGRES_USER }}
+      POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+      DB_PORT: ${{ vars.DB_PORT }}
+      API_PORT: ${{ vars.API_PORT }}
+      WEB_PORT: ${{ vars.WEB_PORT }}
+      NEXT_PUBLIC_API_BASE_URL: ${{ vars.NEXT_PUBLIC_API_BASE_URL }}
+      CORS_ORIGIN: ${{ vars.CORS_ORIGIN }}
+      AUTH_USERNAME: ${{ vars.AUTH_USERNAME }}
+      AUTH_PASSWORD: ${{ secrets.AUTH_PASSWORD }}
+      SESSION_COOKIE_NAME: ${{ vars.SESSION_COOKIE_NAME }}
+      CHATWOOT_BASE_URL: ${{ vars.CHATWOOT_BASE_URL }}
+      CHATWOOT_ACCOUNT_ID: ${{ vars.CHATWOOT_ACCOUNT_ID }}
+      CHATWOOT_API_TOKEN: ${{ secrets.CHATWOOT_API_TOKEN }}
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      EMBEDDING_MODEL: ${{ vars.EMBEDDING_MODEL }}
+      EMBED_BATCH_SIZE: ${{ vars.EMBED_BATCH_SIZE }}
+      CHUNK_SIZE: ${{ vars.CHUNK_SIZE }}
+      MIN_EMBED_CHARS: ${{ vars.MIN_EMBED_CHARS }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+
+      - name: Configure SSH key
         run: |
           set -euo pipefail
-          for kv in \
-            "SUPABASE_SERVICE_ROLE_KEY=$SUPABASE_SERVICE_ROLE_KEY" \
-            "OPENAI_API_KEY=$OPENAI_API_KEY" \
-            "AGENT_GATEWAY_HMAC_SECRET=$AGENT_GATEWAY_HMAC_SECRET" \
-            "COMPOSIO_API_KEY=$COMPOSIO_API_KEY"; do
-              name="${kv%%=*}"
-              val="${kv#*=}"
-              printf "%s" "$val" | wrangler secret put "$name" --name agent-gw
-              echo "set secret $name (agent-gw)"
-          done
+          install -d -m 700 ~/.ssh
+          printf "%s" "$SSH_PRIVATE_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -H "$SSH_HOST" >> ~/.ssh/known_hosts
 
-      - name: Deploy agent-gw (prod)
-        if: ${{ inputs.target == 'all' || inputs.target == 'agent-gw' }}
-        working-directory: agent-gw
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          SUPABASE_URL: ${{ vars.SUPABASE_URL }}
+      - name: Sync repository to remote
         run: |
           set -euo pipefail
-          wrangler deploy --name agent-gw --var SUPABASE_URL:$SUPABASE_URL
+          remote_path="${DEPLOY_PATH:-/opt/labpics-web-prod}"
+          ssh "$SSH_USER@$SSH_HOST" "mkdir -p '$remote_path'"
+          rsync -az --delete \
+            --exclude '.git' \
+            --exclude '**/node_modules' \
+            --exclude '**/.next' \
+            --exclude '.env' \
+            ./ "$SSH_USER@$SSH_HOST:$remote_path/"
 
-      # -----------------
-      # cw-sync (prod)
-      # -----------------
-      - name: Configure secrets (cw-sync)
-        if: ${{ inputs.target == 'all' || inputs.target == 'cw-sync' }}
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          CHATWOOT_API_TOKEN: ${{ secrets.CHATWOOT_API_TOKEN }}
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          SYNC_TOKEN: ${{ secrets.SYNC_TOKEN }}
+      - name: Upload environment file
         run: |
           set -euo pipefail
-          for kv in \
-            "CHATWOOT_API_TOKEN=$CHATWOOT_API_TOKEN" \
-            "SUPABASE_SERVICE_ROLE_KEY=$SUPABASE_SERVICE_ROLE_KEY" \
-            "OPENAI_API_KEY=$OPENAI_API_KEY" \
-            "SYNC_TOKEN=$SYNC_TOKEN"; do
-              name="${kv%%=*}"
-              val="${kv#*=}"
-              printf "%s" "$val" | wrangler secret put "$name" --name cw-sync
-              echo "set secret $name (cw-sync)"
-          done
+          remote_path="${DEPLOY_PATH:-/opt/labpics-web-prod}"
+          cat > .env.deploy <<EOF
+          POSTGRES_DB=${POSTGRES_DB:-labpics}
+          POSTGRES_USER=${POSTGRES_USER:-app}
+          POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-app}
+          DB_PORT=${DB_PORT:-5432}
+          API_PORT=${API_PORT:-8080}
+          WEB_PORT=${WEB_PORT:-3000}
+          NEXT_PUBLIC_API_BASE_URL=${NEXT_PUBLIC_API_BASE_URL:-http://localhost:8080}
+          CORS_ORIGIN=${CORS_ORIGIN:-http://localhost:3000}
+          AUTH_USERNAME=${AUTH_USERNAME:-admin}
+          AUTH_PASSWORD=${AUTH_PASSWORD:-admin}
+          SESSION_COOKIE_NAME=${SESSION_COOKIE_NAME:-sid}
+          CHATWOOT_BASE_URL=${CHATWOOT_BASE_URL:-https://app.chatwoot.com}
+          CHATWOOT_ACCOUNT_ID=${CHATWOOT_ACCOUNT_ID:-123}
+          CHATWOOT_API_TOKEN=${CHATWOOT_API_TOKEN}
+          OPENAI_API_KEY=${OPENAI_API_KEY}
+          EMBEDDING_MODEL=${EMBEDDING_MODEL:-text-embedding-3-small}
+          EMBED_BATCH_SIZE=${EMBED_BATCH_SIZE:-100}
+          CHUNK_SIZE=${CHUNK_SIZE:-1000}
+          MIN_EMBED_CHARS=${MIN_EMBED_CHARS:-30}
+          EOF
+          scp .env.deploy "$SSH_USER@$SSH_HOST:$remote_path/.env"
 
-      - name: Deploy cw-sync (prod)
-        if: ${{ inputs.target == 'all' || inputs.target == 'cw-sync' }}
-        working-directory: cw-sync
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          SUPABASE_URL: ${{ vars.SUPABASE_URL }}
-          CHATWOOT_BASE_URL: ${{ vars.CHATWOOT_BASE_URL }}
-          CHATWOOT_ACCOUNT_ID: ${{ vars.CHATWOOT_ACCOUNT_ID }}
-          SYNC_TABLE: ${{ vars.SYNC_TABLE }}
-          RAG_TABLE: ${{ vars.RAG_TABLE }}
+      - name: Deploy compose stack
         run: |
           set -euo pipefail
-          wrangler deploy --name cw-sync \
-            --var SUPABASE_URL:$SUPABASE_URL \
-            --var CHATWOOT_BASE_URL:$CHATWOOT_BASE_URL \
-            --var CHATWOOT_ACCOUNT_ID:$CHATWOOT_ACCOUNT_ID \
-            --var SYNC_TABLE:$SYNC_TABLE \
-            --var RAG_TABLE:$RAG_TABLE
+          remote_path="${DEPLOY_PATH:-/opt/labpics-web-prod}"
+          compose_project="${COMPOSE_PROJECT_NAME:-labpics-prod}"
+          ssh "$SSH_USER@$SSH_HOST" "cd '$remote_path' && COMPOSE_PROJECT_NAME='$compose_project' docker compose --env-file .env up -d --build --remove-orphans"
+
+      - name: Smoke check remote services
+        run: |
+          set -euo pipefail
+          api_port="${API_PORT:-8080}"
+          web_port="${WEB_PORT:-3000}"
+          ssh "$SSH_USER@$SSH_HOST" "curl -fsS http://127.0.0.1:${api_port}/health >/dev/null"
+          ssh "$SSH_USER@$SSH_HOST" "curl -fsS http://127.0.0.1:${web_port}/login >/dev/null"
