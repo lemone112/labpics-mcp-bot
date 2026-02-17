@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { PageShell } from "@/components/page-shell";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { PageLoadingSkeleton } from "@/components/ui/page-loading-skeleton";
 import { StatTile } from "@/components/ui/stat-tile";
 import { Toast } from "@/components/ui/toast";
 import { Button } from "@/components/ui/button";
@@ -119,7 +120,11 @@ export default function CrmFeaturePage() {
   }
 
   if (loading || !session) {
-    return <div className="p-8 text-sm">Loading...</div>;
+    return (
+      <PageShell title="CRM" subtitle="Accounts/Opportunities with kanban stages and next-step discipline">
+        <PageLoadingSkeleton />
+      </PageShell>
+    );
   }
 
   if (!session.active_project_id) {

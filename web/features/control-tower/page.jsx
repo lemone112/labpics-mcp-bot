@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { PageShell } from "@/components/page-shell";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { PageLoadingSkeleton } from "@/components/ui/page-loading-skeleton";
 import { StatTile } from "@/components/ui/stat-tile";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { StatusChip } from "@/components/ui/status-chip";
@@ -61,7 +62,11 @@ export default function ControlTowerFeaturePage() {
   );
 
   if (loading || !session) {
-    return <div className="p-8 text-sm">Loading...</div>;
+    return (
+      <PageShell title="Control Tower" subtitle="Unified Project/Account status across Chatwoot, Attio, Linear and NBA">
+        <PageLoadingSkeleton />
+      </PageShell>
+    );
   }
 
   if (!session.active_project_id) {

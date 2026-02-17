@@ -7,6 +7,7 @@ import { PageShell } from "@/components/page-shell";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
+import { PageLoadingSkeleton } from "@/components/ui/page-loading-skeleton";
 import { Toast } from "@/components/ui/toast";
 import { StatTile } from "@/components/ui/stat-tile";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -67,7 +68,11 @@ export default function AnalyticsFeaturePage() {
   }
 
   if (loading || !session) {
-    return <div className="p-8 text-sm">Loading...</div>;
+    return (
+      <PageShell title="Analytics + Risk" subtitle="Pipeline forecast, delivery/comms metrics and drill-down evidence">
+        <PageLoadingSkeleton />
+      </PageShell>
+    );
   }
 
   if (!session.active_project_id) {

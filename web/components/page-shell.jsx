@@ -6,7 +6,7 @@ import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/s
 export function PageShell({ title, subtitle, children }) {
   return (
     <div className="min-h-screen bg-background">
-      <SidebarProvider>
+      <SidebarProvider className="[--sidebar-width:19rem]">
         <AppSidebar />
         <SidebarInset>
           <header className="sticky top-0 z-20 flex h-16 shrink-0 items-center gap-2 border-b bg-background/90 px-4 backdrop-blur lg:px-6">

@@ -6,6 +6,7 @@ import Link from "next/link";
 import { PageShell } from "@/components/page-shell";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { PageLoadingSkeleton } from "@/components/ui/page-loading-skeleton";
 import { StatTile } from "@/components/ui/stat-tile";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { StatusChip } from "@/components/ui/status-chip";
@@ -48,7 +49,11 @@ export default function JobsFeaturePage() {
   }
 
   if (loading || !session) {
-    return <div className="p-8 text-sm">Loading...</div>;
+    return (
+      <PageShell title="Jobs" subtitle="Run ingestion, sync and enrichment jobs">
+        <PageLoadingSkeleton />
+      </PageShell>
+    );
   }
 
   if (!session?.active_project_id) {

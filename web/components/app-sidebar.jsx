@@ -1,22 +1,18 @@
 "use client";
 
+import { useEffect, useRef } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
-  BarChartIcon,
-  ChatBubbleIcon,
-  ClockIcon,
-  DashboardIcon,
-  ExitIcon,
-  FileTextIcon,
-  IdCardIcon,
-  MagnifyingGlassIcon,
-  ReaderIcon,
-  RocketIcon,
-} from "@radix-ui/react-icons";
+  BriefcaseBusiness,
+  LayoutDashboard,
+  LogOut,
+  Sparkles,
+} from "lucide-react";
+import { animate, stagger } from "animejs";
 
-import { ThemeToggle } from "@/components/theme-toggle";
 import { apiFetch } from "@/lib/api";
+import { MOTION, motionEnabled } from "@/lib/motion";
 import {
   Sidebar,
   SidebarContent,
@@ -27,23 +23,68 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
+  SidebarMenuSub,
+  SidebarMenuSubButton,
+  SidebarMenuSubItem,
 } from "@/components/ui/sidebar";
 
-const NAV_ITEMS = [
-  { href: "/control-tower", label: "Control Tower", icon: DashboardIcon },
-  { href: "/projects", label: "Projects", icon: RocketIcon },
-  { href: "/jobs", label: "Jobs", icon: ClockIcon },
-  { href: "/search", label: "Search", icon: MagnifyingGlassIcon },
-  { href: "/crm", label: "CRM", icon: IdCardIcon },
-  { href: "/signals", label: "Signals", icon: ChatBubbleIcon },
-  { href: "/offers", label: "Offers", icon: FileTextIcon },
-  { href: "/digests", label: "Digests", icon: ReaderIcon },
-  { href: "/analytics", label: "Analytics", icon: BarChartIcon },
+const NAV_SECTIONS = [
+  {
+    title: "Workspace",
+    href: "/control-tower",
+    icon: LayoutDashboard,
+    items: [
+      { title: "Control Tower", href: "/control-tower" },
+      { title: "Projects", href: "/projects" },
+      { title: "Jobs", href: "/jobs" },
+      { title: "Search", href: "/search" },
+    ],
+  },
+  {
+    title: "Revenue",
+    href: "/crm",
+    icon: BriefcaseBusiness,
+    items: [
+      { title: "CRM", href: "/crm" },
+      { title: "Signals", href: "/signals" },
+      { title: "Offers", href: "/offers" },
+    ],
+  },
+  {
+    title: "Insights",
+    href: "/digests",
+    icon: Sparkles,
+    items: [
+      { title: "Digests", href: "/digests" },
+      { title: "Analytics", href: "/analytics" },
+    ],
+  },
 ];
 
 export function AppSidebar(props) {
   const pathname = usePathname();
   const router = useRouter();
+  const navRef = useRef(null);
+
+  useEffect(() => {
+    const nav = navRef.current;
+    if (!nav || !motionEnabled()) return undefined;
+
+    const targets = nav.querySelectorAll("[data-nav-item]");
+    if (!targets.length) return undefined;
+
+    const animation = animate(targets, {
+      opacity: [0, 1],
+      translateX: [-8, 0],
+      delay: stagger(MOTION.stagger.fast),
+      duration: MOTION.durations.base,
+      ease: MOTION.easing.standard,
+    });
+
+    return () => {
+      animation.cancel();
+    };
+  }, [pathname]);
 
   async function onLogout() {
     try {
@@ -62,7 +103,7 @@ export function AppSidebar(props) {
             <SidebarMenuButton size="lg" asChild>
               <Link href="/control-tower">
                 <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground">
-                  <DashboardIcon className="size-4" />
+                  <LayoutDashboard className="size-4" />
                 </div>
                 <div className="flex flex-col gap-0.5 leading-none">
                   <span className="font-semibold">Labpics</span>
@@ -77,18 +118,31 @@ export function AppSidebar(props) {
       <SidebarContent>
         <SidebarGroup>
           <SidebarGroupLabel>Navigation</SidebarGroupLabel>
-          <SidebarMenu>
-            {NAV_ITEMS.map((item) => {
-              const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
-              const Icon = item.icon;
+          <SidebarMenu ref={navRef} className="gap-2">
+            {NAV_SECTIONS.map((section) => {
+              const Icon = section.icon;
+              const sectionActive = section.items.some((item) => pathname === item.href || pathname.startsWith(`${item.href}/`));
               return (
-                <SidebarMenuItem key={item.href}>
-                  <SidebarMenuButton asChild isActive={active}>
-                    <Link href={item.href}>
+                <SidebarMenuItem key={section.title}>
+                  <SidebarMenuButton asChild isActive={sectionActive} data-nav-item>
+                    <Link href={section.href} className="font-medium">
                       <Icon />
-                      <span>{item.label}</span>
+                      <span>{section.title}</span>
                     </Link>
                   </SidebarMenuButton>
+                  <SidebarMenuSub className="ml-0 border-l-0 px-1.5">
+                    {section.items.map((item) => (
+                      <SidebarMenuSubItem key={item.href}>
+                        <SidebarMenuSubButton
+                          asChild
+                          isActive={pathname === item.href || pathname.startsWith(`${item.href}/`)}
+                          data-nav-item
+                        >
+                          <Link href={item.href}>{item.title}</Link>
+                        </SidebarMenuSubButton>
+                      </SidebarMenuSubItem>
+                    ))}
+                  </SidebarMenuSub>
                 </SidebarMenuItem>
               );
             })}
@@ -99,14 +153,8 @@ export function AppSidebar(props) {
       <SidebarFooter>
         <SidebarMenu>
           <SidebarMenuItem>
-            <div className="flex items-center justify-between rounded-md border border-sidebar-border/70 px-2 py-1.5 group-data-[collapsible=icon]:hidden">
-              <span className="text-xs text-sidebar-foreground/80">Theme</span>
-              <ThemeToggle />
-            </div>
-          </SidebarMenuItem>
-          <SidebarMenuItem>
             <SidebarMenuButton onClick={onLogout}>
-              <ExitIcon />
+              <LogOut />
               <span>Logout</span>
             </SidebarMenuButton>
           </SidebarMenuItem>

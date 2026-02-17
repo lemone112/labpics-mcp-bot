@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import { PageShell } from "@/components/page-shell";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { PageLoadingSkeleton } from "@/components/ui/page-loading-skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -64,7 +65,11 @@ export default function ProjectsFeaturePage() {
   }
 
   if (loading || !session) {
-    return <div className="p-8 text-sm">Loading...</div>;
+    return (
+      <PageShell title="Projects" subtitle="Create and select active project for session">
+        <PageLoadingSkeleton />
+      </PageShell>
+    );
   }
 
   return (

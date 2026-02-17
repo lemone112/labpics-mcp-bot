@@ -27,8 +27,10 @@ export function MotionGroup({
 
     const reveal = animate(targets, {
       opacity: [0, 1],
-      translateY: [8, 0],
+      translateY: [10, 0],
+      translateX: [-2, 0],
       scale: [0.995, 1],
+      filter: ["blur(2px)", "blur(0px)"],
       delay: stagger(delay, { start: MOTION.stagger.base }),
       duration: MOTION.durations.slow,
       ease: MOTION.easing.standard,

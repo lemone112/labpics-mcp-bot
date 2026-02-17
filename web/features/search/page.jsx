@@ -5,6 +5,7 @@ import Link from "next/link";
 
 import { PageShell } from "@/components/page-shell";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { PageLoadingSkeleton } from "@/components/ui/page-loading-skeleton";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -45,7 +46,11 @@ export default function SearchFeaturePage() {
   }
 
   if (loading || !session) {
-    return <div className="p-8 text-sm">Loading...</div>;
+    return (
+      <PageShell title="Search" subtitle="Vector similarity search over ready embeddings">
+        <PageLoadingSkeleton />
+      </PageShell>
+    );
   }
 
   if (!session?.active_project_id) {

@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
+import { PageLoadingSkeleton } from "@/components/ui/page-loading-skeleton";
 import { Toast } from "@/components/ui/toast";
 import { StatusChip } from "@/components/ui/status-chip";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -118,7 +119,11 @@ export default function OffersFeaturePage() {
   }
 
   if (loading || !session) {
-    return <div className="p-8 text-sm">Loading...</div>;
+    return (
+      <PageShell title="Offers + Outbox" subtitle="Draft→approve→send lifecycle with idempotency and rate-limit policies">
+        <PageLoadingSkeleton />
+      </PageShell>
+    );
   }
 
   if (!session.active_project_id) {
