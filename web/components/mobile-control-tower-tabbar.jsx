@@ -22,17 +22,25 @@ const MOBILE_BUSINESS_ITEMS = [
   { key: "offers", label: "Офферы", href: "/control-tower/offers", icon: Sparkles },
 ];
 
-function resolveControlTowerPrefix(pathname) {
+const KNOWN_ROOT_SEGMENTS = [
+  "control-tower",
+  "projects",
+  "jobs",
+  "search",
+  "crm",
+  "signals",
+  "offers",
+  "digests",
+  "analytics",
+  "login",
+];
+
+function resolveBasePrefix(pathname) {
   const path = String(pathname || "");
-  const marker = "/control-tower";
-  const index = path.indexOf(marker);
-  if (index < 0) {
-    return { inControlTower: false, prefix: "" };
-  }
-  return {
-    inControlTower: true,
-    prefix: path.slice(0, index),
-  };
+  const rootsPattern = KNOWN_ROOT_SEGMENTS.join("|");
+  const match = path.match(new RegExp(`^(.*?)/(?:${rootsPattern})(?:/|$)`));
+  if (!match) return "";
+  return String(match[1] || "");
 }
 
 function withPrefix(prefix, href) {
@@ -41,8 +49,7 @@ function withPrefix(prefix, href) {
 
 export function MobileControlTowerTabbar() {
   const pathname = usePathname();
-  const { inControlTower, prefix } = resolveControlTowerPrefix(pathname);
-  if (!inControlTower) return null;
+  const prefix = resolveBasePrefix(pathname);
 
   return (
     <nav className="fixed inset-x-0 bottom-0 z-[60] border-t bg-background/95 pb-[env(safe-area-inset-bottom)] shadow-lg backdrop-blur md:hidden">
