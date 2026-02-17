@@ -1,58 +1,33 @@
-# Спеки (ТЗ для Cursor)
+# Specs (`docs/specs/`)
 
-Эта папка — **семантическое ТЗ**: описываем *что должно работать и как это ощущается/ведёт себя*, без привязки к конкретным запросам, компонентам и файлам.
+This folder contains **behavior specs** (semantic requirements): what must be true, what users experience, invariants, and acceptance criteria.
 
-## Инварианты (не обсуждаются)
+- Canonical terms: [`docs/glossary.md`](../glossary.md)
+- Writing rules: [`docs/style-guide.md`](../style-guide.md)
+- MVP vs roadmap guardrails: [`docs/mvp-vs-roadmap.md`](../mvp-vs-roadmap.md)
 
-1. **Никакого смешивания проектов.** Система никогда не показывает и не использует данные другого проекта.
-2. **Evidence-first.** Любая «ценная сущность» (commitment, risk, digest-вывод, proposal) должна указывать на первоисточник.
-3. **Safe-by-default.** Если нельзя однозначно привязать данные/действие — система *не делает* это автоматически.
-4. **Идемпотентность.** Повторные прогоны не создают мусор и дубликаты.
-5. **Объяснимость.** Любое действие/вывод должны быть разборчивыми: “почему так” и “на основании чего”.
+## Invariants (non-negotiable)
 
-## Как Cursor должен работать со спеками
+1. **No cross-project mixing.** The system must never read/write another project's data.
+2. **Evidence-first.** Any valuable derived entity must reference primary sources.
+3. **Safe-by-default.** If binding is ambiguous, do not auto-act.
+4. **Idempotency.** Re-running jobs must not create duplicates or junk.
+5. **Explainability.** Outputs/actions must show “why” + “based on what”.
 
-Правила:
+## How to use specs
 
-- **Одна спека = один PR** (если не оговорено иначе).
-- Делать **end-to-end**: модель данных → серверная логика → UI → обновление документации.
-- Любая автоматизация должна иметь:
-  - понятный статус
-  - ретраи/устойчивость к сбоям
-  - журнал (audit trail)
+- One spec = one problem and one outcome.
+- Prefer explicit **acceptance criteria**.
+- If something is not in MVP, mark it as **Roadmap** and link to `mvp-vs-roadmap.md`.
 
-## Принцип уверенности (чтобы не убить доверие)
+## Recommended spec structure
 
-Для извлечённых/сгенерированных сущностей используем «ворота уверенности»:
-
-- **Предложено** — низкая/средняя уверенность: показываем человеку, **не влияет на KPI** и не считается обязательством/риском.
-- **Активно** — высокая уверенность или подтверждено человеком: влияет на KPI, попадает в дайджест.
-
-> Это сохраняет “авто”, но защищает от шума и галлюцинаций.
-
-## Типовой жизненный цикл сущности
-
-- `предложено` → `активно` (подтверждение)
-- `активно` → `закрыто` (выполнено/снято)
-- `активно` → `отменено`
-
-Важное правило: **ручные правки человека не должны молча перетираться автоматикой**.
-
-## Что пользователь должен всегда видеть
-
-- какой проект активен
-- что было импортировано/пропущено и почему
-- какие выводы “официальные”, а какие “предложенные”
-- откуда взялся каждый вывод (evidence)
-
-## Индекс
-
-- [0001 — Мультипроектная изоляция памяти (RAG)](./0001-multiproject-rag-scope.md)
-- [0002 — Commitments v1](./0002-commitments-v1.md)
-- [0003 — Risks v1](./0003-risks-v1.md)
-- [0004 — Weekly digest v1](./0004-weekly-digest-v1.md)
-- [0005 — Интеграции Linear/Attio: preview/apply](./0005-integrations-linear-attio-preview.md)
-- [0006 — Проекты, клиенты и связывание идентичностей](./0006-projects-clients-and-links.md)
-- [0007 — Cadence джоб и контроль стоимости](./0007-jobs-cadence-and-cost-control.md)
-- [0008 — Аудит, приватность и retention](./0008-audit-privacy-retention.md)
-- [0009 — Web IA: страницы и навигация](./0009-web-ia-pages-navigation.md)
+- Status (Draft/Ready/Implemented)
+- Goal
+- Non-goals
+- Definitions (link glossary entries)
+- UX / behavior
+- Data and scope rules (project-scoped)
+- Failure modes
+- Operational notes
+- Acceptance criteria
