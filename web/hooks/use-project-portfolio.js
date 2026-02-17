@@ -149,17 +149,6 @@ export function ProjectPortfolioProvider({ children }) {
     }
   }, [projectIds, projectIdSet, selectedScopeId, canSelectAll, lastConcreteProjectId, ensureConcreteSelection]);
 
-  const selectProject = useCallback(
-    (projectId) => {
-      const normalized = normalizeProjectId(projectId);
-      if (!normalized || !projectIdSet.has(normalized)) return;
-      setActivationError("");
-      setSelectedScopeId(normalized);
-      setLastConcreteProjectId(normalized);
-    },
-    [projectIdSet]
-  );
-
   const activateProject = useCallback(
     async (projectId) => {
       const normalized = normalizeProjectId(projectId);
@@ -234,7 +223,6 @@ export function ProjectPortfolioProvider({ children }) {
       loadingProjects,
       error,
       refreshProjects,
-      selectProject,
       activateProject,
       selectAllProjects,
     }),
@@ -257,7 +245,6 @@ export function ProjectPortfolioProvider({ children }) {
       loadingProjects,
       error,
       refreshProjects,
-      selectProject,
       activateProject,
       selectAllProjects,
     ]
