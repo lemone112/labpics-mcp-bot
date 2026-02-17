@@ -94,6 +94,7 @@ docker compose up --build
 
 - UI: `http://localhost:3000`
 - API health: `http://localhost:8080/health`
+- через edge proxy (если включен профиль `edge`): `https://dashboard.lab.pics`
 
 ---
 
@@ -115,6 +116,8 @@ docker compose up --build
 3. обновляют `.env` на сервере
 4. выполняют `docker compose up -d --build`
 5. делают smoke-check `/health` и `/login`
+
+Для production включается профиль `edge` (Caddy), который публикует UI на `https://dashboard.lab.pics` и проксирует `/api/*` в `server`.
 
 ---
 
@@ -140,6 +143,11 @@ docker compose up --build
 - `API_PORT`
 - `WEB_PORT`
 - `NEXT_PUBLIC_API_BASE_URL`
+- `API_UPSTREAM_URL`
+- `DOMAIN` (prod: `dashboard.lab.pics`)
+- `API_UPSTREAM`
+- `WEB_UPSTREAM`
+- `ENABLE_EDGE_PROXY`
 - `CORS_ORIGIN`
 - `AUTH_USERNAME`
 - `SESSION_COOKIE_NAME`

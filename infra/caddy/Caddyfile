@@ -1,0 +1,19 @@
+{$DOMAIN:dashboard.lab.pics} {
+  encode zstd gzip
+
+  @api path /api/*
+  handle @api {
+    uri strip_prefix /api
+    reverse_proxy {$API_UPSTREAM:server:8080}
+  }
+
+  handle {
+    reverse_proxy {$WEB_UPSTREAM:web:3000}
+  }
+
+  header {
+    X-Content-Type-Options "nosniff"
+    X-Frame-Options "DENY"
+    Referrer-Policy "same-origin"
+  }
+}
