@@ -37,6 +37,8 @@ Composition is defined in [`/docker-compose.yml`](../docker-compose.yml).
 Manual jobs via API:
 
 - `POST /jobs/chatwoot/sync`
+- `POST /jobs/attio/sync`
+- `POST /jobs/linear/sync`
 - `POST /jobs/embeddings/run`
 
 Scheduled jobs via worker tick:
@@ -50,12 +52,41 @@ Worker/scheduler state:
 - `worker_runs`
 - run history in scoped `job_runs`
 
+Scheduled handlers include:
+
+- ingestion/sync (Chatwoot, Attio, Linear)
+- embeddings
+- signals extraction + NBA generation
+- upsell radar
+- risk/health refresh
+- daily/weekly digests
+- analytics aggregates
+
 ## Outbound / approval model
 
 - Draft/approval/send lifecycle is stored in `outbound_messages`.
 - Delivery attempts are stored in `outbound_attempts`.
 - Opt-out, stop-on-reply, and frequency caps are stored in `contact_channel_policies`.
 - Critical actions are written to `audit_events` with `evidence_refs`.
+
+## Control Tower + Intelligence layer
+
+Control Tower (`GET /control-tower`) is a scoped aggregate layer combining:
+
+- integration health/watermarks (Chatwoot, Attio, Linear)
+- delivery/commercial metrics
+- top NBA
+- risk/health indicators
+- latest evidence snippets
+
+Related domain APIs:
+
+- identity graph/linking (`/identity/*`)
+- CRM + offers (`/crm/*`, `/offers/*`)
+- signals/NBA (`/signals/*`, `/nba/*`)
+- upsell radar (`/upsell/*`)
+- deal→delivery continuity (`/continuity/*`)
+- digests/risk/analytics (`/digests/*`, `/risk/*`, `/analytics/*`)
 
 ## Design constraints
 
@@ -68,4 +99,4 @@ Worker/scheduler state:
 
 - Webhooks (polling + jobs only)
 - Distributed queue system (single-process scheduler tick in MVP)
-- Linear/Attio integrations (planned)
+- Deep bidirectional writeback to external systems (current write path is DB-first with preview/apply workflows)

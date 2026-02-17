@@ -16,9 +16,25 @@ import { applyMigrations } from "../db/migrate-lib.js";
 import { runChatwootSync } from "./services/chatwoot.js";
 import { runEmbeddings, searchChunks } from "./services/embeddings.js";
 import { finishJob, getJobsStatus, startJob } from "./services/jobs.js";
-import { listAuditEvents, writeAuditEvent } from "./services/audit.js";
+import { listAuditEvents, normalizeEvidenceRefs, writeAuditEvent } from "./services/audit.js";
 import { approveOutbound, createOutboundDraft, listOutbound, processDueOutbounds, sendOutbound, setOptOut } from "./services/outbox.js";
 import { listScheduledJobs, runSchedulerTick } from "./services/scheduler.js";
+import { runAttioSync } from "./services/attio.js";
+import { runLinearSync } from "./services/linear.js";
+import { applyIdentitySuggestions, listIdentityLinks, listIdentitySuggestions, previewIdentitySuggestions } from "./services/identity-graph.js";
+import { extractSignalsAndNba, getTopNba, listNba, listSignals, updateNbaStatus, updateSignalStatus } from "./services/signals.js";
+import { listUpsellRadar, refreshUpsellRadar, updateUpsellStatus } from "./services/upsell.js";
+import { applyContinuityActions, buildContinuityPreview, listContinuityActions } from "./services/continuity.js";
+import {
+  generateDailyDigest,
+  generateWeeklyDigest,
+  getAnalyticsOverview,
+  getControlTower,
+  getDigests,
+  getRiskOverview,
+  refreshAnalytics,
+  refreshRiskAndHealth,
+} from "./services/intelligence.js";
 
 function requiredEnv(name) {
   const value = process.env[name];
@@ -39,6 +55,12 @@ function toTopK(value, fallback = 10) {
   const parsed = Number.parseInt(String(value ?? ""), 10);
   if (!Number.isFinite(parsed)) return fallback;
   return Math.max(1, Math.min(parsed, 50));
+}
+
+function toNumber(value, fallback = 0, min = Number.NEGATIVE_INFINITY, max = Number.POSITIVE_INFINITY) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.max(min, Math.min(max, parsed));
 }
 
 function timingSafeStringEqual(a, b) {
@@ -970,6 +992,104 @@ async function main() {
     }
   });
 
+  registerPost("/jobs/attio/sync", async (request, reply) => {
+    const scope = requireProjectScope(request);
+    const job = await startJob(pool, "attio_sync", scope);
+    try {
+      const result = await runAttioSync(pool, scope, request.log);
+      await finishJob(pool, job.id, {
+        status: "ok",
+        processedCount: Number(result.touched_accounts || 0) + Number(result.touched_opportunities || 0),
+        meta: result,
+      });
+      await writeAuditEvent(pool, {
+        projectId: scope.projectId,
+        accountScopeId: scope.accountScopeId,
+        actorUsername: request.auth?.username || null,
+        action: "job.attio_sync",
+        entityType: "job_run",
+        entityId: String(job.id),
+        status: "ok",
+        requestId: request.requestId,
+        payload: result,
+        evidenceRefs: [],
+      });
+      return sendOk(reply, request.requestId, { result });
+    } catch (error) {
+      const errMsg = String(error?.message || error);
+      await finishJob(pool, job.id, { status: "failed", error: errMsg });
+      await writeAuditEvent(pool, {
+        projectId: scope.projectId,
+        accountScopeId: scope.accountScopeId,
+        actorUsername: request.auth?.username || null,
+        action: "job.attio_sync",
+        entityType: "job_run",
+        entityId: String(job.id),
+        status: "failed",
+        requestId: request.requestId,
+        payload: { error: errMsg },
+        evidenceRefs: [],
+      });
+      if (errMsg.includes("attio_workspace_source_")) {
+        return sendError(
+          reply,
+          request.requestId,
+          new ApiError(409, "attio_source_binding_error", "Attio source binding conflict", { reason: errMsg })
+        );
+      }
+      return sendError(reply, request.requestId, new ApiError(500, "attio_sync_failed", "Attio sync failed"));
+    }
+  });
+
+  registerPost("/jobs/linear/sync", async (request, reply) => {
+    const scope = requireProjectScope(request);
+    const job = await startJob(pool, "linear_sync", scope);
+    try {
+      const result = await runLinearSync(pool, scope, request.log);
+      await finishJob(pool, job.id, {
+        status: "ok",
+        processedCount: Number(result.touched_projects || 0) + Number(result.touched_issues || 0),
+        meta: result,
+      });
+      await writeAuditEvent(pool, {
+        projectId: scope.projectId,
+        accountScopeId: scope.accountScopeId,
+        actorUsername: request.auth?.username || null,
+        action: "job.linear_sync",
+        entityType: "job_run",
+        entityId: String(job.id),
+        status: "ok",
+        requestId: request.requestId,
+        payload: result,
+        evidenceRefs: [],
+      });
+      return sendOk(reply, request.requestId, { result });
+    } catch (error) {
+      const errMsg = String(error?.message || error);
+      await finishJob(pool, job.id, { status: "failed", error: errMsg });
+      await writeAuditEvent(pool, {
+        projectId: scope.projectId,
+        accountScopeId: scope.accountScopeId,
+        actorUsername: request.auth?.username || null,
+        action: "job.linear_sync",
+        entityType: "job_run",
+        entityId: String(job.id),
+        status: "failed",
+        requestId: request.requestId,
+        payload: { error: errMsg },
+        evidenceRefs: [],
+      });
+      if (errMsg.includes("linear_workspace_source_")) {
+        return sendError(
+          reply,
+          request.requestId,
+          new ApiError(409, "linear_source_binding_error", "Linear source binding conflict", { reason: errMsg })
+        );
+      }
+      return sendError(reply, request.requestId, new ApiError(500, "linear_sync_failed", "Linear sync failed"));
+    }
+  });
+
   registerGet("/jobs/status", async (request, reply) => {
     const scope = requireProjectScope(request);
     const status = await getJobsStatus(pool, scope);
@@ -1013,6 +1133,874 @@ async function main() {
 
     const result = await searchChunks(pool, scope, query, topK, request.log);
     return sendOk(reply, request.requestId, result);
+  });
+
+  registerGet("/control-tower", async (request, reply) => {
+    const scope = requireProjectScope(request);
+    const payload = await getControlTower(pool, scope);
+    return sendOk(reply, request.requestId, payload);
+  });
+
+  registerPost("/identity/suggestions/preview", async (request, reply) => {
+    const scope = requireProjectScope(request);
+    const body = request.body && typeof request.body === "object" ? request.body : {};
+    const limit = parseLimit(body?.limit, 100, 200);
+    const result = await previewIdentitySuggestions(pool, scope, limit);
+    await writeAuditEvent(pool, {
+      projectId: scope.projectId,
+      accountScopeId: scope.accountScopeId,
+      actorUsername: request.auth?.username || null,
+      action: "identity.preview",
+      entityType: "identity_link_suggestion",
+      entityId: scope.projectId,
+      status: "ok",
+      requestId: request.requestId,
+      payload: { generated: result.generated, stored: result.stored },
+      evidenceRefs: [],
+    });
+    return sendOk(reply, request.requestId, result);
+  });
+
+  registerGet("/identity/suggestions", async (request, reply) => {
+    const scope = requireProjectScope(request);
+    const rows = await listIdentitySuggestions(pool, scope, {
+      status: request.query?.status,
+      limit: request.query?.limit,
+    });
+    return sendOk(reply, request.requestId, { suggestions: rows });
+  });
+
+  registerPost("/identity/suggestions/apply", async (request, reply) => {
+    const scope = requireProjectScope(request);
+    const body = request.body && typeof request.body === "object" ? request.body : {};
+    const suggestionIds = Array.isArray(body?.suggestion_ids) ? body.suggestion_ids : [];
+    const result = await applyIdentitySuggestions(pool, scope, suggestionIds, request.auth?.username || null);
+    await writeAuditEvent(pool, {
+      projectId: scope.projectId,
+      accountScopeId: scope.accountScopeId,
+      actorUsername: request.auth?.username || null,
+      action: "identity.apply",
+      entityType: "identity_link",
+      entityId: scope.projectId,
+      status: "ok",
+      requestId: request.requestId,
+      payload: { applied: result.applied },
+      evidenceRefs: result.links.flatMap((row) => row.evidence_refs || []),
+    });
+    return sendOk(reply, request.requestId, result);
+  });
+
+  registerGet("/identity/links", async (request, reply) => {
+    const scope = requireProjectScope(request);
+    const rows = await listIdentityLinks(pool, scope, {
+      status: request.query?.status,
+      limit: request.query?.limit,
+    });
+    return sendOk(reply, request.requestId, { links: rows });
+  });
+
+  registerPost("/signals/extract", async (request, reply) => {
+    const scope = requireProjectScope(request);
+    const result = await extractSignalsAndNba(pool, scope);
+    await writeAuditEvent(pool, {
+      projectId: scope.projectId,
+      accountScopeId: scope.accountScopeId,
+      actorUsername: request.auth?.username || null,
+      action: "signals.extract",
+      entityType: "signal",
+      entityId: scope.projectId,
+      status: "ok",
+      requestId: request.requestId,
+      payload: result,
+      evidenceRefs: [],
+    });
+    return sendOk(reply, request.requestId, { result });
+  });
+
+  registerGet("/signals", async (request, reply) => {
+    const scope = requireProjectScope(request);
+    const signals = await listSignals(pool, scope, {
+      status: request.query?.status,
+      severity_min: request.query?.severity_min,
+      limit: request.query?.limit,
+    });
+    return sendOk(reply, request.requestId, { signals });
+  });
+
+  registerPost("/signals/:id/status", async (request, reply) => {
+    const scope = requireProjectScope(request);
+    const body = request.body && typeof request.body === "object" ? request.body : {};
+    const signal = await updateSignalStatus(
+      pool,
+      scope,
+      String(request.params?.id || ""),
+      String(body?.status || "")
+    );
+    if (!signal) {
+      return sendError(reply, request.requestId, new ApiError(404, "signal_not_found", "Signal not found"));
+    }
+    await writeAuditEvent(pool, {
+      projectId: scope.projectId,
+      accountScopeId: scope.accountScopeId,
+      actorUsername: request.auth?.username || null,
+      action: "signals.status_update",
+      entityType: "signal",
+      entityId: signal.id,
+      status: "ok",
+      requestId: request.requestId,
+      payload: { status: signal.status },
+      evidenceRefs: signal.evidence_refs || [],
+    });
+    return sendOk(reply, request.requestId, { signal });
+  });
+
+  registerGet("/nba", async (request, reply) => {
+    const scope = requireProjectScope(request);
+    const items = await listNba(pool, scope, {
+      status: request.query?.status,
+      limit: request.query?.limit,
+    });
+    return sendOk(reply, request.requestId, { items });
+  });
+
+  registerPost("/nba/:id/status", async (request, reply) => {
+    const scope = requireProjectScope(request);
+    const body = request.body && typeof request.body === "object" ? request.body : {};
+    const item = await updateNbaStatus(pool, scope, String(request.params?.id || ""), String(body?.status || ""));
+    if (!item) {
+      return sendError(reply, request.requestId, new ApiError(404, "nba_not_found", "NBA item not found"));
+    }
+    await writeAuditEvent(pool, {
+      projectId: scope.projectId,
+      accountScopeId: scope.accountScopeId,
+      actorUsername: request.auth?.username || null,
+      action: "nba.status_update",
+      entityType: "next_best_action",
+      entityId: item.id,
+      status: "ok",
+      requestId: request.requestId,
+      payload: { status: item.status },
+      evidenceRefs: item.evidence_refs || [],
+    });
+    return sendOk(reply, request.requestId, { item });
+  });
+
+  registerPost("/upsell/radar/refresh", async (request, reply) => {
+    const scope = requireProjectScope(request);
+    const result = await refreshUpsellRadar(pool, scope);
+    await writeAuditEvent(pool, {
+      projectId: scope.projectId,
+      accountScopeId: scope.accountScopeId,
+      actorUsername: request.auth?.username || null,
+      action: "upsell.refresh",
+      entityType: "upsell_opportunity",
+      entityId: scope.projectId,
+      status: "ok",
+      requestId: request.requestId,
+      payload: result,
+      evidenceRefs: [],
+    });
+    return sendOk(reply, request.requestId, { result });
+  });
+
+  registerGet("/upsell/radar", async (request, reply) => {
+    const scope = requireProjectScope(request);
+    const rows = await listUpsellRadar(pool, scope, {
+      status: request.query?.status,
+      limit: request.query?.limit,
+    });
+    return sendOk(reply, request.requestId, { opportunities: rows });
+  });
+
+  registerPost("/upsell/:id/status", async (request, reply) => {
+    const scope = requireProjectScope(request);
+    const body = request.body && typeof request.body === "object" ? request.body : {};
+    const item = await updateUpsellStatus(pool, scope, String(request.params?.id || ""), String(body?.status || ""));
+    if (!item) {
+      return sendError(reply, request.requestId, new ApiError(404, "upsell_not_found", "Upsell opportunity not found"));
+    }
+    await writeAuditEvent(pool, {
+      projectId: scope.projectId,
+      accountScopeId: scope.accountScopeId,
+      actorUsername: request.auth?.username || null,
+      action: "upsell.status_update",
+      entityType: "upsell_opportunity",
+      entityId: item.id,
+      status: "ok",
+      requestId: request.requestId,
+      payload: { status: item.status },
+      evidenceRefs: item.evidence_refs || [],
+    });
+    return sendOk(reply, request.requestId, { item });
+  });
+
+  registerPost("/continuity/preview", async (request, reply) => {
+    const scope = requireProjectScope(request);
+    const result = await buildContinuityPreview(pool, scope, request.auth?.username || null);
+    await writeAuditEvent(pool, {
+      projectId: scope.projectId,
+      accountScopeId: scope.accountScopeId,
+      actorUsername: request.auth?.username || null,
+      action: "continuity.preview",
+      entityType: "continuity_action",
+      entityId: scope.projectId,
+      status: "ok",
+      requestId: request.requestId,
+      payload: { touched: result.touched },
+      evidenceRefs: result.rows.flatMap((row) => row.evidence_refs || []),
+    });
+    return sendOk(reply, request.requestId, result);
+  });
+
+  registerGet("/continuity/actions", async (request, reply) => {
+    const scope = requireProjectScope(request);
+    const actions = await listContinuityActions(pool, scope, {
+      status: request.query?.status,
+      limit: request.query?.limit,
+    });
+    return sendOk(reply, request.requestId, { actions });
+  });
+
+  registerPost("/continuity/apply", async (request, reply) => {
+    const scope = requireProjectScope(request);
+    const body = request.body && typeof request.body === "object" ? request.body : {};
+    const ids = Array.isArray(body?.action_ids) ? body.action_ids : [];
+    const result = await applyContinuityActions(pool, scope, ids, request.auth?.username || null);
+    await writeAuditEvent(pool, {
+      projectId: scope.projectId,
+      accountScopeId: scope.accountScopeId,
+      actorUsername: request.auth?.username || null,
+      action: "continuity.apply",
+      entityType: "continuity_action",
+      entityId: scope.projectId,
+      status: "ok",
+      requestId: request.requestId,
+      payload: { applied: result.applied },
+      evidenceRefs: result.actions.flatMap((row) => row.evidence_refs || []),
+    });
+    return sendOk(reply, request.requestId, result);
+  });
+
+  registerGet("/crm/accounts", async (request, reply) => {
+    const scope = requireProjectScope(request);
+    const limit = parseLimit(request.query?.limit, 200, 500);
+    const rows = await pool.query(
+      `
+        SELECT id, name, domain, external_ref, stage, owner_username, created_at, updated_at
+        FROM crm_accounts
+        WHERE project_id = $1
+          AND account_scope_id = $2
+        ORDER BY updated_at DESC
+        LIMIT $3
+      `,
+      [scope.projectId, scope.accountScopeId, limit]
+    );
+    return sendOk(reply, request.requestId, { accounts: rows.rows });
+  });
+
+  registerPost("/crm/accounts", async (request, reply) => {
+    const scope = requireProjectScope(request);
+    const body = request.body && typeof request.body === "object" ? request.body : {};
+    const name = String(body?.name || "").trim();
+    if (name.length < 2) {
+      return sendError(reply, request.requestId, new ApiError(400, "invalid_account_name", "Account name is required"));
+    }
+    const domain = String(body?.domain || "").trim() || null;
+    const stage = String(body?.stage || "prospect").trim().toLowerCase();
+    const ownerUsername = String(body?.owner_username || request.auth?.username || "").trim() || null;
+    const { rows } = await pool.query(
+      `
+        INSERT INTO crm_accounts(project_id, account_scope_id, name, domain, external_ref, stage, owner_username, updated_at)
+        VALUES ($1, $2, $3, $4, NULL, $5, $6, now())
+        RETURNING id, name, domain, external_ref, stage, owner_username, created_at, updated_at
+      `,
+      [scope.projectId, scope.accountScopeId, name.slice(0, 300), domain, stage, ownerUsername]
+    );
+    await writeAuditEvent(pool, {
+      projectId: scope.projectId,
+      accountScopeId: scope.accountScopeId,
+      actorUsername: request.auth?.username || null,
+      action: "crm.account.create",
+      entityType: "crm_account",
+      entityId: rows[0].id,
+      status: "ok",
+      requestId: request.requestId,
+      payload: { name: rows[0].name, stage: rows[0].stage },
+      evidenceRefs: normalizeEvidenceRefs(body?.evidence_refs || []),
+    });
+    return sendOk(reply, request.requestId, { account: rows[0] }, 201);
+  });
+
+  registerGet("/crm/opportunities", async (request, reply) => {
+    const scope = requireProjectScope(request);
+    const limit = parseLimit(request.query?.limit, 200, 500);
+    const status = String(request.query?.stage || "").trim().toLowerCase();
+    const rows = await pool.query(
+      `
+        SELECT
+          o.id,
+          o.account_id,
+          a.name AS account_name,
+          o.title,
+          o.stage,
+          o.amount_estimate,
+          o.probability,
+          o.expected_close_date,
+          o.next_step,
+          o.owner_username,
+          o.evidence_refs,
+          o.created_at,
+          o.updated_at
+        FROM crm_opportunities AS o
+        LEFT JOIN crm_accounts AS a ON a.id = o.account_id
+        WHERE o.project_id = $1
+          AND o.account_scope_id = $2
+          AND ($3 = '' OR o.stage = $3)
+        ORDER BY o.updated_at DESC
+        LIMIT $4
+      `,
+      [scope.projectId, scope.accountScopeId, status, limit]
+    );
+    return sendOk(reply, request.requestId, { opportunities: rows.rows });
+  });
+
+  registerPost("/crm/opportunities", async (request, reply) => {
+    const scope = requireProjectScope(request);
+    const body = request.body && typeof request.body === "object" ? request.body : {};
+    const title = String(body?.title || "").trim();
+    const accountId = String(body?.account_id || "").trim();
+    const nextStep = String(body?.next_step || "").trim();
+    if (!title) {
+      return sendError(reply, request.requestId, new ApiError(400, "invalid_opportunity_title", "Opportunity title is required"));
+    }
+    if (!accountId) {
+      return sendError(reply, request.requestId, new ApiError(400, "invalid_account_id", "account_id is required"));
+    }
+    if (!nextStep || nextStep.length < 4) {
+      return sendError(reply, request.requestId, new ApiError(400, "next_step_required", "next_step is required"));
+    }
+    const stage = String(body?.stage || "discovery").trim().toLowerCase();
+    const probability = toNumber(body?.probability, 0.1, 0, 1);
+    const amount = toNumber(body?.amount_estimate, 0, 0, 1_000_000_000);
+    const { rows } = await pool.query(
+      `
+        INSERT INTO crm_opportunities(
+          project_id,
+          account_scope_id,
+          account_id,
+          title,
+          stage,
+          amount_estimate,
+          probability,
+          expected_close_date,
+          next_step,
+          owner_username,
+          evidence_refs,
+          updated_at
+        )
+        VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::jsonb, now())
+        RETURNING id, account_id, title, stage, amount_estimate, probability, expected_close_date, next_step, owner_username, evidence_refs, created_at, updated_at
+      `,
+      [
+        scope.projectId,
+        scope.accountScopeId,
+        accountId,
+        title.slice(0, 500),
+        stage,
+        amount,
+        probability,
+        body?.expected_close_date || null,
+        nextStep.slice(0, 1000),
+        String(body?.owner_username || request.auth?.username || "").trim() || null,
+        JSON.stringify(normalizeEvidenceRefs(body?.evidence_refs || [])),
+      ]
+    );
+    await writeAuditEvent(pool, {
+      projectId: scope.projectId,
+      accountScopeId: scope.accountScopeId,
+      actorUsername: request.auth?.username || null,
+      action: "crm.opportunity.create",
+      entityType: "crm_opportunity",
+      entityId: rows[0].id,
+      status: "ok",
+      requestId: request.requestId,
+      payload: {
+        title: rows[0].title,
+        stage: rows[0].stage,
+        amount_estimate: rows[0].amount_estimate,
+        probability: rows[0].probability,
+      },
+      evidenceRefs: rows[0].evidence_refs || [],
+    });
+    return sendOk(reply, request.requestId, { opportunity: rows[0] }, 201);
+  });
+
+  registerPost("/crm/opportunities/:id/stage", async (request, reply) => {
+    const scope = requireProjectScope(request);
+    const body = request.body && typeof request.body === "object" ? request.body : {};
+    const nextStage = String(body?.stage || "").trim().toLowerCase();
+    const reason = String(body?.reason || "").trim() || null;
+    const evidenceRefs = normalizeEvidenceRefs(body?.evidence_refs || []);
+    if (!nextStage) {
+      return sendError(reply, request.requestId, new ApiError(400, "invalid_stage", "stage is required"));
+    }
+    const current = await pool.query(
+      `
+        SELECT id, stage, title
+        FROM crm_opportunities
+        WHERE id = $1
+          AND project_id = $2
+          AND account_scope_id = $3
+        LIMIT 1
+      `,
+      [String(request.params?.id || ""), scope.projectId, scope.accountScopeId]
+    );
+    if (!current.rows[0]) {
+      return sendError(reply, request.requestId, new ApiError(404, "opportunity_not_found", "Opportunity not found"));
+    }
+    const updated = await pool.query(
+      `
+        UPDATE crm_opportunities
+        SET stage = $4,
+            updated_at = now()
+        WHERE id = $1
+          AND project_id = $2
+          AND account_scope_id = $3
+        RETURNING id, title, stage, amount_estimate, probability, expected_close_date, next_step, updated_at, evidence_refs
+      `,
+      [current.rows[0].id, scope.projectId, scope.accountScopeId, nextStage]
+    );
+    const audit = await writeAuditEvent(pool, {
+      projectId: scope.projectId,
+      accountScopeId: scope.accountScopeId,
+      actorUsername: request.auth?.username || null,
+      action: "crm.opportunity.stage_update",
+      entityType: "crm_opportunity",
+      entityId: current.rows[0].id,
+      status: "ok",
+      requestId: request.requestId,
+      payload: { from_stage: current.rows[0].stage, to_stage: nextStage, reason },
+      evidenceRefs,
+    });
+    await pool.query(
+      `
+        INSERT INTO crm_opportunity_stage_events(
+          project_id,
+          account_scope_id,
+          opportunity_id,
+          from_stage,
+          to_stage,
+          reason,
+          actor_username,
+          evidence_refs,
+          audit_event_id
+        )
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9)
+      `,
+      [
+        scope.projectId,
+        scope.accountScopeId,
+        current.rows[0].id,
+        current.rows[0].stage,
+        nextStage,
+        reason,
+        request.auth?.username || null,
+        JSON.stringify(evidenceRefs),
+        audit.id,
+      ]
+    );
+    return sendOk(reply, request.requestId, { opportunity: updated.rows[0] });
+  });
+
+  registerGet("/crm/overview", async (request, reply) => {
+    const scope = requireProjectScope(request);
+    const [accounts, opportunities, links] = await Promise.all([
+      pool.query(
+        `
+          SELECT count(*)::int AS total_accounts
+          FROM crm_accounts
+          WHERE project_id = $1
+            AND account_scope_id = $2
+        `,
+        [scope.projectId, scope.accountScopeId]
+      ),
+      pool.query(
+        `
+          SELECT stage, count(*)::int AS count
+          FROM crm_opportunities
+          WHERE project_id = $1
+            AND account_scope_id = $2
+          GROUP BY stage
+        `,
+        [scope.projectId, scope.accountScopeId]
+      ),
+      pool.query(
+        `
+          SELECT status, count(*)::int AS count
+          FROM identity_links
+          WHERE project_id = $1
+            AND account_scope_id = $2
+          GROUP BY status
+        `,
+        [scope.projectId, scope.accountScopeId]
+      ),
+    ]);
+    return sendOk(reply, request.requestId, {
+      accounts: accounts.rows[0]?.total_accounts || 0,
+      opportunity_by_stage: opportunities.rows,
+      links_by_status: links.rows,
+    });
+  });
+
+  registerGet("/offers", async (request, reply) => {
+    const scope = requireProjectScope(request);
+    const limit = parseLimit(request.query?.limit, 150, 500);
+    const rows = await pool.query(
+      `
+        SELECT
+          id,
+          account_id,
+          opportunity_id,
+          title,
+          currency,
+          subtotal,
+          discount_pct,
+          total,
+          status,
+          generated_doc_url,
+          evidence_refs,
+          created_by,
+          created_at,
+          updated_at
+        FROM offers
+        WHERE project_id = $1
+          AND account_scope_id = $2
+        ORDER BY updated_at DESC
+        LIMIT $3
+      `,
+      [scope.projectId, scope.accountScopeId, limit]
+    );
+    return sendOk(reply, request.requestId, { offers: rows.rows });
+  });
+
+  registerPost("/offers", async (request, reply) => {
+    const scope = requireProjectScope(request);
+    const body = request.body && typeof request.body === "object" ? request.body : {};
+    const title = String(body?.title || "").trim();
+    if (!title) {
+      return sendError(reply, request.requestId, new ApiError(400, "invalid_offer_title", "Offer title is required"));
+    }
+    const subtotal = toNumber(body?.subtotal, 0, 0, 1_000_000_000);
+    const discountPct = toNumber(body?.discount_pct, 0, 0, 100);
+    const total = Number((subtotal * (1 - discountPct / 100)).toFixed(2));
+    const status = discountPct > 0 ? "draft" : "approved";
+    const evidenceRefs = normalizeEvidenceRefs(body?.evidence_refs || []);
+    const { rows } = await pool.query(
+      `
+        INSERT INTO offers(
+          project_id,
+          account_scope_id,
+          account_id,
+          opportunity_id,
+          title,
+          currency,
+          subtotal,
+          discount_pct,
+          total,
+          status,
+          generated_doc_url,
+          evidence_refs,
+          created_by,
+          updated_at
+        )
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NULL, $11::jsonb, $12, now())
+        RETURNING
+          id,
+          account_id,
+          opportunity_id,
+          title,
+          currency,
+          subtotal,
+          discount_pct,
+          total,
+          status,
+          generated_doc_url,
+          evidence_refs,
+          created_by,
+          created_at,
+          updated_at
+      `,
+      [
+        scope.projectId,
+        scope.accountScopeId,
+        body?.account_id || null,
+        body?.opportunity_id || null,
+        title.slice(0, 500),
+        String(body?.currency || "USD").trim().toUpperCase().slice(0, 6),
+        subtotal,
+        discountPct,
+        total,
+        status,
+        JSON.stringify(evidenceRefs),
+        request.auth?.username || null,
+      ]
+    );
+    await writeAuditEvent(pool, {
+      projectId: scope.projectId,
+      accountScopeId: scope.accountScopeId,
+      actorUsername: request.auth?.username || null,
+      action: "offer.create",
+      entityType: "offer",
+      entityId: rows[0].id,
+      status: "ok",
+      requestId: request.requestId,
+      payload: {
+        subtotal,
+        discount_pct: discountPct,
+        total,
+        status,
+      },
+      evidenceRefs,
+    });
+    return sendOk(reply, request.requestId, { offer: rows[0] }, 201);
+  });
+
+  registerPost("/offers/:id/approve-discount", async (request, reply) => {
+    const scope = requireProjectScope(request);
+    const offerId = String(request.params?.id || "");
+    const body = request.body && typeof request.body === "object" ? request.body : {};
+    const evidenceRefs = normalizeEvidenceRefs(body?.evidence_refs || []);
+    const { rows } = await pool.query(
+      `
+        UPDATE offers
+        SET status = 'approved',
+            updated_at = now()
+        WHERE id = $1
+          AND project_id = $2
+          AND account_scope_id = $3
+        RETURNING id, title, discount_pct, status, evidence_refs
+      `,
+      [offerId, scope.projectId, scope.accountScopeId]
+    );
+    const offer = rows[0];
+    if (!offer) {
+      return sendError(reply, request.requestId, new ApiError(404, "offer_not_found", "Offer not found"));
+    }
+    const audit = await writeAuditEvent(pool, {
+      projectId: scope.projectId,
+      accountScopeId: scope.accountScopeId,
+      actorUsername: request.auth?.username || null,
+      action: "offer.approve_discount",
+      entityType: "offer",
+      entityId: offer.id,
+      status: "ok",
+      requestId: request.requestId,
+      payload: { discount_pct: offer.discount_pct },
+      evidenceRefs: evidenceRefs.length ? evidenceRefs : offer.evidence_refs || [],
+    });
+    await pool.query(
+      `
+        INSERT INTO offer_approvals(
+          project_id,
+          account_scope_id,
+          offer_id,
+          action,
+          actor_username,
+          comment,
+          evidence_refs,
+          audit_event_id
+        )
+        VALUES ($1, $2, $3, 'approve_discount', $4, $5, $6::jsonb, $7)
+      `,
+      [
+        scope.projectId,
+        scope.accountScopeId,
+        offer.id,
+        request.auth?.username || null,
+        String(body?.comment || "").trim() || null,
+        JSON.stringify(evidenceRefs),
+        audit.id,
+      ]
+    );
+    return sendOk(reply, request.requestId, { offer });
+  });
+
+  registerPost("/offers/:id/approve-send", async (request, reply) => {
+    const scope = requireProjectScope(request);
+    const offerId = String(request.params?.id || "");
+    const body = request.body && typeof request.body === "object" ? request.body : {};
+    const evidenceRefs = normalizeEvidenceRefs(body?.evidence_refs || []);
+    const { rows } = await pool.query(
+      `
+        UPDATE offers
+        SET status = 'sent',
+            updated_at = now()
+        WHERE id = $1
+          AND project_id = $2
+          AND account_scope_id = $3
+          AND status IN ('approved', 'draft')
+        RETURNING id, title, status, evidence_refs
+      `,
+      [offerId, scope.projectId, scope.accountScopeId]
+    );
+    const offer = rows[0];
+    if (!offer) {
+      return sendError(reply, request.requestId, new ApiError(404, "offer_not_found", "Offer not found"));
+    }
+    const audit = await writeAuditEvent(pool, {
+      projectId: scope.projectId,
+      accountScopeId: scope.accountScopeId,
+      actorUsername: request.auth?.username || null,
+      action: "offer.approve_send",
+      entityType: "offer",
+      entityId: offer.id,
+      status: "ok",
+      requestId: request.requestId,
+      payload: { status: "sent" },
+      evidenceRefs: evidenceRefs.length ? evidenceRefs : offer.evidence_refs || [],
+    });
+    await pool.query(
+      `
+        INSERT INTO offer_approvals(
+          project_id,
+          account_scope_id,
+          offer_id,
+          action,
+          actor_username,
+          comment,
+          evidence_refs,
+          audit_event_id
+        )
+        VALUES ($1, $2, $3, 'approve_send', $4, $5, $6::jsonb, $7)
+      `,
+      [
+        scope.projectId,
+        scope.accountScopeId,
+        offer.id,
+        request.auth?.username || null,
+        String(body?.comment || "").trim() || null,
+        JSON.stringify(evidenceRefs),
+        audit.id,
+      ]
+    );
+    return sendOk(reply, request.requestId, { offer });
+  });
+
+  registerPost("/digests/daily/generate", async (request, reply) => {
+    const scope = requireProjectScope(request);
+    const result = await generateDailyDigest(pool, scope);
+    await writeAuditEvent(pool, {
+      projectId: scope.projectId,
+      accountScopeId: scope.accountScopeId,
+      actorUsername: request.auth?.username || null,
+      action: "digest.daily.generate",
+      entityType: "daily_digest",
+      entityId: result.digest_date,
+      status: "ok",
+      requestId: request.requestId,
+      payload: { digest_date: result.digest_date },
+      evidenceRefs: result.evidence_refs || [],
+    });
+    return sendOk(reply, request.requestId, result);
+  });
+
+  registerGet("/digests/daily", async (request, reply) => {
+    const scope = requireProjectScope(request);
+    const rows = await getDigests(pool, scope, "daily", parseLimit(request.query?.limit, 20, 100));
+    return sendOk(reply, request.requestId, { digests: rows });
+  });
+
+  registerPost("/digests/weekly/generate", async (request, reply) => {
+    const scope = requireProjectScope(request);
+    const result = await generateWeeklyDigest(pool, scope);
+    await writeAuditEvent(pool, {
+      projectId: scope.projectId,
+      accountScopeId: scope.accountScopeId,
+      actorUsername: request.auth?.username || null,
+      action: "digest.weekly.generate",
+      entityType: "weekly_digest",
+      entityId: result.week_start,
+      status: "ok",
+      requestId: request.requestId,
+      payload: { week_start: result.week_start },
+      evidenceRefs: result.evidence_refs || [],
+    });
+    return sendOk(reply, request.requestId, result);
+  });
+
+  registerGet("/digests/weekly", async (request, reply) => {
+    const scope = requireProjectScope(request);
+    const rows = await getDigests(pool, scope, "weekly", parseLimit(request.query?.limit, 12, 52));
+    return sendOk(reply, request.requestId, { digests: rows });
+  });
+
+  registerPost("/risk/refresh", async (request, reply) => {
+    const scope = requireProjectScope(request);
+    const result = await refreshRiskAndHealth(pool, scope);
+    await writeAuditEvent(pool, {
+      projectId: scope.projectId,
+      accountScopeId: scope.accountScopeId,
+      actorUsername: request.auth?.username || null,
+      action: "risk.refresh",
+      entityType: "risk_pattern",
+      entityId: scope.projectId,
+      status: "ok",
+      requestId: request.requestId,
+      payload: result,
+      evidenceRefs: [],
+    });
+    return sendOk(reply, request.requestId, { result });
+  });
+
+  registerGet("/risk/overview", async (request, reply) => {
+    const scope = requireProjectScope(request);
+    const overview = await getRiskOverview(pool, scope);
+    return sendOk(reply, request.requestId, overview);
+  });
+
+  registerPost("/analytics/refresh", async (request, reply) => {
+    const scope = requireProjectScope(request);
+    const body = request.body && typeof request.body === "object" ? request.body : {};
+    const days = parseLimit(body?.period_days, 30, 120);
+    const result = await refreshAnalytics(pool, scope, days);
+    await writeAuditEvent(pool, {
+      projectId: scope.projectId,
+      accountScopeId: scope.accountScopeId,
+      actorUsername: request.auth?.username || null,
+      action: "analytics.refresh",
+      entityType: "analytics_snapshot",
+      entityId: scope.projectId,
+      status: "ok",
+      requestId: request.requestId,
+      payload: result,
+      evidenceRefs: [],
+    });
+    return sendOk(reply, request.requestId, { result });
+  });
+
+  registerGet("/analytics/overview", async (request, reply) => {
+    const scope = requireProjectScope(request);
+    const overview = await getAnalyticsOverview(pool, scope);
+    return sendOk(reply, request.requestId, overview);
+  });
+
+  registerGet("/analytics/drilldown", async (request, reply) => {
+    const scope = requireProjectScope(request);
+    const source = String(request.query?.source || "").trim().toLowerCase();
+    const limit = parseLimit(request.query?.limit, 50, 200);
+    const { rows } = await pool.query(
+      `
+        SELECT id, source_type, source_table, source_pk, snippet, payload, created_at
+        FROM evidence_items
+        WHERE project_id = $1
+          AND account_scope_id = $2
+          AND ($3 = '' OR source_type = $3 OR source_table = $3)
+        ORDER BY created_at DESC
+        LIMIT $4
+      `,
+      [scope.projectId, scope.accountScopeId, source || "", limit]
+    );
+    return sendOk(reply, request.requestId, { evidence: rows });
   });
 
   registerGet("/audit", async (request, reply) => {

@@ -152,6 +152,16 @@ Scope behavior:
 Processes `rag_chunks` with `embedding_status='pending'`.
 Rows transition through `processing` to `ready` or `failed`.
 
+### `POST /jobs/attio/sync`
+
+Runs Attio sync (`attio_accounts_raw`, `attio_opportunities_raw`) with scoped watermark updates (`sync_watermarks`, `source=attio:*`).
+Supports idempotent upserts and retries.
+
+### `POST /jobs/linear/sync`
+
+Runs Linear sync (`linear_projects_raw`, `linear_issues_raw`) with scoped watermark updates (`sync_watermarks`, `source=linear:*`).
+Supports idempotent upserts and retries.
+
 ### `GET /jobs/status`
 
 Returns:
@@ -169,6 +179,91 @@ Returns configured scheduled jobs for active project.
 ### `POST /jobs/scheduler/tick`
 
 Runs due scheduler jobs (worker tick) for active project.
+
+## Control Tower
+
+### `GET /control-tower`
+
+Unified project/account snapshot:
+
+- integration sync watermarks (Chatwoot/Attio/Linear)
+- top metrics (money, delivery, comms)
+- top NBA
+- risk overview
+- recent evidence
+
+## Identity graph / linking
+
+### `POST /identity/suggestions/preview`
+
+Generate/update cross-system link suggestions (`Chatwoot ↔ Attio ↔ Linear`) with confidence + evidence refs.
+
+### `GET /identity/suggestions`
+
+List suggestions with status filters.
+
+### `POST /identity/suggestions/apply`
+
+Apply selected suggestions into `identity_links` with audit trail.
+
+### `GET /identity/links`
+
+List active/inactive identity links.
+
+## CRM / Offers
+
+### `GET /crm/accounts`, `POST /crm/accounts`
+### `GET /crm/opportunities`, `POST /crm/opportunities`
+### `POST /crm/opportunities/:id/stage`
+### `GET /crm/overview`
+
+CRM entities and stage movement (with mandatory audit + evidence refs for stage updates).
+
+### `GET /offers`, `POST /offers`
+### `POST /offers/:id/approve-discount`
+### `POST /offers/:id/approve-send`
+
+Offer builder + approval trail for discount/send actions.
+
+## Signals / NBA / Upsell / Continuity
+
+### `POST /signals/extract`
+### `GET /signals`
+### `POST /signals/:id/status`
+
+Signal extraction and lifecycle (`proposed → accepted/dismissed → done`).
+
+### `GET /nba`
+### `POST /nba/:id/status`
+
+Next Best Action retrieval and status updates.
+
+### `POST /upsell/radar/refresh`
+### `GET /upsell/radar`
+### `POST /upsell/:id/status`
+
+Upsell radar generation from chat/deal context.
+
+### `POST /continuity/preview`
+### `GET /continuity/actions`
+### `POST /continuity/apply`
+
+Deal→Delivery continuity preview/apply into Linear task context.
+
+## Digests / Risk / Analytics
+
+### `POST /digests/daily/generate`, `GET /digests/daily`
+### `POST /digests/weekly/generate`, `GET /digests/weekly`
+
+Daily/weekly digest generation and history.
+
+### `POST /risk/refresh`, `GET /risk/overview`
+
+Risk pattern engine + health score snapshots.
+
+### `POST /analytics/refresh`, `GET /analytics/overview`, `GET /analytics/drilldown`
+
+Pipeline/forecast (Attio), delivery metrics (Linear), comms metrics (Chatwoot), drill-down to evidence.
 
 ## Search
 

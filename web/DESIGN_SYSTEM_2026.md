@@ -69,3 +69,52 @@ Every UI change must pass this checklist:
 - [ ] Mobile overflow is safe
 - [ ] Build succeeds
 - [ ] `npm run design:audit` succeeds
+
+## 6) Standard component library (Hero UI + custom)
+
+All product surfaces must use this shared set before creating new visual primitives:
+
+- `Table` (sortable/list views)
+- `Kanban` (opportunity/action stage views)
+- `InboxList` (message/evidence streams)
+- `Drawer` / modal patterns
+- `Filters` (query + trailing controls)
+- `StatTile` (topline metrics)
+- `StatusChip` (semantic status language)
+- `EmptyState`
+- `Toast`
+- `SkeletonBlock`
+
+Rules:
+
+1. Prefer variant props over one-off classes.
+2. New component APIs must preserve compact/comfortable density compatibility.
+3. New components must define loading/empty/error state behavior.
+
+## 7) Motion system (Anime.js standard)
+
+Anime.js is the single motion engine.
+
+- Duration tokens live in `web/lib/motion.js`.
+- Easing tokens live in `web/lib/motion.js`.
+- Respect reduced motion (`prefers-reduced-motion`).
+- No random per-page animation curves/durations.
+
+### Motion budget
+
+- Micro feedback: `120-220ms`
+- Surface/list transitions: `220-420ms`
+- Avoid chaining more than 2 sequential animations for one interaction.
+- Never animate layout in a way that causes content jumps.
+
+### Where motion is required
+
+- Feedback after critical user actions (submit, approve, status changes)
+- Progressive reveal for page sections and dense lists
+- Controlled transitions for drawers/modals
+
+### Where motion is forbidden
+
+- Decorative looping animations on data tables/forms
+- Aggressive entrance motion that delays reading
+- Rapid repetitive animation that distracts from evidence workflows

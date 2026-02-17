@@ -2,6 +2,7 @@ import crypto from "node:crypto";
 
 import { fetchWithRetry } from "../lib/http.js";
 import { chunkText, toIsoTime, toPositiveInt } from "../lib/chunking.js";
+import { resolveProjectSourceBinding } from "./sources.js";
 
 function requiredEnv(name) {
   const value = process.env[name];
@@ -186,44 +187,6 @@ async function listConversations(baseUrl, token, accountId, maxConversations, lo
   }
 
   return out.slice(0, maxConversations);
-}
-
-async function resolveProjectChatwootAccountId(pool, scope) {
-  const existing = await pool.query(
-    `
-      SELECT external_id
-      FROM project_sources
-      WHERE project_id = $1
-        AND account_scope_id = $2
-        AND source_kind = 'chatwoot_account'
-      LIMIT 1
-    `,
-    [scope.projectId, scope.accountScopeId]
-  );
-  if (existing.rows[0]?.external_id) {
-    return String(existing.rows[0].external_id);
-  }
-
-  const fallback = String(process.env.CHATWOOT_ACCOUNT_ID || "").trim();
-  if (!fallback) {
-    throw new Error("chatwoot_source_not_bound");
-  }
-
-  try {
-    await pool.query(
-      `
-        INSERT INTO project_sources(project_id, account_scope_id, source_kind, external_id, meta, updated_at)
-        VALUES ($1, $2, 'chatwoot_account', $3, '{}'::jsonb, now())
-      `,
-      [scope.projectId, scope.accountScopeId, fallback]
-    );
-    return fallback;
-  } catch (error) {
-    if (String(error?.code) === "23505") {
-      throw new Error("chatwoot_source_bound_to_another_project");
-    }
-    throw error;
-  }
 }
 
 async function getWatermark(pool, scope, source) {
@@ -680,7 +643,13 @@ async function getStorageSummary(pool, scope, budgetGb) {
 export async function runChatwootSync(pool, scope, logger = console) {
   const baseUrl = requiredEnv("CHATWOOT_BASE_URL").replace(/\/+$/, "");
   const apiToken = requiredEnv("CHATWOOT_API_TOKEN");
-  const accountId = await resolveProjectChatwootAccountId(pool, scope);
+  const accountId = await resolveProjectSourceBinding(
+    pool,
+    scope,
+    "chatwoot_account",
+    process.env.CHATWOOT_ACCOUNT_ID || "",
+    { source: "env_bootstrap" }
+  );
   const source = `chatwoot:${accountId}`;
 
   const maxConversations = toPositiveInt(process.env.CHATWOOT_CONVERSATIONS_LIMIT, 60, 1, 1000);

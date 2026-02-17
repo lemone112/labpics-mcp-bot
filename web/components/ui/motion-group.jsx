@@ -4,12 +4,13 @@ import { useEffect, useRef } from "react";
 import { animate, stagger } from "animejs";
 
 import { cn } from "@/lib/utils";
+import { MOTION, motionEnabled } from "@/lib/motion";
 
 export function MotionGroup({
   children,
   className,
   itemSelector = "[data-motion-item]",
-  delay = 80,
+  delay = MOTION.stagger.slow,
 }) {
   const scopeRef = useRef(null);
 
@@ -20,7 +21,7 @@ export function MotionGroup({
     const targets = scope.querySelectorAll(itemSelector);
     if (!targets.length) return undefined;
 
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+    if (!motionEnabled()) {
       return undefined;
     }
 
@@ -28,9 +29,9 @@ export function MotionGroup({
       opacity: [0, 1],
       translateY: [8, 0],
       scale: [0.995, 1],
-      delay: stagger(delay, { start: 40 }),
-      duration: 420,
-      ease: "outQuad",
+      delay: stagger(delay, { start: MOTION.stagger.base }),
+      duration: MOTION.durations.slow,
+      ease: MOTION.easing.standard,
     });
 
     return () => {

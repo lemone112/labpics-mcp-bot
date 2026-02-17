@@ -13,6 +13,12 @@ The MVP is defined by:
 - Vector search over embedded chunks (strict project/account SQL scope)
 - Jobs UI (`/jobs`) to run/observe sync & embeddings
 - Platform layer: audit events, outbox/approval, scheduler tick, evidence index
+- Control Tower UI (`/control-tower`) with scoped integration health + NBA + evidence
+- Attio/Linear sync jobs with watermark/idempotent upsert/retry semantics
+- Identity graph preview/apply (`/identity/*`) with audit trail
+- Signals + NBA extraction/status lifecycle (`/signals/*`, `/nba/*`)
+- Upsell radar and deal→delivery continuity preview/apply (`/upsell/*`, `/continuity/*`)
+- Daily/weekly digests + risk/health + analytics snapshots (`/digests/*`, `/risk/*`, `/analytics/*`)
 
 ## Explicit non-goals (MVP)
 
@@ -25,6 +31,7 @@ The MVP is defined by:
 
 Future work belongs in specs and should be tagged as roadmap:
 
-- Commitments / risks / weekly digests derived views
-- Integrations beyond Chatwoot
+- Deep external writeback (Attio/Linear object mutation beyond controlled preview/apply)
+- Rich CRM UX (full board interactions, inline editing, ownership workflows)
+- High-fidelity visual regression automation (baseline lifecycle in CI)
 - Advanced permission model

@@ -24,3 +24,17 @@ This repository has two documentation layers:
 - **How it works** (bullets)
 - **Operational notes** (what breaks, where to look)
 - **Links** (to specs / runbooks / code)
+
+## UI documentation additions (platform era)
+
+When documenting UI or UX behavior, include:
+
+- module scope (`Projects`, `Jobs`, `Search`, `CRM`, `Signals`, `Offers`, `Digests`, `Analytics`, `Control Tower`)
+- component primitive used (`Table`, `Kanban`, `InboxList`, `Drawer`, etc.)
+- state model (loading / empty / error / optimistic)
+- animation behavior only if it affects user comprehension
+
+Refer to:
+
+- `web/DESIGN_SYSTEM_2026.md`
+- `web/MOTION_GUIDELINES.md`

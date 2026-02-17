@@ -32,13 +32,16 @@ jobs:
         run: |
           set -euo pipefail
           npm ci
-          node --check src/index.js
+          while IFS= read -r file; do
+            node --check "$file"
+          done < <(find src -name "*.js" -type f | sort)
 
       - name: Validate web
         working-directory: web
         run: |
           set -euo pipefail
           npm ci
+          npm run lint
           npm run build
 
   deploy-dev:
@@ -83,6 +86,16 @@ jobs:
       CHATWOOT_PAGES_LIMIT: ${{ vars.CHATWOOT_PAGES_LIMIT }}
       CHATWOOT_MESSAGES_LIMIT: ${{ vars.CHATWOOT_MESSAGES_LIMIT }}
       CHATWOOT_LOOKBACK_DAYS: ${{ vars.CHATWOOT_LOOKBACK_DAYS }}
+      ATTIO_BASE_URL: ${{ vars.ATTIO_BASE_URL }}
+      ATTIO_WORKSPACE_ID: ${{ vars.ATTIO_WORKSPACE_ID }}
+      ATTIO_API_TOKEN: ${{ secrets.ATTIO_API_TOKEN }}
+      ATTIO_SYNC_LIMIT: ${{ vars.ATTIO_SYNC_LIMIT }}
+      ATTIO_MOCK_MODE: ${{ vars.ATTIO_MOCK_MODE }}
+      LINEAR_BASE_URL: ${{ vars.LINEAR_BASE_URL }}
+      LINEAR_WORKSPACE_ID: ${{ vars.LINEAR_WORKSPACE_ID }}
+      LINEAR_API_TOKEN: ${{ secrets.LINEAR_API_TOKEN }}
+      LINEAR_SYNC_LIMIT: ${{ vars.LINEAR_SYNC_LIMIT }}
+      LINEAR_MOCK_MODE: ${{ vars.LINEAR_MOCK_MODE }}
       OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
       EMBEDDING_MODEL: ${{ vars.EMBEDDING_MODEL }}
       EMBEDDING_DIM: ${{ vars.EMBEDDING_DIM }}
@@ -96,6 +109,10 @@ jobs:
       SEARCH_HNSW_EF_SEARCH: ${{ vars.SEARCH_HNSW_EF_SEARCH }}
       STORAGE_BUDGET_GB: ${{ vars.STORAGE_BUDGET_GB }}
       STORAGE_ALERT_THRESHOLD_PCT: ${{ vars.STORAGE_ALERT_THRESHOLD_PCT }}
+      WORKER_INTERVAL_SECONDS: ${{ vars.WORKER_INTERVAL_SECONDS }}
+      WORKER_TICK_LIMIT: ${{ vars.WORKER_TICK_LIMIT }}
+      CSRF_COOKIE_NAME: ${{ vars.CSRF_COOKIE_NAME }}
+      NEXT_PUBLIC_CSRF_COOKIE_NAME: ${{ vars.NEXT_PUBLIC_CSRF_COOKIE_NAME }}
     steps:
       - uses: actions/checkout@v4
 
@@ -143,6 +160,16 @@ jobs:
           CHATWOOT_PAGES_LIMIT=${CHATWOOT_PAGES_LIMIT:-20}
           CHATWOOT_MESSAGES_LIMIT=${CHATWOOT_MESSAGES_LIMIT:-300}
           CHATWOOT_LOOKBACK_DAYS=${CHATWOOT_LOOKBACK_DAYS:-7}
+          ATTIO_BASE_URL=${ATTIO_BASE_URL:-https://api.attio.com}
+          ATTIO_WORKSPACE_ID=${ATTIO_WORKSPACE_ID:-}
+          ATTIO_API_TOKEN=${ATTIO_API_TOKEN:-}
+          ATTIO_SYNC_LIMIT=${ATTIO_SYNC_LIMIT:-200}
+          ATTIO_MOCK_MODE=${ATTIO_MOCK_MODE:-1}
+          LINEAR_BASE_URL=${LINEAR_BASE_URL:-https://api.linear.app/graphql}
+          LINEAR_WORKSPACE_ID=${LINEAR_WORKSPACE_ID:-}
+          LINEAR_API_TOKEN=${LINEAR_API_TOKEN:-}
+          LINEAR_SYNC_LIMIT=${LINEAR_SYNC_LIMIT:-200}
+          LINEAR_MOCK_MODE=${LINEAR_MOCK_MODE:-1}
           OPENAI_API_KEY=${OPENAI_API_KEY}
           EMBEDDING_MODEL=${EMBEDDING_MODEL:-text-embedding-3-small}
           EMBEDDING_DIM=${EMBEDDING_DIM:-1536}
@@ -156,6 +183,10 @@ jobs:
           SEARCH_HNSW_EF_SEARCH=${SEARCH_HNSW_EF_SEARCH:-40}
           STORAGE_BUDGET_GB=${STORAGE_BUDGET_GB:-20}
           STORAGE_ALERT_THRESHOLD_PCT=${STORAGE_ALERT_THRESHOLD_PCT:-85}
+          WORKER_INTERVAL_SECONDS=${WORKER_INTERVAL_SECONDS:-60}
+          WORKER_TICK_LIMIT=${WORKER_TICK_LIMIT:-25}
+          CSRF_COOKIE_NAME=${CSRF_COOKIE_NAME:-csrf_token}
+          NEXT_PUBLIC_CSRF_COOKIE_NAME=${NEXT_PUBLIC_CSRF_COOKIE_NAME:-csrf_token}
           EOF
 
       - name: Deploy compose stack
@@ -192,6 +223,10 @@ jobs:
 
           wait_for_url "http://127.0.0.1:${api_port}/health"
           wait_for_url "http://127.0.0.1:${web_port}/login"
+          wait_for_url "http://127.0.0.1:${web_port}/projects"
+          wait_for_url "http://127.0.0.1:${web_port}/jobs"
+          wait_for_url "http://127.0.0.1:${web_port}/search"
+          wait_for_url "http://127.0.0.1:${web_port}/control-tower"
           if [ "${ENABLE_EDGE_PROXY:-true}" = "true" ]; then
             domain="${DOMAIN}"
             if ! wait_for_url "https://${domain}/login" 40 3; then

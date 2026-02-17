@@ -6,7 +6,10 @@
     "dev": "next dev -H 0.0.0.0 -p 3000",
     "build": "next build",
     "start": "next start -H 0.0.0.0 -p 3000",
-    "design:audit": "node scripts/design-audit.mjs"
+    "design:audit": "node scripts/design-audit.mjs",
+    "ui:consistency": "node scripts/ui-consistency-check.mjs",
+    "ui:visual": "node scripts/visual-regression.mjs",
+    "lint": "npm run design:audit && npm run ui:consistency"
   },
   "dependencies": {
     "@heroui/react": "^2.8.9",

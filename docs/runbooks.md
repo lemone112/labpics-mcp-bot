@@ -109,6 +109,53 @@ Each runbook uses the same structure:
 
 ---
 
+## Runbook: Attio/Linear sync failing in Control Tower
+
+**Symptom**
+- `POST /jobs/attio/sync` or `POST /jobs/linear/sync` returns failed status.
+- Control Tower integration block shows stale or missing watermark for `attio:*` / `linear:*`.
+
+**Checks**
+- Validate environment variables:
+  - `ATTIO_BASE_URL`, `ATTIO_API_TOKEN`, `ATTIO_WORKSPACE_ID`
+  - `LINEAR_BASE_URL`, `LINEAR_API_TOKEN`, `LINEAR_WORKSPACE_ID`
+- Check `project_sources` for per-project bindings (`attio_workspace`, `linear_workspace`).
+- Check `sync_watermarks` by `project_id/account_scope_id`.
+- Check latest `job_runs` and `worker_runs` error payload.
+
+**Fix**
+- Correct credentials/source binding for project.
+- Re-run manual sync jobs from `/jobs`.
+- If upstream temporarily unavailable, switch to mock mode (`ATTIO_MOCK_MODE=1`, `LINEAR_MOCK_MODE=1`) to keep pipeline operational for demos/dev.
+
+**Evidence to capture**
+- failing `job_runs` row (`error`, `meta`)
+- source binding row from `project_sources`
+- current sync watermark rows
+
+---
+
+## Runbook: Signals/NBA drift (too many stale proposed items)
+
+**Symptom**
+- Signals page accumulates stale `proposed` signals and NBAs.
+
+**Checks**
+- `POST /signals/extract` result (`generated_candidates`, `touched_signals`, `touched_nba`)
+- status distribution in `signals` / `next_best_actions`
+- dedupe quality (`dedupe_key` collisions / repeats)
+
+**Fix**
+- Run extraction and then triage statuses (`accepted/dismissed/done`).
+- Ensure continuity and upsell preview/apply loops are executed regularly.
+- Trigger `POST /risk/refresh` and digest generation after triage.
+
+**Evidence to capture**
+- before/after status counts
+- sample stale signal IDs + evidence refs
+
+---
+
 ## Runbook: Embeddings job fails
 
 **Symptom**
