@@ -49,7 +49,7 @@ export default function SearchPage() {
 
   return (
     <PageShell title="Search" subtitle="Vector similarity search over ready embeddings">
-      <div className="space-y-6">
+      <div className="space-y-4">
         <Card data-motion-item>
           <CardHeader>
             <CardTitle>Search form</CardTitle>

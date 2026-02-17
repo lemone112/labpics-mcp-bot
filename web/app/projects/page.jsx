@@ -69,7 +69,7 @@ export default function ProjectsPage() {
 
   return (
     <PageShell title="Projects" subtitle="Create and select active project for session">
-      <div className="space-y-6">
+      <div className="space-y-4">
         <Card data-motion-item>
           <CardHeader>
             <CardTitle>New project</CardTitle>
