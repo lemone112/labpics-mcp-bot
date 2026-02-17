@@ -3,7 +3,8 @@
 Canonical terms used across `docs/` and `docs/specs/`.
 
 ## Project
-A top-level isolation boundary. All ingestion, storage, embedding, and search are **project-scoped**.
+A top-level workspace context selected per session (`active_project_id`).
+Current MVP stores this context but does not yet enforce strict project-scoped SQL for ingestion/search.
 
 ## Evidence-first
 A rule: any valuable output (commitment/risk/digest/proposal) must reference primary sources.
@@ -24,10 +25,11 @@ Transform raw messages into chunks suitable for embeddings and retrieval.
 Vector representations stored in Postgres/pgvector.
 
 ## Vector search
-Similarity search over embeddings within a project scope.
+Similarity search over embeddings (`rag_chunks`) using pgvector distance.
+Current MVP executes search in global scope.
 
 ## RAG
-Retrieval-augmented generation: generation grounded in retrieved evidence (project-scoped).
+Retrieval-augmented generation: generation grounded in retrieved evidence.
 
 ## Job
 A background task (sync / embeddings / maintenance) with observable status and logs.

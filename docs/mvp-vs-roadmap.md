@@ -7,16 +7,17 @@ This document prevents drift between what the system **does today** and what is 
 The MVP is defined by:
 
 - Login/password authentication + server sessions
-- Project selection and project-scoped data access
+- Project selection stored in session (`active_project_id`)
 - Chatwoot → DB sync
 - Chunking + embeddings stored in Postgres/pgvector
-- Vector search over embedded chunks (project-scoped)
+- Vector search over embedded chunks (global SQL scope in current MVP)
 - Jobs UI (`/jobs`) to run/observe sync & embeddings
 
 ## Explicit non-goals (MVP)
 
 - Multi-tenant organizations and RBAC
 - Automatic cross-project linking
+- Strict per-project SQL isolation for retrieval pipeline
 - Backfill of legacy data
 - Automated “derived artifacts” (commitments/risks/digests) unless they are evidence-linked and spec’d
 

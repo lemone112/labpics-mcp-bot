@@ -18,7 +18,8 @@ This branch deploys a Docker Compose stack:
 
 3. Smoke check:
 
-- API: `GET http://localhost:8080/health`
+- API direct: `GET http://localhost:8080/health`
+- API via web proxy: `GET http://localhost:3000/api/health`
 - UI: `http://localhost:3000/login`
 
 ## Production (VPS)
@@ -35,7 +36,9 @@ Recommended approach:
 - `OPENAI_API_KEY`
 - `CHATWOOT_API_TOKEN`
 - `AUTH_PASSWORD`
-- `SESSION_SECRET` (if you later add signing)
+- `TELEGRAM_BOT_TOKEN` (optional, for PIN signup)
+- `TELEGRAM_WEBHOOK_SECRET` (optional)
+- `SIGNUP_PIN_SECRET` (optional)
 
 ## Post-deploy checklist
 

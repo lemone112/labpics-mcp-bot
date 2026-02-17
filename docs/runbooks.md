@@ -28,8 +28,9 @@ Each runbook uses the same structure:
 1. Open `/jobs` and inspect latest runs.
    - If there are pending sync runs: complete sync first.
    - If embeddings show `ready = 0`: embeddings are missing.
-2. Confirm project scope
-   - Ensure the UI is set to the intended project (no cross-project assumptions).
+2. Confirm data scope assumptions
+   - Current MVP search is global (not strict per-project SQL scope).
+   - Do not expect project isolation unless schema/query scoping is implemented.
 3. Verify environment
    - `OPENAI_API_KEY` is set on the server.
 
@@ -100,3 +101,31 @@ Each runbook uses the same structure:
 - Error message
 - Batch size
 - Approx message/chunk counts
+
+---
+
+## Runbook: Signup disabled / PIN flow unavailable
+
+**Symptom**
+- On `/login`, account creation flow is disabled or cannot send PIN.
+
+**Checks**
+- `GET /auth/signup/status` response:
+  - `has_telegram_token`
+  - `owner_bound`
+- Server env:
+  - `TELEGRAM_BOT_TOKEN`
+  - `TELEGRAM_WEBHOOK_SECRET` (if used)
+  - `SIGNUP_PIN_SECRET` (optional)
+- Telegram owner binding:
+  - send `/bind` to bot and verify owner is stored.
+
+**Fix**
+- Configure Telegram bot token.
+- Bind owner via webhook flow (`/bind` from target owner account).
+- Retry `POST /auth/signup/start`.
+
+**Evidence to capture**
+- `/auth/signup/status` payload
+- Telegram webhook delivery status
+- Backend logs around `/auth/telegram/webhook` and `/auth/signup/start`
