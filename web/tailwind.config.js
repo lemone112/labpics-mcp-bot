@@ -1,5 +1,23 @@
 const { heroui } = require("@heroui/theme");
 
+const sharedLayout = {
+  radius: {
+    small: "10px",
+    medium: "14px",
+    large: "18px",
+  },
+  borderWidth: {
+    small: "1px",
+    medium: "1px",
+    large: "1px",
+  },
+  boxShadow: {
+    small: "0 6px 16px rgba(20, 24, 40, 0.06)",
+    medium: "0 14px 30px rgba(20, 24, 40, 0.08)",
+    large: "0 22px 48px rgba(20, 24, 40, 0.12)",
+  },
+};
+
 module.exports = {
   darkMode: "class",
   content: [
@@ -11,48 +29,55 @@ module.exports = {
     "./node_modules/@heroui/react/dist/**/*.{js,ts,jsx,tsx}",
   ],
   theme: {
-    extend: {},
+    extend: {
+      fontFamily: {
+        sans: ["Inter", "ui-sans-serif", "system-ui", "-apple-system", "Segoe UI", "Roboto", "Arial", "sans-serif"],
+      },
+    },
   },
   plugins: [
     heroui({
-      defaultTheme: "dark",
+      defaultTheme: "light",
+      layout: sharedLayout,
       themes: {
-        dark: {
+        light: {
           colors: {
-            background: "#05070d",
-            foreground: "#dce7f9",
-            divider: "rgba(148, 163, 184, 0.22)",
-            overlay: "#04050b",
-            focus: "#22d3ee",
-            content1: "#0b1020",
-            content2: "#11192d",
-            content3: "#16223a",
-            content4: "#1b2a44",
+            background: "#f5f6fb",
+            foreground: "#111827",
+            divider: "rgba(15, 23, 42, 0.08)",
+            overlay: "rgba(15, 23, 42, 0.42)",
+            focus: "#635bff",
+            content1: "#ffffff",
+            content2: "#f8f9ff",
+            content3: "#f2f4ff",
+            content4: "#ebefff",
             default: {
-              foreground: "#e6edf8",
-              DEFAULT: "#131d2f",
+              foreground: "#1f2937",
+              DEFAULT: "#eef1fb",
             },
             primary: {
-              50: "#ecfdff",
-              100: "#cffafe",
-              200: "#a5f3fc",
-              300: "#67e8f9",
-              400: "#22d3ee",
-              500: "#06b6d4",
-              600: "#0891b2",
-              700: "#0e7490",
-              800: "#155e75",
-              900: "#164e63",
-              foreground: "#04151e",
-              DEFAULT: "#22d3ee",
+              50: "#eeefff",
+              100: "#e0e1ff",
+              200: "#c8caff",
+              300: "#aaacff",
+              400: "#8786ff",
+              500: "#635bff",
+              600: "#5648f6",
+              700: "#473bd1",
+              800: "#3932a6",
+              900: "#2f2c80",
+              foreground: "#ffffff",
+              DEFAULT: "#635bff",
             },
             secondary: {
-              300: "#c4b5fd",
-              400: "#a78bfa",
-              500: "#8b5cf6",
-              600: "#7c3aed",
-              foreground: "#f4f1ff",
-              DEFAULT: "#8b5cf6",
+              100: "#f5f1ff",
+              200: "#ece3ff",
+              300: "#ddccff",
+              400: "#c5a9ff",
+              500: "#aa82ff",
+              600: "#9567ff",
+              foreground: "#22163f",
+              DEFAULT: "#aa82ff",
             },
             success: {
               400: "#4ade80",
@@ -76,21 +101,63 @@ module.exports = {
               DEFAULT: "#f43f5e",
             },
           },
-          layout: {
-            radius: {
-              small: "10px",
-              medium: "14px",
-              large: "18px",
+        },
+        dark: {
+          extend: "dark",
+          colors: {
+            background: "#090d16",
+            foreground: "#dce7f9",
+            divider: "rgba(148, 163, 184, 0.22)",
+            overlay: "#04050b",
+            focus: "#8786ff",
+            content1: "#11172a",
+            content2: "#171f35",
+            content3: "#1d2942",
+            content4: "#22334e",
+            default: {
+              foreground: "#e6edf8",
+              DEFAULT: "#192138",
             },
-            borderWidth: {
-              small: "1px",
-              medium: "1px",
-              large: "1px",
+            primary: {
+              100: "#e0e1ff",
+              200: "#c8caff",
+              300: "#aaacff",
+              400: "#8786ff",
+              500: "#635bff",
+              600: "#5648f6",
+              700: "#473bd1",
+              800: "#3932a6",
+              foreground: "#eef0ff",
+              DEFAULT: "#8786ff",
             },
-            boxShadow: {
-              small: "0 8px 22px rgba(3, 8, 20, 0.34)",
-              medium: "0 12px 34px rgba(3, 8, 20, 0.4)",
-              large: "0 20px 56px rgba(3, 8, 20, 0.48)",
+            secondary: {
+              300: "#ddccff",
+              400: "#c5a9ff",
+              500: "#aa82ff",
+              600: "#9567ff",
+              foreground: "#f9f5ff",
+              DEFAULT: "#aa82ff",
+            },
+            success: {
+              400: "#4ade80",
+              500: "#22c55e",
+              600: "#16a34a",
+              foreground: "#03130a",
+              DEFAULT: "#22c55e",
+            },
+            warning: {
+              400: "#fbbf24",
+              500: "#f59e0b",
+              600: "#d97706",
+              foreground: "#1a1003",
+              DEFAULT: "#f59e0b",
+            },
+            danger: {
+              400: "#fb7185",
+              500: "#f43f5e",
+              600: "#e11d48",
+              foreground: "#20050c",
+              DEFAULT: "#f43f5e",
             },
           },
         },

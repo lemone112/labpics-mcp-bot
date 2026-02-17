@@ -6,6 +6,7 @@ import { PageShell } from "@/components/page-shell";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { StatusChip } from "@/components/ui/status-chip";
 import { Toast } from "@/components/ui/toast";
 import { apiFetch } from "@/lib/api";
 import { useAuthGuard } from "@/hooks/use-auth-guard";
@@ -54,6 +55,9 @@ export default function JobsPage() {
         <Card data-motion-item>
           <CardHeader>
             <CardTitle>Run jobs</CardTitle>
+            <p className="text-sm text-[var(--text-muted)]">
+              Trigger ingestion and embeddings tasks for the active project.
+            </p>
           </CardHeader>
           <CardContent className="flex flex-wrap gap-3">
             <Button disabled={busyJob.length > 0} onClick={() => runJob("/jobs/chatwoot/sync", "chatwoot_sync")}>
@@ -148,10 +152,12 @@ export default function JobsPage() {
                 {(status?.jobs || []).map((job) => (
                   <TableRow key={`${job.job_name}-${job.id}`}>
                     <TableCell>{job.job_name}</TableCell>
-                    <TableCell>{job.status}</TableCell>
+                    <TableCell>
+                      <StatusChip status={job.status} />
+                    </TableCell>
                     <TableCell>{job.started_at ? new Date(job.started_at).toLocaleString() : "-"}</TableCell>
                     <TableCell>{job.processed_count}</TableCell>
-                    <TableCell className="max-w-[260px] truncate text-rose-300">{job.error || "-"}</TableCell>
+                    <TableCell className="max-w-[260px] truncate text-rose-600">{job.error || "-"}</TableCell>
                   </TableRow>
                 ))}
                 {!status?.jobs?.length ? (

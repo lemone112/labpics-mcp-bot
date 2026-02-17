@@ -40,15 +40,15 @@ export default function LoginPage() {
     <div className="flex min-h-screen items-center justify-center p-4 lg:p-8">
       <MotionGroup className="grid w-full max-w-5xl gap-5 lg:grid-cols-[1.2fr_1fr]">
         <section data-motion-item className="app-surface hidden rounded-[var(--radius-lg)] p-7 lg:flex lg:flex-col">
-          <p className="text-[11px] font-medium uppercase tracking-[0.1em] text-[var(--brand-300)]">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.1em] text-[var(--brand-500)]">
             LABPICS PLATFORM
           </p>
           <h1 className="mt-3 text-3xl font-semibold leading-tight tracking-[-0.03em] text-[var(--text-strong)]">
-            Data operations cockpit with enterprise-grade clarity
+            Operational CRM intelligence with Attio-inspired clarity
           </h1>
           <p className="mt-3 max-w-md text-sm text-[var(--text-muted)]">
-            Unified control over Chatwoot sync, embeddings pipeline and vector search in a
-            consistent workflow.
+            Clean command center for sync, embeddings and semantic search, designed around
+            fast scanning and confident actions.
           </p>
 
           <ul className="mt-8 space-y-3 text-sm text-[var(--text-primary)]">

@@ -53,11 +53,9 @@ export function AppSidebar() {
   return (
     <aside className="app-surface-elevated sticky top-4 flex h-[calc(100vh-2rem)] w-full max-w-64 flex-col rounded-[var(--radius-lg)] p-4">
       <div className="mb-6 border-b border-[var(--border-subtle)] pb-4">
-        <div className="inline-flex items-center gap-2 rounded-full border border-[var(--border-accent)] bg-[rgba(34,211,238,0.08)] px-2 py-1">
+        <div className="inline-flex items-center gap-2 rounded-full border border-[var(--border-accent)] bg-[rgba(99,91,255,0.08)] px-2 py-1">
           <span className="h-2 w-2 rounded-full bg-[var(--brand-400)]" />
-          <span className="text-[11px] font-medium uppercase tracking-[0.08em] text-[var(--brand-300)]">
-            Live
-          </span>
+          <span className="text-[11px] font-medium uppercase tracking-[0.08em] text-[var(--brand-500)]">Workspace</span>
         </div>
         <h1 className="mt-3 text-sm font-semibold tracking-[0.08em] text-[var(--text-strong)]">
           LABPICS CONSOLE
@@ -65,6 +63,9 @@ export function AppSidebar() {
         <p className="mt-1 text-xs text-[var(--text-muted)]">Fastify + pgvector + Hero UI</p>
       </div>
 
+      <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.09em] text-[var(--text-subtle)]">
+        Navigation
+      </p>
       <nav ref={navRef} className="space-y-1.5">
         {items.map((item) => {
           const active = pathname === item.href;
@@ -76,8 +77,8 @@ export function AppSidebar() {
               className={cn(
                 "block rounded-[var(--radius-sm)] border px-3 py-2 text-sm font-medium transition-all",
                 active
-                  ? "border-[var(--border-accent)] bg-[rgba(34,211,238,0.14)] text-[var(--brand-300)] shadow-[var(--shadow-glow)]"
-                  : "border-transparent text-[var(--text-primary)] hover:border-[var(--border-subtle)] hover:bg-[rgba(148,163,184,0.08)]"
+                  ? "border-[var(--border-accent)] bg-[rgba(99,91,255,0.08)] text-[var(--brand-500)] shadow-[var(--shadow-glow)]"
+                  : "border-transparent text-[var(--text-primary)] hover:border-[var(--border-subtle)] hover:bg-[rgba(99,91,255,0.04)]"
               )}
             >
               {item.label}
