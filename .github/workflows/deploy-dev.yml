@@ -98,10 +98,21 @@ jobs:
       - name: Configure SSH key
         run: |
           set -euo pipefail
+          : "${SSH_HOST:?Missing SSH_HOST secret}"
+          : "${SSH_USER:?Missing SSH_USER secret}"
+          : "${SSH_PRIVATE_KEY:?Missing SSH_PRIVATE_KEY secret}"
           install -d -m 700 ~/.ssh
-          printf "%s" "$SSH_PRIVATE_KEY" | tr -d '\r' | sed 's/\\n/\n/g' > ~/.ssh/id_ed25519
+          raw_key="$(printf "%s" "$SSH_PRIVATE_KEY" | tr -d '\r')"
+          printf "%s" "$raw_key" | sed 's/\\n/\n/g' > ~/.ssh/id_ed25519
+          if ! ssh-keygen -l -f ~/.ssh/id_ed25519 >/dev/null 2>&1; then
+            if printf "%s" "$raw_key" | base64 -d > ~/.ssh/id_ed25519 2>/dev/null && ssh-keygen -l -f ~/.ssh/id_ed25519 >/dev/null 2>&1; then
+              echo "decoded SSH_PRIVATE_KEY from base64"
+            else
+              echo "SSH_PRIVATE_KEY is invalid. Use OpenSSH private key text or base64-encoded private key." >&2
+              exit 255
+            fi
+          fi
           chmod 600 ~/.ssh/id_ed25519
-          ssh-keygen -l -f ~/.ssh/id_ed25519 >/dev/null
           ssh-keyscan -H "$SSH_HOST" >> ~/.ssh/known_hosts
 
       - name: Sync repository to remote
