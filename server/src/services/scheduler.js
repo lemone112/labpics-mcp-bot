@@ -7,7 +7,7 @@ import { extractSignalsAndNba } from "./signals.js";
 import { refreshUpsellRadar } from "./upsell.js";
 import { generateDailyDigest, generateWeeklyDigest, refreshAnalytics, refreshRiskAndHealth } from "./intelligence.js";
 
-function toPositiveInt(value, fallback, min = 1, max = 86400) {
+function toPositiveInt(value, fallback, min = 1, max = 2_592_000) {
   const parsed = Number.parseInt(String(value ?? ""), 10);
   if (!Number.isFinite(parsed)) return fallback;
   return Math.max(min, Math.min(max, parsed));
@@ -171,7 +171,7 @@ export async function runSchedulerTick(pool, scope, options = {}) {
             updated_at = now()
           WHERE id = $1
         `,
-        [job.id, toPositiveInt(job.cadence_seconds, 900, 1, 86400)]
+        [job.id, toPositiveInt(job.cadence_seconds, 900, 1, 2_592_000)]
       );
       stats.ok++;
       stats.details.push({ job_type: job.job_type, status: "ok", details: details || {} });
