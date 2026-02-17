@@ -26,6 +26,7 @@ import { syncLoopsContacts } from "./services/loops.js";
 import { listKagRecommendations, listKagScores, listKagSignals, runKagRecommendationRefresh } from "./services/kag.js";
 import { listProjectEvents } from "./services/event-log.js";
 import { buildProjectSnapshot, listPastCaseOutcomes, listProjectSnapshots } from "./services/snapshots.js";
+import { findSimilarCases, rebuildCaseSignatures } from "./services/similarity.js";
 import {
   generateDailyDigest,
   generateWeeklyDigest,
@@ -1190,6 +1191,38 @@ async function main() {
       outcome_type: request.query?.outcome_type,
     });
     return sendOk(reply, request.requestId, { outcomes });
+  });
+
+  registerPost("/kag/similarity/rebuild", async (request, reply) => {
+    const scope = requireProjectScope(request);
+    const body = request.body && typeof request.body === "object" ? request.body : {};
+    const result = await rebuildCaseSignatures(pool, scope, {
+      project_id: body?.project_id,
+      window_days: body?.window_days,
+    });
+    await writeAuditEvent(pool, {
+      projectId: scope.projectId,
+      accountScopeId: scope.accountScopeId,
+      actorUsername: request.auth?.username || null,
+      action: "kag.similarity.rebuild",
+      entityType: "case_signature",
+      entityId: String(body?.project_id || scope.projectId),
+      status: "ok",
+      requestId: request.requestId,
+      payload: result,
+      evidenceRefs: [],
+    });
+    return sendOk(reply, request.requestId, { result });
+  });
+
+  registerGet("/kag/similar-cases", async (request, reply) => {
+    const scope = requireProjectScope(request);
+    const cases = await findSimilarCases(pool, scope, {
+      project_id: request.query?.project_id,
+      window_days: request.query?.window_days,
+      top_k: request.query?.top_k,
+    });
+    return sendOk(reply, request.requestId, { cases: cases.slice(0, 3), all: cases });
   });
 
   registerPost("/upsell/radar/refresh", async (request, reply) => {

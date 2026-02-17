@@ -7,6 +7,7 @@ import { syncLoopsContacts } from "./loops.js";
 import { runKagRecommendationRefresh } from "./kag.js";
 import { runConnectorSync } from "./connector-sync.js";
 import { buildProjectSnapshot } from "./snapshots.js";
+import { rebuildCaseSignatures } from "./similarity.js";
 
 function toPositiveInt(value, fallback, min = 1, max = 2_592_000) {
   const parsed = Number.parseInt(String(value ?? ""), 10);
@@ -33,6 +34,7 @@ function createHandlers(customHandlers = {}) {
       processDueOutbounds(pool, scope, "scheduler", `scheduler_campaign_${Date.now()}`, 50),
     analytics_aggregates: async ({ pool, scope }) => refreshAnalytics(pool, scope, 30),
     project_snapshot_daily: async ({ pool, scope }) => buildProjectSnapshot(pool, scope, {}),
+    case_signatures_refresh: async ({ pool, scope }) => rebuildCaseSignatures(pool, scope, {}),
     loops_contacts_sync: async ({ pool, scope }) =>
       syncLoopsContacts(
         pool,
@@ -62,6 +64,7 @@ export async function ensureDefaultScheduledJobs(pool, scope) {
     { jobType: "campaign_scheduler", cadenceSeconds: 300 },
     { jobType: "analytics_aggregates", cadenceSeconds: 1800 },
     { jobType: "project_snapshot_daily", cadenceSeconds: 86400 },
+    { jobType: "case_signatures_refresh", cadenceSeconds: 21600 },
     { jobType: "loops_contacts_sync", cadenceSeconds: 3600 },
     { jobType: "kag_recommendations_refresh", cadenceSeconds: 900 },
   ];
