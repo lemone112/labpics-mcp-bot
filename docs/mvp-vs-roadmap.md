@@ -1,29 +1,29 @@
-# MVP now vs Roadmap
+# MVP now vs Roadmap (Labpics Dashboard)
 
 This document prevents drift between what the system **does today** and what is **planned**.
 
 ## MVP (now)
 
-The MVP is defined by:
+MVP is the minimal evidence-backed loop:
 
-- Project selection stored in session (`active_project_id`)
+- login/password authentication + server sessions
+- project selection stored in session (`active_project_id`)
 - Chatwoot → DB sync
-- Chunking + embeddings stored in Postgres/pgvector
-- Vector search over embedded chunks (global SQL scope in current MVP)
-- Jobs UI (`/jobs`) to run/observe sync & embeddings
+- chunking + embeddings stored in Postgres/pgvector
+- vector search over embedded chunks (strict SQL scope)
+- jobs UI to run/observe sync & embeddings
 
-## Explicit non-goals (MVP)
+## Non-goals (MVP)
 
-- Multi-tenant organizations and RBAC
-- Automatic cross-project linking
-- Strict per-project SQL isolation for retrieval pipeline
-- Backfill of legacy data
-- Automated “derived artifacts” (commitments/risks/digests) unless they are evidence-linked and spec’d
+- organizations/RBAC
+- automatic cross-project linking
+- uncontrolled writebacks to external systems
 
 ## Roadmap (later)
 
-Future work belongs in specs and should be tagged as roadmap:
-
-- Commitments / risks / weekly digests derived views
-- Integrations beyond Chatwoot
-- Advanced permission model
+- commitments / risks / digests automation
+- Linear/Attio deep workflows (preview→apply + writeback)
+- signals/NBA and outbound approvals
+- CRM (accounts/opportunities) and sales tooling
+- health score / risk radar
+- revenue analytics

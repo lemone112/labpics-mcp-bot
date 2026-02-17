@@ -37,6 +37,13 @@
 5. **Командная палитра** (позже)
    - “перейти к проекту”, “запустить импорт”, “создать commitment”
 
+## UI shell baseline (implementation constraint)
+
+UI shell for MVP is based on **shadcn/ui sidebar-04**.
+
+- generate: `npx shadcn@latest add sidebar-04`
+- the shell must host: project switcher, primary navigation, and top bar actions
+
 ## Ключевой UX-инвариант
 
 Пользователь **всегда** должен понимать:

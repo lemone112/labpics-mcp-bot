@@ -1,4 +1,4 @@
-# Design System 2026 (Attio/Amie-aligned)
+# Design System 2026 (shadcn UI)
 
 This UI is intentionally optimized for a quiet SaaS surface:
 
@@ -9,23 +9,20 @@ This UI is intentionally optimized for a quiet SaaS surface:
 
 ## 1) Non-negotiable rules
 
-1. Tokens first. No raw visual values in features when a token exists.
-2. No decorative shadows by default.
-3. Minimal typography: only apply explicit text styles when hierarchy requires it.
-4. Radius math for nested blocks is mandatory:
-   - `innerRadius = outerRadius - containerPadding`
-   - use `.app-inset` + `--container-radius` + `--container-padding`
-5. One interaction language for all controls:
+1. Use shadcn component primitives from `components/ui/*` first.
+2. Use semantic theme classes (`bg-background`, `text-foreground`, `border-input`, etc.).
+3. Keep typography simple and consistent with shadcn defaults.
+4. One interaction language for all controls:
    - same focus ring family
    - same disabled behavior
    - same density scale
 
 ## 2) Visual grammar
 
-- Surfaces: neutral (`--surface-*`)
-- Borders: thin (`--border-subtle`, `--border-strong`)
-- Accent: reserved for action and focus (`--brand-*`)
-- Status: semantic tokens (`--status-*`)
+- Surfaces: `background`, `card`, `popover`
+- Borders: `border`, `input`
+- Accent: `primary`, `secondary`, `accent`
+- Alerts: `destructive`
 
 ## 3) Typography scale
 
@@ -45,27 +42,73 @@ Avoid:
 ## 4) Component constraints
 
 - Card:
-  - defines container radius/padding variables
-  - nested tiles inside card must use `.app-inset`
+  - use shadcn `Card` primitives (`CardHeader`, `CardContent`, `CardTitle`, `CardDescription`)
 - Table:
-  - always horizontally safe (`overflow-x-auto`)
+  - use shadcn `Table` primitives
+  - keep horizontally safe wrappers
   - headers and cells share one density system
 - Buttons:
-  - no decorative transforms
-  - explicit focus-visible ring
+  - use shadcn button variants (`default`, `secondary`, `outline`, `ghost`, `destructive`)
 - Inputs:
-  - border-driven interaction state
-  - focus ring for keyboard accessibility
+  - use shadcn `Input` and related form primitives
 
 ## 5) Quality gate (before merge)
 
 Every UI change must pass this checklist:
 
-- [ ] No ad-hoc colors when token exists
-- [ ] No unnecessary shadow
+- [ ] No ad-hoc colors when semantic classes exist
+- [ ] No one-off style objects
 - [ ] No unnecessary typography overrides
-- [ ] Nested radius follows formula
 - [ ] Hover/focus/disabled states are consistent
 - [ ] Mobile overflow is safe
 - [ ] Build succeeds
 - [ ] `npm run design:audit` succeeds
+
+## 6) Standard component library (shadcn + custom)
+
+All product surfaces must use this shared set before creating new visual primitives:
+
+- `Table` (sortable/list views)
+- `Kanban` (opportunity/action stage views)
+- `InboxList` (message/evidence streams)
+- `Drawer` / modal patterns
+- `Filters` (query + trailing controls)
+- `StatTile` (topline metrics)
+- `StatusChip` (semantic status language)
+- `EmptyState`
+- `Toast`
+- `SkeletonBlock`
+
+Rules:
+
+1. Prefer variant props over one-off classes.
+2. New component APIs must preserve compact/comfortable density compatibility.
+3. New components must define loading/empty/error state behavior.
+
+## 7) Motion system (Anime.js standard)
+
+Anime.js is the single motion engine.
+
+- Duration tokens live in `web/lib/motion.js`.
+- Easing tokens live in `web/lib/motion.js`.
+- Respect reduced motion (`prefers-reduced-motion`).
+- No random per-page animation curves/durations.
+
+### Motion budget
+
+- Micro feedback: `120-220ms`
+- Surface/list transitions: `220-420ms`
+- Avoid chaining more than 2 sequential animations for one interaction.
+- Never animate layout in a way that causes content jumps.
+
+### Where motion is required
+
+- Feedback after critical user actions (submit, approve, status changes)
+- Progressive reveal for page sections and dense lists
+- Controlled transitions for drawers/modals
+
+### Where motion is forbidden
+
+- Decorative looping animations on data tables/forms
+- Aggressive entrance motion that delays reading
+- Rapid repetitive animation that distracts from evidence workflows

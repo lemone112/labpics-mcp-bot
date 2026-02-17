@@ -2,130 +2,60 @@
 
 Operational playbooks for the MVP.
 
-> If you are new: start from [`docs/index.md`](./index.md) → run the MVP loop → then use this page when something breaks.
+Start from: [`docs/index.md`](./index.md)
 
-## Incident templates
+## MVP loop checklist
 
-Each runbook uses the same structure:
-
-- **Symptom**
-- **Impact**
-- **Checks** (UI, DB, logs, env)
-- **Fix**
-- **Evidence to capture** (for an issue)
-
----
+1. Login works
+2. Project selected
+3. Sync runs
+4. Embeddings run
+5. Search returns evidence-backed results
 
 ## Runbook: Search returns no results
 
-**Symptom**
-- `/search` returns empty results for queries that should match.
+Checks:
 
-**Impact**
-- Users cannot retrieve evidence-backed context.
+- Verify an active project is selected.
+- Verify `rag_chunks` exist for the project.
+- Verify embeddings have `ready > 0`.
+- Verify `OPENAI_API_KEY` is set.
 
-**Checks**
-1. Open `/jobs` and inspect latest runs.
-   - If there are pending sync runs: complete sync first.
-   - If embeddings show `ready = 0`: embeddings are missing.
-2. Confirm data scope assumptions
-   - Current MVP search is global (not strict per-project SQL scope).
-   - Do not expect project isolation unless schema/query scoping is implemented.
-3. Verify environment
-   - `OPENAI_API_KEY` is set on the server.
+Fix:
 
-**Fix**
-- Run **Sync** job, then **Embeddings** job.
-- If embeddings keep failing: set `EMBED_BATCH_SIZE=20` and retry.
+- Run sync, then embeddings.
 
-**Evidence to capture**
-- Screenshot of `/jobs` status
-- The job run error text
-- Project id/name
+## Runbook: Chatwoot sync fails
 
----
+Checks:
 
-## Runbook: Chatwoot sync job fails
+- `CHATWOOT_BASE_URL`
+- `CHATWOOT_API_TOKEN`
+- `CHATWOOT_ACCOUNT_ID`
 
-**Symptom**
-- Sync job shows failed status.
+Fix:
 
-**Checks**
-- In `/jobs`, open the latest error details.
-- Verify env variables:
-  - `CHATWOOT_BASE_URL`
-  - `CHATWOOT_API_TOKEN`
-  - `CHATWOOT_ACCOUNT_ID`
-
-**Fix**
-- Correct env vars and re-run the sync job.
-
-**Evidence to capture**
-- The failing request/endpoint (if present in logs)
-- The account id and inbox id (if applicable)
-
----
+- Correct env vars and rerun the job.
 
 ## Runbook: Auth loop / unauthorized
 
-**Symptom**
-- UI redirects back to login or API returns 401/403.
+Checks:
 
-**Checks**
-- Browser devtools: cookie is set and sent.
-- Server env: `CORS_ORIGIN` matches UI origin.
-- Reverse proxy: cookies are not stripped.
+- Session cookie is set and sent.
+- For protected POST requests: CSRF cookie + `x-csrf-token` header.
 
-**Fix**
-- Align `CORS_ORIGIN` and proxy settings, then re-login.
+Fix:
 
-**Evidence to capture**
-- Response headers
-- Server logs around auth
-
----
+- Clear cookies and login again.
+- Align `CORS_ORIGIN` with the UI origin.
 
 ## Runbook: Embeddings job fails
 
-**Symptom**
-- Embeddings job fails or stalls.
+Checks:
 
-**Checks**
-- Validate OpenAI key and quotas.
-- Inspect error logs from the job run.
+- OpenAI key/quota
+- job error payload
 
-**Fix**
-- Reduce `EMBED_BATCH_SIZE` to 20 and retry.
+Fix:
 
-**Evidence to capture**
-- Error message
-- Batch size
-- Approx message/chunk counts
-
----
-
-## Runbook: Signup disabled / PIN flow unavailable
-
-**Symptom**
-- On `/login`, account creation flow is disabled or cannot send PIN.
-
-**Checks**
-- `GET /auth/signup/status` response:
-  - `has_telegram_token`
-  - `owner_bound`
-- Server env:
-  - `TELEGRAM_BOT_TOKEN`
-  - `TELEGRAM_WEBHOOK_SECRET` (if used)
-  - `SIGNUP_PIN_SECRET` (optional)
-- Telegram owner binding:
-  - send `/bind` to bot and verify owner is stored.
-
-**Fix**
-- Configure Telegram bot token.
-- Bind owner via webhook flow (`/bind` from target owner account).
-- Retry `POST /auth/signup/start`.
-
-**Evidence to capture**
-- `/auth/signup/status` payload
-- Telegram webhook delivery status
-- Backend logs around `/auth/telegram/webhook` and `/auth/signup/start`
+- Reduce `EMBED_BATCH_SIZE` and retry.

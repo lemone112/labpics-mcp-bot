@@ -1,6 +1,6 @@
 {
   "$schema": "https://ui.shadcn.com/schema.json",
-  "style": "new-york",
+  "style": "vega",
   "rsc": true,
   "tsx": false,
   "tailwind": {
@@ -11,6 +11,12 @@
     "prefix": ""
   },
   "iconLibrary": "lucide",
+  "theme": "blue",
+  "base": "radix",
+  "font": "geist",
+  "menuAccent": "subtle",
+  "menuColor": "default",
+  "radius": "medium",
   "rtl": false,
   "aliases": {
     "components": "@/components",

@@ -2,6 +2,7 @@ import crypto from "node:crypto";
 
 import { fetchWithRetry } from "../lib/http.js";
 import { chunkText, toIsoTime, toPositiveInt } from "../lib/chunking.js";
+import { resolveProjectSourceBinding } from "./sources.js";
 
 function requiredEnv(name) {
   const value = process.env[name];
@@ -9,16 +10,16 @@ function requiredEnv(name) {
   return value;
 }
 
-function conversationGlobalId(accountId, conversationId) {
-  return `cw:${accountId}:${conversationId}`;
+function conversationGlobalId(projectId, accountId, conversationId) {
+  return `cw:${projectId}:${accountId}:${conversationId}`;
 }
 
-function messageGlobalId(accountId, messageId) {
-  return `cwmsg:${accountId}:${messageId}`;
+function messageGlobalId(projectId, accountId, messageId) {
+  return `cwmsg:${projectId}:${accountId}:${messageId}`;
 }
 
-function contactGlobalId(accountId, contactId) {
-  return `cwc:${accountId}:${contactId}`;
+function contactGlobalId(projectId, accountId, contactId) {
+  return `cwc:${projectId}:${accountId}:${contactId}`;
 }
 
 function sha256Hex(value) {
@@ -74,7 +75,7 @@ function shouldSkipMessage(createdAt, since, messageId, watermarkMessageId) {
   return messageId <= watermarkMessageId;
 }
 
-function extractContact(sender, accountId, fallbackUpdatedAt, fallbackId = null) {
+function extractContact(sender, projectId, accountId, fallbackUpdatedAt, fallbackId = null) {
   if (!sender || typeof sender !== "object") return null;
   const rawId = sender.id ?? fallbackId;
   const contactId = toBigIntOrNull(rawId);
@@ -93,7 +94,7 @@ function extractContact(sender, accountId, fallbackUpdatedAt, fallbackId = null)
         : {};
 
   return {
-    id: contactGlobalId(accountId, contactId),
+    id: contactGlobalId(projectId, accountId, contactId),
     account_id: Number(accountId),
     contact_id: contactId,
     name,
@@ -106,25 +107,25 @@ function extractContact(sender, accountId, fallbackUpdatedAt, fallbackId = null)
   };
 }
 
-function extractConversationContact(conversation, accountId, fallbackUpdatedAt) {
+function extractConversationContact(conversation, projectId, accountId, fallbackUpdatedAt) {
   const sender = conversation?.meta?.sender || conversation?.contact || conversation?.sender || null;
   const senderType = String(sender?.type || sender?.role || "").toLowerCase();
   if (senderType && !senderType.includes("contact") && !senderType.includes("customer")) return null;
-  return extractContact(sender, accountId, fallbackUpdatedAt);
+  return extractContact(sender, projectId, accountId, fallbackUpdatedAt);
 }
 
-function extractMessageContact(message, accountId, fallbackUpdatedAt) {
+function extractMessageContact(message, projectId, accountId, fallbackUpdatedAt) {
   const senderType = String(message?.sender_type || "").toLowerCase();
   const senderObjectType = String(message?.sender?.type || "").toLowerCase();
   const sender = message?.sender || null;
   const senderId = message?.sender_id;
 
   if (senderType.includes("contact")) {
-    return extractContact(sender, accountId, fallbackUpdatedAt, senderId);
+    return extractContact(sender, projectId, accountId, fallbackUpdatedAt, senderId);
   }
 
   if (!senderType && (!senderObjectType || senderObjectType.includes("contact"))) {
-    return extractContact(sender, accountId, fallbackUpdatedAt, senderId);
+    return extractContact(sender, projectId, accountId, fallbackUpdatedAt, senderId);
   }
   return null;
 }
@@ -188,44 +189,59 @@ async function listConversations(baseUrl, token, accountId, maxConversations, lo
   return out.slice(0, maxConversations);
 }
 
-async function getWatermark(pool, source) {
+async function getWatermark(pool, scope, source) {
   const { rows } = await pool.query(
     `
       SELECT source, cursor_ts, cursor_id, meta
       FROM sync_watermarks
-      WHERE source = $1
+      WHERE project_id = $1
+        AND account_scope_id = $2
+        AND source = $3
       LIMIT 1
     `,
-    [source]
+    [scope.projectId, scope.accountScopeId, source]
   );
   return rows[0] || null;
 }
 
-async function upsertWatermark(pool, source, cursorTs, cursorId, meta) {
+async function upsertWatermark(pool, scope, source, cursorTs, cursorId, meta) {
   await pool.query(
     `
-      INSERT INTO sync_watermarks(source, cursor_ts, cursor_id, meta, updated_at)
-      VALUES ($1, $2, $3, $4::jsonb, now())
-      ON CONFLICT (source)
+      INSERT INTO sync_watermarks(project_id, account_scope_id, source, cursor_ts, cursor_id, meta, updated_at)
+      VALUES ($1, $2, $3, $4, $5, $6::jsonb, now())
+      ON CONFLICT (project_id, source)
       DO UPDATE
-      SET cursor_ts = EXCLUDED.cursor_ts,
+      SET account_scope_id = EXCLUDED.account_scope_id,
+          cursor_ts = EXCLUDED.cursor_ts,
           cursor_id = EXCLUDED.cursor_id,
           meta = EXCLUDED.meta,
           updated_at = now()
     `,
-    [source, cursorTs, cursorId, JSON.stringify(meta || {})]
+    [scope.projectId, scope.accountScopeId, source, cursorTs, cursorId, JSON.stringify(meta || {})]
   );
 }
 
-async function upsertConversation(pool, row) {
+async function upsertConversation(pool, scope, row) {
   await pool.query(
     `
       INSERT INTO cw_conversations(
-        id, account_id, conversation_id, contact_global_id, inbox_id, status, assignee_id, data, updated_at
+        id,
+        project_id,
+        account_scope_id,
+        account_id,
+        conversation_id,
+        contact_global_id,
+        inbox_id,
+        status,
+        assignee_id,
+        data,
+        updated_at
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb, $11)
       ON CONFLICT (id)
       DO UPDATE SET
+        project_id = EXCLUDED.project_id,
+        account_scope_id = EXCLUDED.account_scope_id,
         account_id = EXCLUDED.account_id,
         conversation_id = EXCLUDED.conversation_id,
         contact_global_id = EXCLUDED.contact_global_id,
@@ -244,6 +260,8 @@ async function upsertConversation(pool, row) {
     `,
     [
       row.id,
+      scope.projectId,
+      scope.accountScopeId,
       row.account_id,
       row.conversation_id,
       row.contact_global_id,
@@ -256,11 +274,13 @@ async function upsertConversation(pool, row) {
   );
 }
 
-async function upsertMessagesBatch(pool, rows) {
+async function upsertMessagesBatch(pool, scope, rows) {
   if (!rows.length) return 0;
 
   const payload = rows.map((row) => ({
     id: row.id,
+    project_id: scope.projectId,
+    account_scope_id: scope.accountScopeId,
     account_id: row.account_id,
     message_id: row.message_id,
     conversation_id: row.conversation_id,
@@ -279,14 +299,44 @@ async function upsertMessagesBatch(pool, rows) {
   const { rowCount } = await pool.query(
     `
       INSERT INTO cw_messages(
-        id, account_id, message_id, conversation_id, conversation_global_id, contact_global_id,
-        sender_type, sender_id, private, message_type, content, data, created_at, updated_at
+        id,
+        project_id,
+        account_scope_id,
+        account_id,
+        message_id,
+        conversation_id,
+        conversation_global_id,
+        contact_global_id,
+        sender_type,
+        sender_id,
+        private,
+        message_type,
+        content,
+        data,
+        created_at,
+        updated_at
       )
       SELECT
-        x.id, x.account_id, x.message_id, x.conversation_id, x.conversation_global_id, x.contact_global_id,
-        x.sender_type, x.sender_id, x.private, x.message_type, x.content, x.data, x.created_at, x.updated_at
+        x.id,
+        x.project_id,
+        x.account_scope_id,
+        x.account_id,
+        x.message_id,
+        x.conversation_id,
+        x.conversation_global_id,
+        x.contact_global_id,
+        x.sender_type,
+        x.sender_id,
+        x.private,
+        x.message_type,
+        x.content,
+        x.data,
+        x.created_at,
+        x.updated_at
       FROM jsonb_to_recordset($1::jsonb) AS x(
         id text,
+        project_id uuid,
+        account_scope_id uuid,
         account_id bigint,
         message_id bigint,
         conversation_id bigint,
@@ -303,6 +353,8 @@ async function upsertMessagesBatch(pool, rows) {
       )
       ON CONFLICT (id)
       DO UPDATE SET
+        project_id = EXCLUDED.project_id,
+        account_scope_id = EXCLUDED.account_scope_id,
         account_id = EXCLUDED.account_id,
         message_id = EXCLUDED.message_id,
         conversation_id = EXCLUDED.conversation_id,
@@ -331,11 +383,13 @@ async function upsertMessagesBatch(pool, rows) {
   return rowCount || 0;
 }
 
-async function upsertContactsBatch(pool, contacts) {
+async function upsertContactsBatch(pool, scope, contacts) {
   if (!contacts.length) return 0;
 
   const payload = contacts.map((row) => ({
     id: row.id,
+    project_id: scope.projectId,
+    account_scope_id: scope.accountScopeId,
     account_id: row.account_id,
     contact_id: row.contact_id,
     name: row.name,
@@ -350,13 +404,36 @@ async function upsertContactsBatch(pool, contacts) {
   const { rowCount } = await pool.query(
     `
       INSERT INTO cw_contacts(
-        id, account_id, contact_id, name, email, phone_number, identifier, custom_attributes, data, updated_at
+        id,
+        project_id,
+        account_scope_id,
+        account_id,
+        contact_id,
+        name,
+        email,
+        phone_number,
+        identifier,
+        custom_attributes,
+        data,
+        updated_at
       )
       SELECT
-        x.id, x.account_id, x.contact_id, x.name, x.email, x.phone_number, x.identifier,
-        x.custom_attributes, x.data, x.updated_at
+        x.id,
+        x.project_id,
+        x.account_scope_id,
+        x.account_id,
+        x.contact_id,
+        x.name,
+        x.email,
+        x.phone_number,
+        x.identifier,
+        x.custom_attributes,
+        x.data,
+        x.updated_at
       FROM jsonb_to_recordset($1::jsonb) AS x(
         id text,
+        project_id uuid,
+        account_scope_id uuid,
         account_id bigint,
         contact_id bigint,
         name text,
@@ -369,6 +446,8 @@ async function upsertContactsBatch(pool, contacts) {
       )
       ON CONFLICT (id)
       DO UPDATE SET
+        project_id = EXCLUDED.project_id,
+        account_scope_id = EXCLUDED.account_scope_id,
         account_id = EXCLUDED.account_id,
         contact_id = EXCLUDED.contact_id,
         name = EXCLUDED.name,
@@ -392,10 +471,12 @@ async function upsertContactsBatch(pool, contacts) {
   return rowCount || 0;
 }
 
-async function insertChunkRows(pool, chunkRows) {
+async function insertChunkRows(pool, scope, chunkRows) {
   if (!chunkRows.length) return { inserted: 0, reset_pending: 0 };
 
   const payload = chunkRows.map((row) => ({
+    project_id: scope.projectId,
+    account_scope_id: scope.accountScopeId,
     conversation_global_id: row.conversation_global_id,
     message_global_id: row.message_global_id,
     chunk_index: row.chunk_index,
@@ -408,6 +489,8 @@ async function insertChunkRows(pool, chunkRows) {
   const inserted = await pool.query(
     `
       INSERT INTO rag_chunks(
+        project_id,
+        account_scope_id,
         conversation_global_id,
         message_global_id,
         chunk_index,
@@ -419,6 +502,8 @@ async function insertChunkRows(pool, chunkRows) {
         updated_at
       )
       SELECT
+        x.project_id,
+        x.account_scope_id,
         x.conversation_global_id,
         x.message_global_id,
         x.chunk_index,
@@ -429,6 +514,8 @@ async function insertChunkRows(pool, chunkRows) {
         x.embedding_model,
         now()
       FROM jsonb_to_recordset($1::jsonb) AS x(
+        project_id uuid,
+        account_scope_id uuid,
         conversation_global_id text,
         message_global_id text,
         chunk_index int,
@@ -457,6 +544,8 @@ async function insertChunkRows(pool, chunkRows) {
         embedding_error = NULL,
         updated_at = now()
       FROM jsonb_to_recordset($1::jsonb) AS x(
+        project_id uuid,
+        account_scope_id uuid,
         conversation_global_id text,
         message_global_id text,
         chunk_index int,
@@ -466,7 +555,9 @@ async function insertChunkRows(pool, chunkRows) {
         embedding_model text
       )
       WHERE
-        rc.message_global_id = x.message_global_id
+        rc.project_id = x.project_id
+        AND rc.account_scope_id = x.account_scope_id
+        AND rc.message_global_id = x.message_global_id
         AND rc.chunk_index = x.chunk_index
         AND rc.text_hash IS DISTINCT FROM x.text_hash
     `,
@@ -501,8 +592,8 @@ function buildChunkRows({ conversationGlobalId: cgid, messageGlobalId: mgid, con
   return rows;
 }
 
-async function getStorageSummary(pool, budgetGb) {
-  const [dbSize, tableSizes] = await Promise.all([
+async function getStorageSummary(pool, scope, budgetGb) {
+  const [dbSize, tableSizes, scopedRowStats] = await Promise.all([
     pool.query("SELECT pg_database_size(current_database())::bigint AS bytes"),
     pool.query(
       `
@@ -517,6 +608,17 @@ async function getStorageSummary(pool, budgetGb) {
       `,
       [["cw_contacts", "cw_conversations", "cw_messages", "rag_chunks"]]
     ),
+    pool.query(
+      `
+        SELECT (
+          COALESCE((SELECT sum(pg_column_size(c.*)) FROM cw_contacts AS c WHERE c.project_id = $1), 0)
+          + COALESCE((SELECT sum(pg_column_size(cn.*)) FROM cw_conversations AS cn WHERE cn.project_id = $1), 0)
+          + COALESCE((SELECT sum(pg_column_size(m.*)) FROM cw_messages AS m WHERE m.project_id = $1), 0)
+          + COALESCE((SELECT sum(pg_column_size(r.*)) FROM rag_chunks AS r WHERE r.project_id = $1), 0)
+        )::bigint AS bytes
+      `,
+      [scope.projectId]
+    ),
   ]);
 
   const perTable = {};
@@ -525,21 +627,29 @@ async function getStorageSummary(pool, budgetGb) {
   }
 
   const dbBytes = Number(dbSize.rows?.[0]?.bytes || 0);
+  const scopedLogicalBytes = Number(scopedRowStats.rows?.[0]?.bytes || 0);
   const budgetBytes = Math.max(1, budgetGb) * 1024 * 1024 * 1024;
   const usagePercent = Number(((dbBytes / budgetBytes) * 100).toFixed(2));
 
   return {
     database_bytes: dbBytes,
+    scoped_logical_bytes: scopedLogicalBytes,
     budget_bytes: budgetBytes,
     usage_percent: usagePercent,
     tables: perTable,
   };
 }
 
-export async function runChatwootSync(pool, logger = console) {
+export async function runChatwootSync(pool, scope, logger = console) {
   const baseUrl = requiredEnv("CHATWOOT_BASE_URL").replace(/\/+$/, "");
   const apiToken = requiredEnv("CHATWOOT_API_TOKEN");
-  const accountId = String(requiredEnv("CHATWOOT_ACCOUNT_ID"));
+  const accountId = await resolveProjectSourceBinding(
+    pool,
+    scope,
+    "chatwoot_account",
+    process.env.CHATWOOT_ACCOUNT_ID || "",
+    { source: "env_bootstrap" }
+  );
   const source = `chatwoot:${accountId}`;
 
   const maxConversations = toPositiveInt(process.env.CHATWOOT_CONVERSATIONS_LIMIT, 60, 1, 1000);
@@ -554,7 +664,7 @@ export async function runChatwootSync(pool, logger = console) {
     Math.min(100, Number.parseFloat(process.env.STORAGE_ALERT_THRESHOLD_PCT || "85"))
   );
 
-  const previousWatermark = await getWatermark(pool, source);
+  const previousWatermark = await getWatermark(pool, scope, source);
   const defaultSince = new Date(Date.now() - lookbackDays * 24 * 60 * 60 * 1000).toISOString();
   const since = toIsoTime(previousWatermark?.cursor_ts) || defaultSince;
   const watermarkMessageNumeric = getCursorMessageNumericId(previousWatermark?.cursor_id);
@@ -574,12 +684,12 @@ export async function runChatwootSync(pool, logger = console) {
     const conversationId = toBigIntOrNull(conversation?.id);
     if (!Number.isFinite(conversationId)) continue;
 
-    const convoGlobalId = conversationGlobalId(accountId, conversationId);
+    const convoGlobalId = conversationGlobalId(scope.projectId, accountId, conversationId);
     const convoUpdatedAt = toIsoTime(conversation?.last_activity_at || conversation?.updated_at || conversation?.created_at);
-    const convoContact = extractConversationContact(conversation, accountId, convoUpdatedAt);
+    const convoContact = extractConversationContact(conversation, scope.projectId, accountId, convoUpdatedAt);
     if (convoContact) contactsById.set(convoContact.id, convoContact);
 
-    await upsertConversation(pool, {
+    await upsertConversation(pool, scope, {
       id: convoGlobalId,
       account_id: Number(accountId),
       conversation_id: conversationId,
@@ -610,9 +720,9 @@ export async function runChatwootSync(pool, logger = console) {
       if (shouldSkipMessage(createdAt, since, messageId, watermarkMessageNumeric)) continue;
 
       const updatedAt = toIsoTime(message?.updated_at || message?.created_at) || createdAt;
-      const msgGlobalId = messageGlobalId(accountId, messageId);
+      const msgGlobalId = messageGlobalId(scope.projectId, accountId, messageId);
       const content = String(message?.content || "");
-      const messageContact = extractMessageContact(message, accountId, updatedAt);
+      const messageContact = extractMessageContact(message, scope.projectId, accountId, updatedAt);
       if (messageContact) contactsById.set(messageContact.id, messageContact);
 
       const convIdRaw = toBigIntOrNull(message?.conversation_id) ?? conversationId;
@@ -655,11 +765,11 @@ export async function runChatwootSync(pool, logger = console) {
     }
 
     if (messageRows.length) {
-      await upsertMessagesBatch(pool, messageRows);
+      await upsertMessagesBatch(pool, scope, messageRows);
     }
 
     if (pendingChunkRows.length) {
-      const chunkResult = await insertChunkRows(pool, pendingChunkRows);
+      const chunkResult = await insertChunkRows(pool, scope, pendingChunkRows);
       insertedChunks += chunkResult.inserted;
       reembeddedChunks += chunkResult.reset_pending;
     }
@@ -671,11 +781,11 @@ export async function runChatwootSync(pool, logger = console) {
     const batchSize = 200;
     for (let i = 0; i < allContacts.length; i += batchSize) {
       const chunk = allContacts.slice(i, i + batchSize);
-      touchedContacts += await upsertContactsBatch(pool, chunk);
+      touchedContacts += await upsertContactsBatch(pool, scope, chunk);
     }
   }
 
-  const storage = await getStorageSummary(pool, storageBudgetGb);
+  const storage = await getStorageSummary(pool, scope, storageBudgetGb);
   if (storage.usage_percent >= storageAlertThresholdPct) {
     logger.warn(
       {
@@ -687,7 +797,9 @@ export async function runChatwootSync(pool, logger = console) {
     );
   }
 
-  await upsertWatermark(pool, source, newestTs, newestMsgId, {
+  await upsertWatermark(pool, scope, source, newestTs, newestMsgId, {
+    project_id: scope.projectId,
+    account_scope_id: scope.accountScopeId,
     processed_conversations: processedConversations,
     processed_messages: processedMessages,
     inserted_chunks: insertedChunks,
@@ -701,6 +813,8 @@ export async function runChatwootSync(pool, logger = console) {
   return {
     source,
     since,
+    project_id: scope.projectId,
+    account_scope_id: scope.accountScopeId,
     processed_conversations: processedConversations,
     processed_messages: processedMessages,
     inserted_chunks: insertedChunks,

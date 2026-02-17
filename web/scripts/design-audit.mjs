@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 
 const ROOT = process.cwd();
-const TARGET_DIRS = ["app", "components"];
+const TARGET_DIRS = ["app", "components", "features"];
 const FILE_EXTENSIONS = new Set([".js", ".jsx", ".ts", ".tsx"]);
 
 const forbiddenRules = [
@@ -21,6 +21,21 @@ const forbiddenRules = [
     name: "uppercase-utility",
     description: "Avoid uppercase utility unless semantically required",
     pattern: /\buppercase\b/,
+  },
+  {
+    name: "inline-style",
+    description: "Use tokenized utility classes instead of inline style objects",
+    pattern: /style=\{\{/,
+  },
+  {
+    name: "anime-duration-literal",
+    description: "Use MOTION duration tokens for Anime.js animations",
+    pattern: /\bduration:\s*\d+/,
+  },
+  {
+    name: "anime-ease-literal",
+    description: "Use MOTION easing tokens for Anime.js animations",
+    pattern: /\bease:\s*["']/,
   },
 ];
 

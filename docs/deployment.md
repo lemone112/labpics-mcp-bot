@@ -1,50 +1,25 @@
 # Deployment (MVP)
 
-This branch deploys a Docker Compose stack:
+This project deploys as a Docker Compose stack:
 
 - Postgres (pgvector)
-- server (Fastify)
-- web (Next.js)
+- `server` (Fastify API + jobs)
+- `web` (Next.js UI)
 
-## Local
+## Environments
 
-1. Create env files:
+- dev: auto-deploy on pushes to `cursor/labpics_dashboard` (if workflows are enabled)
+- prod: manual deploy via GitHub Actions environment approvals
 
-- `cp .env.example .env`
+## Required secrets/vars
 
-2. Start:
+See `README.md` for the full list of environment variables and secrets.
 
-- `docker compose up --build`
+## Health checks
 
-3. Smoke check:
+- API: `GET /health`
+- UI: `/login`
 
-- API direct: `GET http://localhost:8080/health`
-- API via web proxy: `GET http://localhost:3000/api/health`
-- UI: `http://localhost:3000/login`
+## Operational guidance
 
-## Production (VPS)
-
-Recommended approach:
-
-- clone repo to `/opt/labpics`
-- create `.env`
-- run `docker compose up -d --build`
-
-### Required secrets (example)
-
-- `POSTGRES_PASSWORD`
-- `OPENAI_API_KEY`
-- `CHATWOOT_API_TOKEN`
-- `AUTH_PASSWORD`
-- `TELEGRAM_BOT_TOKEN` (optional, for PIN signup)
-- `TELEGRAM_WEBHOOK_SECRET` (optional)
-- `SIGNUP_PIN_SECRET` (optional)
-
-## Post-deploy checklist
-
-- `GET /health` returns `{ ok: true }`
-- Login works
-- Create/select project works
-- Run Chatwoot sync → creates `cw_*` and `rag_chunks`
-- Run embeddings → moves pending → ready
-- Search returns results
+See runbooks: [`docs/runbooks.md`](./runbooks.md)

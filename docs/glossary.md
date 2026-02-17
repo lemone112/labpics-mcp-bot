@@ -3,33 +3,41 @@
 Canonical terms used across `docs/` and `docs/specs/`.
 
 ## Project
-A top-level workspace context selected per session (`active_project_id`).
-Current MVP stores this context but does not yet enforce strict project-scoped SQL for ingestion/search.
 
-## Evidence-first
-A rule: any valuable output (commitment/risk/digest/proposal) must reference primary sources.
+Operational boundary selected per session (`active_project_id`). All reads/writes must be scoped to the active project.
 
-## Safe-by-default
-If the system cannot unambiguously bind an action to a project/entity, it must not do it automatically.
+## Account scope
 
-## Sync
-Ingest raw external data (e.g., Chatwoot conversations/messages) into the DB.
+An additional scoping dimension (`account_scope_id`) attached to a project. Prevents cross-client mixing when multiple accounts exist.
 
-## Watermark
-A cursor that marks how far a sync has progressed for a given scope (e.g., per inbox / per project binding).
+## Evidence
 
-## Chunking
-Transform raw messages into chunks suitable for embeddings and retrieval.
-
-## Embeddings
-Vector representations stored in Postgres/pgvector.
-
-## Vector search
-Similarity search over embeddings (`rag_chunks`) using pgvector distance.
-Current MVP executes search in global scope.
+A stable reference to a source item (message, conversation, chunk, external object). Derived entities must link back to evidence.
 
 ## RAG
-Retrieval-augmented generation: generation grounded in retrieved evidence.
+
+Retrieval-Augmented Generation. In this repo it means: ingest → chunk → embed → vector search → show evidence-backed results.
+
+## Chunk
+
+A text fragment produced from a conversation/message stream and stored as `rag_chunks` with an embedding status.
+
+## Watermark
+
+A per-source progress cursor used by sync jobs to avoid full re-scans (`sync_watermarks`).
 
 ## Job
-A background task (sync / embeddings / maintenance) with observable status and logs.
+
+A repeatable automation step (sync, embeddings, scheduler tick). Jobs must be idempotent.
+
+## Outbox
+
+A controlled outbound pipeline (draft → approved → sent) with guardrails (opt-out, frequency caps, stop-on-reply).
+
+## Preview / Apply
+
+A safety pattern for integrations and writebacks: first generate a preview, then explicitly apply selected actions.
+
+## Control Tower
+
+A scoped project snapshot view: integration health, watermarks, top metrics, NBA/risk overview, and recent evidence.

@@ -15,13 +15,15 @@ async function safeSetLocal(client, key, value, logger = console) {
   }
 }
 
-async function claimPendingChunks(pool, batchSize) {
+async function claimPendingChunks(pool, scope, batchSize) {
   const { rows } = await pool.query(
     `
       WITH picked AS (
         SELECT id, text
         FROM rag_chunks
         WHERE embedding_status = 'pending'
+          AND project_id = $2
+          AND account_scope_id = $3
         ORDER BY created_at ASC
         LIMIT $1
         FOR UPDATE SKIP LOCKED
@@ -35,12 +37,12 @@ async function claimPendingChunks(pool, batchSize) {
       WHERE r.id = picked.id
       RETURNING r.id, picked.text
     `,
-    [batchSize]
+    [batchSize, scope.projectId, scope.accountScopeId]
   );
   return rows;
 }
 
-async function recoverStaleProcessingRows(pool, staleMinutes = 30) {
+async function recoverStaleProcessingRows(pool, scope, staleMinutes = 30) {
   const safeMinutes = Math.max(1, Math.min(24 * 60, staleMinutes));
   await pool.query(
     `
@@ -51,13 +53,15 @@ async function recoverStaleProcessingRows(pool, staleMinutes = 30) {
         updated_at = now()
       WHERE
         embedding_status = 'processing'
+        AND project_id = $2
+        AND account_scope_id = $3
         AND updated_at < (now() - ($1::text || ' minutes')::interval)
     `,
-    [safeMinutes]
+    [safeMinutes, scope.projectId, scope.accountScopeId]
   );
 }
 
-async function markClaimedAsPending(pool, ids, error) {
+async function markClaimedAsPending(pool, scope, ids, error) {
   if (!ids.length) return;
   await pool.query(
     `
@@ -67,12 +71,14 @@ async function markClaimedAsPending(pool, ids, error) {
         embedding_error = $2,
         updated_at = now()
       WHERE id = ANY($1::uuid[])
+        AND project_id = $3
+        AND account_scope_id = $4
     `,
-    [ids, truncateError(error)]
+    [ids, truncateError(error), scope.projectId, scope.accountScopeId]
   );
 }
 
-async function markFailedRows(pool, ids, model, error) {
+async function markFailedRows(pool, scope, ids, model, error) {
   if (!ids.length) return;
   await pool.query(
     `
@@ -83,12 +89,14 @@ async function markFailedRows(pool, ids, model, error) {
         embedding_error = $3,
         updated_at = now()
       WHERE id = ANY($1::uuid[])
+        AND project_id = $4
+        AND account_scope_id = $5
     `,
-    [ids, model, truncateError(error)]
+    [ids, model, truncateError(error), scope.projectId, scope.accountScopeId]
   );
 }
 
-async function markReadyRows(pool, rows, model) {
+async function markReadyRows(pool, scope, rows, model) {
   if (!rows.length) return;
 
   const payload = rows.map((row) => ({
@@ -108,17 +116,19 @@ async function markReadyRows(pool, rows, model) {
         updated_at = now()
       FROM jsonb_to_recordset($1::jsonb) AS x(id uuid, embedding text)
       WHERE r.id = x.id
+        AND r.project_id = $3
+        AND r.account_scope_id = $4
     `,
-    [JSON.stringify(payload), model]
+    [JSON.stringify(payload), model, scope.projectId, scope.accountScopeId]
   );
 }
 
-export async function runEmbeddings(pool, logger = console) {
+export async function runEmbeddings(pool, scope, logger = console) {
   const batchSize = toPositiveInt(process.env.EMBED_BATCH_SIZE, 100, 1, 100);
   const staleMinutes = toPositiveInt(process.env.EMBED_STALE_RECOVERY_MINUTES, 30, 1, 24 * 60);
-  await recoverStaleProcessingRows(pool, staleMinutes);
+  await recoverStaleProcessingRows(pool, scope, staleMinutes);
 
-  const claimedRows = await claimPendingChunks(pool, batchSize);
+  const claimedRows = await claimPendingChunks(pool, scope, batchSize);
   if (!claimedRows.length) {
     return { processed: 0, failed: 0, status: "idle" };
   }
@@ -141,8 +151,8 @@ export async function runEmbeddings(pool, logger = console) {
       readyRows.push({ id: claimed.id, embedding });
     }
 
-    await markReadyRows(pool, readyRows, model);
-    await markFailedRows(pool, failedIds, model, "embedding_missing_from_provider");
+    await markReadyRows(pool, scope, readyRows, model);
+    await markFailedRows(pool, scope, failedIds, model, "embedding_missing_from_provider");
 
     return {
       processed: readyRows.length,
@@ -151,13 +161,13 @@ export async function runEmbeddings(pool, logger = console) {
       model,
     };
   } catch (error) {
-    await markClaimedAsPending(pool, claimedIds, error);
+    await markClaimedAsPending(pool, scope, claimedIds, error);
     logger.error({ err: truncateError(error) }, "embedding batch failed and was returned to pending");
     throw error;
   }
 }
 
-export async function searchChunks(pool, query, topK, logger = console) {
+export async function searchChunks(pool, scope, query, topK, logger = console) {
   const safeTopK = toPositiveInt(topK, 10, 1, 50);
   const normalizedQuery = String(query || "").trim().slice(0, 4_000);
   if (!normalizedQuery) return { query: "", topK: safeTopK, results: [] };
@@ -189,16 +199,20 @@ export async function searchChunks(pool, query, topK, logger = console) {
         FROM rag_chunks
         WHERE embedding_status = 'ready'
           AND embedding IS NOT NULL
+          AND project_id = $2
+          AND account_scope_id = $3
         ORDER BY embedding <-> $1::vector
-        LIMIT $2
+        LIMIT $4
       `,
-      [vectorText, safeTopK]
+      [vectorText, scope.projectId, scope.accountScopeId, safeTopK]
     );
     await client.query("COMMIT");
 
     return {
       query: normalizedQuery,
       topK: safeTopK,
+      project_id: scope.projectId,
+      account_scope_id: scope.accountScopeId,
       embedding_model: model,
       search_config: {
         ivfflat_probes: ivfProbes,

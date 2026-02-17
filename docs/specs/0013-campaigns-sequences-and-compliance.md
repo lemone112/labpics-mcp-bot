@@ -1,100 +1,19 @@
-# Спека 0013 — Campaigns / Sequences / Compliance
+# Спека 0013 — Campaigns / Sequences / Compliance (DRAFT)
 
 Статус: **draft**
 
-Дата: 2026-02-17
+## Факты функционала
 
-> Roadmap: CRM/PM/Sales
+- Система поддерживает sequences (управляемые последовательности исходящих касаний).
+- Встроены guardrails:
+  - opt-out
+  - frequency caps
+  - stop-on-reply
+  - approvals (явное подтверждение)
 
-## Цель
+## Acceptance criteria
 
-Дать студии управляемые рассылки для:
-
-- прогрева (education)
-- reactivation
-- expansion/upsell
-- post-delivery follow-up
-
-При этом:
-
-- обязательный opt-out,
-- частотные ограничения,
-- approval.
-
-## Инварианты
-
-- **Compliance-first**: opt-out и suppression list сильнее любых кампаний.
-- **Safe-by-default**: никаких отправок без approve.
-- **Frequency caps** обязательны.
-- **Stop on reply**: любой ответ клиента останавливает текущий sequence.
-- **Auditability**: кто утвердил и кто отправил фиксируется.
-
-## Каналы (v1)
-
-- Email (при наличии)
-- Chatwoot (если это допустимый канал)
-
-Telegram — только если юридически/этически ок.
-
-## Сущности
-
-### audience_segment
-- `id`, `name`
-- `query` (jsonb: правила сегмента)
-
-### campaign
-- `id`, `name`, `goal`
-- `segment_id`
-- `status` (draft|approved|running|paused|completed)
-- `created_by`
-
-### sequence
-- `id`, `campaign_id`
-- `steps[]`: {day_offset, channel, template_id}
-
-### message_template
-- `id`, `name`, `subject`, `body_md`
-
-### outbound_message
-- `id`, `account_id`, `contact_id`
-- `campaign_id`, `sequence_step`
-- `status` (draft|approved|sent|failed|canceled)
-- `approval_actor`
-- `sent_at`
-
-### opt_out
-- `contact_id`
-- `channel`
-- `reason`
-- `created_at`
-
-## Compliance / Guardrails
-
-- Frequency cap по умолчанию:
-  - max 2 касания/неделя/контакт
-  - max 4 касания/неделя/аккаунт
-- Любой reply клиента останавливает sequence для контакта.
-- Opt-out останавливает всё по каналу.
-- Без approve ничего не отправляется.
-
-## UX
-
-- Campaign list + статусы
-- Campaign builder (segment + sequence)
-- Approval queue (список draft outbound)
-- Отчёты: sent/open/click/reply, conversions, opt-out rate
-
-## Метрики
-
-- sent/open/click/reply
-- conversion to meeting/opportunity
-- opt-out rate
-
-## Критерии приёмки
-
-- Можно создать сегмент.
-- Можно собрать sequence.
-- Approval обязателен.
-- Частотные лимиты соблюдаются.
-- Opt-out работает.
-- Reply останавливает sequence.
+- Нельзя отправлять касания получателю с opt-out.
+- Нельзя превышать frequency caps.
+- Нельзя продолжать sequence после reply (если включено stop-on-reply).
+- Любая отправка проходит через approval.

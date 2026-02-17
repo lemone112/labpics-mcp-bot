@@ -1,52 +1,49 @@
-# System architecture (Web-first MVP)
+# System architecture (web-first MVP)
 
-This branch implements **Web-first** architecture: a single server process (API + jobs) plus a Next.js UI, backed by Postgres (pgvector).
+This repository implements a web-first architecture:
+
+- a single Fastify server process (API + jobs)
+- a Next.js UI
+- Postgres (pgvector) for storage and vector search
 
 ## Components
 
-- **db**: Postgres 16 + pgvector (Docker image `pgvector/pgvector:pg16`)
-- **server**: Node.js + Fastify API + background-like jobs
-- **web**: Next.js UI
+- `server/` — Fastify API, job runners, scheduler/worker loop, DB migrations
+- `web/` — Next.js UI
+- `docker-compose.yml` — local/prod composition
 
-Composition is defined in [`/docker-compose.yml`](../docker-compose.yml).
+## Core loop (MVP)
 
-## Request flow
+1. Login
+2. Select an active project
+3. Sync Chatwoot into scoped tables
+4. Build embeddings for new/changed chunks
+5. Search with strict scope filtering and evidence links
 
-### UI → API
+## Scope model
 
-- Browser calls `NEXT_PUBLIC_API_BASE_URL` (default `/api`).
-- Next.js rewrites `/api/*` to `API_UPSTREAM_URL` (default `http://localhost:8080` locally or `http://server:8080` in Docker).
-- Auth is cookie-based session (`SESSION_COOKIE_NAME`, default `sid`).
+All non-public endpoints require a session and an active project.
 
-### API authentication
+Scope is enforced at multiple layers:
 
-- `POST /auth/login` creates a session row in `sessions` and sets cookie.
-- All routes except `/health` and `/auth/*` require a valid session cookie.
+- DB schema constraints/triggers
+- explicit SQL filters
+- API middleware (resolving `active_project_id` and `account_scope_id`)
 
-### Project scoping
+## Jobs & worker
 
-- Active project is stored on the session row: `sessions.active_project_id`.
-- UI uses `/projects/:id/select` to set the active project.
-- Current MVP retrieval/search SQL is global and does not filter by `active_project_id`.
-- Strict per-project isolation requires adding `project_id` to ingestion/search tables and filtering queries by session project.
+Two layers:
 
-## Jobs execution model
+- manual API-triggered jobs (`/jobs/*`)
+- scheduler tick (`/jobs/scheduler/tick`) which claims due work and records worker runs
 
-Jobs are executed as **API endpoints** (triggered by UI):
+## Integrations (current)
 
-- `POST /jobs/chatwoot/sync`
-- `POST /jobs/embeddings/run`
+- Chatwoot ingest is the MVP source of truth
+- Linear/Attio are optional and should follow preview→apply rules
 
-Each run is recorded in `job_runs` and surfaced in `/jobs/status`.
+## Docs map
 
-## Design constraints
-
-- **Idempotency**: raw rows use stable string IDs (`cw:<...>`, `cwmsg:<...>`).
-- **Observability**: every response includes `request_id` header/body for tracing.
-- **Evidence-first**: future entities must always refer back to raw or chunk rows.
-
-## What is intentionally missing
-
-- Webhooks (polling + jobs only)
-- Queue system (single-process jobs, MVP)
-- Linear/Attio integrations (planned)
+- platform constraints: [`docs/platform-architecture.md`](./platform-architecture.md)
+- pipelines/jobs: [`docs/pipelines.md`](./pipelines.md)
+- API contract: [`docs/api.md`](./api.md)
