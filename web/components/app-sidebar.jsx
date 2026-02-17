@@ -1,45 +1,31 @@
 "use client";
 
-import { useEffect, useRef } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { animate, stagger } from "animejs";
+import { BriefcaseBusiness, LogOut, Search, Settings2 } from "lucide-react";
 
-import { cn } from "@/lib/utils";
 import { apiFetch } from "@/lib/api";
-import { Button } from "@/components/ui/button";
+import {
+  Sidebar,
+  SidebarContent,
+  SidebarFooter,
+  SidebarGroup,
+  SidebarGroupLabel,
+  SidebarHeader,
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
+} from "@/components/ui/sidebar";
 
-const items = [
-  { href: "/projects", label: "Projects" },
-  { href: "/jobs", label: "Jobs" },
-  { href: "/search", label: "Search" },
+const navItems = [
+  { href: "/projects", label: "Projects", icon: BriefcaseBusiness },
+  { href: "/jobs", label: "Jobs", icon: Settings2 },
+  { href: "/search", label: "Search", icon: Search },
 ];
 
-export function AppSidebar() {
+export function AppSidebar(props) {
   const pathname = usePathname();
   const router = useRouter();
-  const navRef = useRef(null);
-
-  useEffect(() => {
-    const nav = navRef.current;
-    if (!nav || typeof window === "undefined") return undefined;
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return undefined;
-
-    const links = nav.querySelectorAll("[data-nav-item]");
-    if (!links.length) return undefined;
-
-    const animation = animate(links, {
-      opacity: [0, 1],
-      translateX: [-6, 0],
-      delay: stagger(45),
-      duration: 360,
-      ease: "outQuad",
-    });
-
-    return () => {
-      animation.cancel();
-    };
-  }, []);
 
   async function onLogout() {
     try {
@@ -51,39 +37,57 @@ export function AppSidebar() {
   }
 
   return (
-    <aside className="flex w-full max-w-56 shrink-0 flex-col border-r border-[var(--border-subtle)] bg-[var(--surface-2)] p-3">
-      <div className="mb-4 border-b border-[var(--border-subtle)] px-2 pb-3">
-        <h1 className="text-sm font-semibold text-[var(--text-strong)]">Labpics</h1>
-        <p className="mt-0.5 text-xs text-[var(--text-muted)]">Operations workspace</p>
-      </div>
+    <Sidebar variant="floating" collapsible="offcanvas" {...props}>
+      <SidebarHeader>
+        <SidebarMenu>
+          <SidebarMenuItem>
+            <SidebarMenuButton size="lg" asChild>
+              <Link href="/projects">
+                <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground">
+                  <BriefcaseBusiness className="size-4" />
+                </div>
+                <div className="flex flex-col gap-0.5 leading-none">
+                  <span className="font-semibold">Labpics</span>
+                  <span className="text-xs text-sidebar-foreground/70">Operations workspace</span>
+                </div>
+              </Link>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+        </SidebarMenu>
+      </SidebarHeader>
 
-      <p className="mb-2 px-2 text-xs text-[var(--text-subtle)]">Navigation</p>
-      <nav ref={navRef} className="space-y-1.5">
-        {items.map((item) => {
-          const active = pathname === item.href;
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
-              data-nav-item
-              className={cn(
-                "block rounded-[var(--radius-sm)] border px-2.5 py-1.5 text-sm font-medium transition-colors",
-                active
-                  ? "border-[var(--border-subtle)] bg-[var(--surface-1)] text-[var(--text-strong)]"
-                  : "border-transparent text-[var(--text-primary)] hover:border-[var(--border-subtle)] hover:bg-[var(--surface-1)]"
-              )}
-            >
-              {item.label}
-            </Link>
-          );
-        })}
-      </nav>
+      <SidebarContent>
+        <SidebarGroup>
+          <SidebarGroupLabel>Navigation</SidebarGroupLabel>
+          <SidebarMenu>
+            {navItems.map((item) => {
+              const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`);
+              const Icon = item.icon;
+              return (
+                <SidebarMenuItem key={item.href}>
+                  <SidebarMenuButton asChild isActive={isActive}>
+                    <Link href={item.href}>
+                      <Icon />
+                      <span>{item.label}</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              );
+            })}
+          </SidebarMenu>
+        </SidebarGroup>
+      </SidebarContent>
 
-      <div className="mt-auto border-t border-[var(--border-subtle)] px-2 pt-3">
-        <Button variant="secondary" className="w-full justify-start" onClick={onLogout}>
-          Logout
-        </Button>
-      </div>
-    </aside>
+      <SidebarFooter>
+        <SidebarMenu>
+          <SidebarMenuItem>
+            <SidebarMenuButton onClick={onLogout}>
+              <LogOut />
+              <span>Logout</span>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+        </SidebarMenu>
+      </SidebarFooter>
+    </Sidebar>
   );
 }

@@ -109,7 +109,7 @@ export default function ProjectsPage() {
                 {projects.map((project) => (
                   <TableRow key={project.id}>
                     <TableCell>{project.name}</TableCell>
-                    <TableCell className="font-mono text-xs text-[var(--text-muted)]">{project.id}</TableCell>
+                    <TableCell className="font-mono text-xs text-muted-foreground">{project.id}</TableCell>
                     <TableCell>{new Date(project.created_at).toLocaleString()}</TableCell>
                     <TableCell>
                       <Button
@@ -125,7 +125,7 @@ export default function ProjectsPage() {
                 ))}
                 {!projects.length ? (
                   <TableRow>
-                    <TableCell colSpan={4} className="text-[var(--text-muted)]">
+                    <TableCell colSpan={4} className="text-muted-foreground">
                       No projects yet.
                     </TableCell>
                   </TableRow>

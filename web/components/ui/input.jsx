@@ -1,24 +1,19 @@
-"use client";
+import * as React from "react"
 
-import { Input as HeroInput } from "@heroui/react";
+import { cn } from "@/lib/utils"
 
-import { cn } from "@/lib/utils";
-
-export function Input({ className, classNames, type = "text", ...props }) {
+const Input = React.forwardRef(({ className, type, ...props }, ref) => {
   return (
-    <HeroInput
+    <input
       type={type}
-      variant="bordered"
-      radius="md"
-      size="md"
-      className={cn("w-full", className)}
-      classNames={{
-        inputWrapper:
-          "min-h-9 border border-[var(--border-subtle)] bg-white shadow-none transition-colors group-data-[focus=true]:border-[var(--border-accent)] group-data-[focus=true]:bg-white group-data-[focus=true]:shadow-[0_0_0_3px_var(--focus-ring-soft)] group-data-[hover=true]:border-[var(--border-strong)]",
-        input: "text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)]",
-        ...classNames,
-      }}
-      {...props}
-    />
+      className={cn(
+        "flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-base shadow-sm transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium file:text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 md:text-sm",
+        className
+      )}
+      ref={ref}
+      {...props} />
   );
-}
+})
+Input.displayName = "Input"
+
+export { Input }

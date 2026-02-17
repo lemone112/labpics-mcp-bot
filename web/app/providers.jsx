@@ -1,11 +1,5 @@
 "use client";
 
-import { HeroUIProvider } from "@heroui/react";
-
 export function Providers({ children }) {
-  return (
-    <HeroUIProvider reducedMotion="user" className="min-h-screen">
-      {children}
-    </HeroUIProvider>
-  );
+  return children;
 }

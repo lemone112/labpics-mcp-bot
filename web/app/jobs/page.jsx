@@ -56,7 +56,7 @@ export default function JobsPage() {
         <Card data-motion-item>
           <CardHeader>
             <CardTitle>Run jobs</CardTitle>
-            <p className="text-sm text-[var(--text-muted)]">
+            <p className="text-sm text-muted-foreground">
               Trigger ingestion and embeddings tasks for current workspace data.
             </p>
           </CardHeader>
@@ -137,12 +137,12 @@ export default function JobsPage() {
                     </TableCell>
                     <TableCell>{job.started_at ? new Date(job.started_at).toLocaleString() : "-"}</TableCell>
                     <TableCell>{job.processed_count}</TableCell>
-                    <TableCell className="max-w-[260px] truncate text-[var(--status-danger-fg)]">{job.error || "-"}</TableCell>
+                    <TableCell className="max-w-[260px] truncate text-destructive">{job.error || "-"}</TableCell>
                   </TableRow>
                 ))}
                 {!status?.jobs?.length ? (
                   <TableRow>
-                    <TableCell colSpan={5} className="text-[var(--text-muted)]">
+                    <TableCell colSpan={5} className="text-muted-foreground">
                       No job runs yet.
                     </TableCell>
                   </TableRow>

@@ -123,7 +123,7 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-[var(--app-bg)] p-4">
+    <div className="flex min-h-screen items-center justify-center bg-background p-4">
       <MotionGroup className="w-full max-w-md">
         <Card data-motion-item className="w-full">
           <CardHeader>
@@ -154,12 +154,12 @@ export default function LoginPage() {
             {mode === "login" ? (
               <form className="space-y-4" onSubmit={onLoginSubmit}>
                 <div className="space-y-1">
-                  <label className="text-sm text-[var(--text-muted)]">Username</label>
+                  <label className="text-sm text-muted-foreground">Username</label>
                   <Input value={loginUsername} onChange={(e) => setLoginUsername(e.target.value)} required />
                 </div>
 
                 <div className="space-y-1">
-                  <label className="text-sm text-[var(--text-muted)]">Password</label>
+                  <label className="text-sm text-muted-foreground">Password</label>
                   <Input type="password" value={loginPassword} onChange={(e) => setLoginPassword(e.target.value)} required />
                 </div>
 
@@ -170,7 +170,7 @@ export default function LoginPage() {
             ) : (
               <div className="space-y-4">
                 {!signupStatus.enabled ? (
-                  <div className="app-inset border border-[var(--status-warning-border)] bg-[var(--status-warning-bg)] p-3 text-sm text-[var(--status-warning-fg)]">
+                  <div className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-800">
                     {!signupStatus.loaded
                       ? "Checking signup availability..."
                       : signupStatus.hasTelegramToken
@@ -182,7 +182,7 @@ export default function LoginPage() {
                 {!signupRequestId ? (
                   <form className="space-y-4" onSubmit={onSignupStart}>
                     <div className="space-y-1">
-                      <label className="text-sm text-[var(--text-muted)]">New username</label>
+                      <label className="text-sm text-muted-foreground">New username</label>
                       <Input
                         value={signupUsername}
                         onChange={(e) => setSignupUsername(e.target.value)}
@@ -192,7 +192,7 @@ export default function LoginPage() {
                     </div>
 
                     <div className="space-y-1">
-                      <label className="text-sm text-[var(--text-muted)]">New password</label>
+                      <label className="text-sm text-muted-foreground">New password</label>
                       <Input
                         type="password"
                         value={signupPassword}
@@ -209,7 +209,7 @@ export default function LoginPage() {
                 ) : (
                   <form className="space-y-4" onSubmit={onSignupConfirm}>
                     <div className="space-y-1">
-                      <label className="text-sm text-[var(--text-muted)]">6-digit PIN</label>
+                      <label className="text-sm text-muted-foreground">6-digit PIN</label>
                       <Input
                         value={signupPin}
                         onChange={(e) => setSignupPin(e.target.value)}

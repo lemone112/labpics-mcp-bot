@@ -75,7 +75,7 @@ export default function SearchPage() {
             </form>
 
             {meta ? (
-              <div className="mt-3 text-sm text-[var(--text-muted)]">
+              <div className="mt-3 text-sm text-muted-foreground">
                 model: {meta.embedding_model || "-"} • topK: {meta.topK || "-"}
               </div>
             ) : null}
@@ -100,14 +100,14 @@ export default function SearchPage() {
                 {results.map((row) => (
                   <TableRow key={row.id}>
                     <TableCell>{row.distance != null ? Number(row.distance).toFixed(4) : "-"}</TableCell>
-                    <TableCell className="font-mono text-xs text-[var(--text-primary)]">{row.conversation_global_id || "-"}</TableCell>
-                    <TableCell className="font-mono text-xs text-[var(--text-primary)]">{row.message_global_id || "-"}</TableCell>
+                    <TableCell className="font-mono text-xs text-muted-foreground">{row.conversation_global_id || "-"}</TableCell>
+                    <TableCell className="font-mono text-xs text-muted-foreground">{row.message_global_id || "-"}</TableCell>
                     <TableCell className="max-w-[460px] whitespace-pre-wrap">{row.text}</TableCell>
                   </TableRow>
                 ))}
                 {!results.length ? (
                   <TableRow>
-                    <TableCell colSpan={4} className="text-[var(--text-muted)]">
+                    <TableCell colSpan={4} className="text-muted-foreground">
                       No results yet.
                     </TableCell>
                   </TableRow>

@@ -1,69 +1,46 @@
 "use client";
 
-import { Chip } from "@heroui/react";
+import { Badge } from "@/components/ui/badge";
 
 import { cn } from "@/lib/utils";
 
 const statusMap = {
   pending: {
-    color: "default",
     label: "Pending",
-    className:
-      "border-[var(--status-warning-border)] bg-[var(--status-warning-bg)] text-[var(--status-warning-fg)]",
+    className: "border-amber-300 bg-amber-50 text-amber-800 hover:bg-amber-100",
   },
   processing: {
-    color: "default",
     label: "Processing",
-    className:
-      "border-[var(--status-info-border)] bg-[var(--status-info-bg)] text-[var(--status-info-fg)]",
+    className: "border-sky-300 bg-sky-50 text-sky-800 hover:bg-sky-100",
   },
   ready: {
-    color: "default",
     label: "Ready",
-    className:
-      "border-[var(--status-success-border)] bg-[var(--status-success-bg)] text-[var(--status-success-fg)]",
+    className: "border-emerald-300 bg-emerald-50 text-emerald-800 hover:bg-emerald-100",
   },
   completed: {
-    color: "default",
     label: "Completed",
-    className:
-      "border-[var(--status-success-border)] bg-[var(--status-success-bg)] text-[var(--status-success-fg)]",
+    className: "border-emerald-300 bg-emerald-50 text-emerald-800 hover:bg-emerald-100",
   },
   failed: {
-    color: "default",
     label: "Failed",
-    className:
-      "border-[var(--status-danger-border)] bg-[var(--status-danger-bg)] text-[var(--status-danger-fg)]",
+    className: "border-rose-300 bg-rose-50 text-rose-800 hover:bg-rose-100",
   },
   running: {
-    color: "default",
     label: "Running",
-    className:
-      "border-[var(--status-info-border)] bg-[var(--status-info-bg)] text-[var(--status-info-fg)]",
+    className: "border-sky-300 bg-sky-50 text-sky-800 hover:bg-sky-100",
   },
 };
 
 export function StatusChip({ status, className }) {
   const normalized = String(status || "").toLowerCase();
   const chip = statusMap[normalized] || {
-    color: "default",
     label: status || "Unknown",
-    className: "border-[var(--border-subtle)] bg-[var(--surface-soft)] text-[var(--text-primary)]",
+    className: "border-border bg-muted text-muted-foreground hover:bg-muted",
   };
 
   return (
-    <Chip
-      size="sm"
-      radius="sm"
-      variant="flat"
-      color={chip.color}
-      className={cn(
-        "border text-xs font-medium",
-        chip.className,
-        className
-      )}
-    >
+    <Badge variant="outline" className={cn("border text-xs font-medium", chip.className, className)}>
       {chip.label}
-    </Chip>
+    </Badge>
   );
 }
