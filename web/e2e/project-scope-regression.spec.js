@@ -114,7 +114,8 @@ test("mobile: project sheet selects project and closes cleanly", async ({ page }
   await page.getByTestId("mobile-projects-sheet").getByTestId(`project-select-${PROJECT_ALPHA.id}`).click();
 
   await expect(page.getByTestId("mobile-projects-sheet")).toBeHidden();
-  await expect(page.getByText("Выбор: Проект Альфа")).toBeVisible();
   await expect.poll(() => state.selectedProjectIds.includes(PROJECT_ALPHA.id)).toBe(true);
+  await page.getByTestId("mobile-projects-open").click();
+  await expect(page.getByTestId("mobile-projects-sheet").getByText("Выбор: Проект Альфа")).toBeVisible();
   await expect(page.getByText(/active_project_required/i)).toHaveCount(0);
 });
