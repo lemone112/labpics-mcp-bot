@@ -5,9 +5,11 @@ const { Pool } = pg;
 export function createDbPool(databaseUrl) {
   return new Pool({
     connectionString: databaseUrl,
-    max: 15,
+    max: parseInt(process.env.PG_POOL_MAX, 10) || 25,
     idleTimeoutMillis: 30_000,
     connectionTimeoutMillis: 10_000,
+    statement_timeout: parseInt(process.env.PG_STATEMENT_TIMEOUT_MS, 10) || 30_000,
+    application_name: process.env.PG_APP_NAME || "labpics-dashboard",
   });
 }
 
