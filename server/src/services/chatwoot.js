@@ -201,6 +201,29 @@ async function getWatermark(pool, source) {
   return rows[0] || null;
 }
 
+async function getLinkedInboxIds(pool, projectId, accountId) {
+  const { rows } = await pool.query(
+    `
+      SELECT source_external_id
+      FROM project_source_links
+      WHERE project_id = $1::uuid
+        AND source_type = 'chatwoot_inbox'
+        AND is_active = true
+        AND source_account_id = $2
+      ORDER BY created_at ASC
+    `,
+    [projectId, String(accountId)]
+  );
+
+  const ids = [];
+  for (const row of rows) {
+    const inboxId = toBigIntOrNull(row.source_external_id);
+    if (!Number.isFinite(inboxId)) continue;
+    ids.push(inboxId);
+  }
+  return ids;
+}
+
 async function upsertWatermark(pool, source, cursorTs, cursorId, meta) {
   await pool.query(
     `
@@ -579,6 +602,41 @@ export async function runChatwootSync(pool, projectId, logger = console) {
   const defaultSince = new Date(Date.now() - lookbackDays * 24 * 60 * 60 * 1000).toISOString();
   const since = toIsoTime(previousWatermark?.cursor_ts) || defaultSince;
   const watermarkMessageNumeric = getCursorMessageNumericId(previousWatermark?.cursor_id);
+  const linkedInboxIds = await getLinkedInboxIds(pool, scopedProjectId, accountId);
+  const linkedInboxSet = new Set(linkedInboxIds.map((value) => String(value)));
+
+  if (!linkedInboxIds.length) {
+    const storage = await getStorageSummary(pool, storageBudgetGb);
+    await upsertWatermark(pool, source, previousWatermark?.cursor_ts || since, previousWatermark?.cursor_id || null, {
+      processed_conversations: 0,
+      processed_messages: 0,
+      inserted_chunks: 0,
+      reembedded_chunks: 0,
+      touched_contacts: 0,
+      skipped_unlinked_conversations: 0,
+      skipped_reason: "no_linked_inboxes",
+      linked_inboxes_count: 0,
+      since,
+      synced_at: new Date().toISOString(),
+      storage,
+    });
+
+    return {
+      source,
+      since,
+      processed_conversations: 0,
+      processed_messages: 0,
+      inserted_chunks: 0,
+      reembedded_chunks: 0,
+      touched_contacts: 0,
+      skipped_unlinked_conversations: 0,
+      linked_inboxes_count: 0,
+      skipped_reason: "no_linked_inboxes",
+      cursor_ts: previousWatermark?.cursor_ts || since,
+      cursor_id: previousWatermark?.cursor_id || null,
+      storage,
+    };
+  }
 
   const conversations = await listConversations(baseUrl, apiToken, accountId, maxConversations, logger);
 
@@ -586,6 +644,7 @@ export async function runChatwootSync(pool, projectId, logger = console) {
   let processedMessages = 0;
   let insertedChunks = 0;
   let reembeddedChunks = 0;
+  let skippedUnlinkedConversations = 0;
   let newestTs = toIsoTime(previousWatermark?.cursor_ts) || since;
   let newestMsgId = previousWatermark?.cursor_id || null;
 
@@ -594,6 +653,12 @@ export async function runChatwootSync(pool, projectId, logger = console) {
   for (const conversation of conversations) {
     const conversationId = toBigIntOrNull(conversation?.id);
     if (!Number.isFinite(conversationId)) continue;
+    const inboxId = toBigIntOrNull(conversation?.inbox_id);
+    const isLinkedInbox = Number.isFinite(inboxId) && linkedInboxSet.has(String(inboxId));
+    if (!isLinkedInbox) {
+      skippedUnlinkedConversations++;
+      continue;
+    }
 
     const convoGlobalId = conversationGlobalId(accountId, conversationId);
     const convoUpdatedAt = toIsoTime(conversation?.last_activity_at || conversation?.updated_at || conversation?.created_at);
@@ -605,7 +670,7 @@ export async function runChatwootSync(pool, projectId, logger = console) {
       account_id: Number(accountId),
       conversation_id: conversationId,
       contact_global_id: convoContact?.id || null,
-      inbox_id: toBigIntOrNull(conversation?.inbox_id),
+      inbox_id: inboxId,
       status: asTextOrNull(conversation?.status, 100),
       assignee_id: toBigIntOrNull(conversation?.assignee_id),
       data: conversation,
@@ -715,6 +780,8 @@ export async function runChatwootSync(pool, projectId, logger = console) {
     inserted_chunks: insertedChunks,
     reembedded_chunks: reembeddedChunks,
     touched_contacts: touchedContacts,
+    skipped_unlinked_conversations: skippedUnlinkedConversations,
+    linked_inboxes_count: linkedInboxIds.length,
     since,
     synced_at: new Date().toISOString(),
     storage,
@@ -728,6 +795,8 @@ export async function runChatwootSync(pool, projectId, logger = console) {
     inserted_chunks: insertedChunks,
     reembedded_chunks: reembeddedChunks,
     touched_contacts: touchedContacts,
+    skipped_unlinked_conversations: skippedUnlinkedConversations,
+    linked_inboxes_count: linkedInboxIds.length,
     cursor_ts: newestTs,
     cursor_id: newestMsgId,
     storage,

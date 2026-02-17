@@ -132,6 +132,25 @@ Columns:
 - `created_at timestamptz not null default now()`
 - `updated_at timestamptz not null default now()`
 
+### `project_source_links`
+Project-to-source identity links (safe-by-default scoping).
+
+Columns:
+- `id uuid primary key default gen_random_uuid()`
+- `project_id uuid not null references projects(id) on delete cascade`
+- `source_type text not null` (currently `chatwoot_inbox`)
+- `source_account_id text not null`
+- `source_external_id text not null`
+- `source_url text`
+- `created_by text`
+- `metadata jsonb not null default '{}'::jsonb`
+- `is_active boolean not null default true`
+- `created_at timestamptz not null default now()`
+- `updated_at timestamptz not null default now()`
+
+Uniqueness:
+- `(source_type, source_account_id, source_external_id)` is unique
+
 ## Indexes
 Created in `0002_indexes.sql`:
 
@@ -146,6 +165,7 @@ Additional indexes are created by later migrations for:
 - project-scoped `rag_chunks` access
 - project-scoped `job_runs` reads
 - message/contact lookups used by scoped review endpoints
+- project source linking and inbox lookup (`project_source_links`, `cw_conversations.inbox_id`)
 
 ## Planned schema additions
 For product roadmap (commitments/risks/digests), extend schema with:

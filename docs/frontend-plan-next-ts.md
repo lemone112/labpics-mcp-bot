@@ -77,7 +77,8 @@ Target qualities inspired by Linear / Attio / Plane / ClickUp:
    - **Resolved in iteration 2:** `rag_chunks` received `project_id`, API now enforces `active_project_id` and scoped search.
 2. **Roadmap entities missing API:** risks/digest/settings links are not fully backed by server endpoints yet.
    - Iteration 2 connected `commitments` with project-scoped API + DB persistence.
-3. **Linking UX incomplete:** no full project-source linking editor in backend yet (spec 0006).
+3. **Linking UX incomplete:** no full multi-source linking editor yet (Linear/Attio still pending).
+   - **Resolved for Chatwoot inboxes in iteration 3:** project-link API + Settings UI for inbox mapping.
 4. **Audit/privacy surface incomplete:** UI should avoid raw full-text dumps in list views by default (spec 0008).
 
 ## Iteration 1 delivery (implementation target)

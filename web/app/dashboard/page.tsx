@@ -129,7 +129,7 @@ export default function DashboardPage() {
               <CardTitle>Now / Next actions</CardTitle>
               <CardDescription>Action list inspired by Linear/Attio operating loop.</CardDescription>
             </div>
-            <Badge variant="info">Iteration 1</Badge>
+            <Badge variant="info">Iteration 2</Badge>
           </CardHeader>
           <CardContent>
             <ul className="space-y-2 text-sm text-slate-200">
@@ -188,10 +188,10 @@ export default function DashboardPage() {
           </CardHeader>
           <CardContent className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
             {[
-              { name: "Commitments", status: "UI ready" },
+              { name: "Commitments", status: "API connected" },
               { name: "Risks", status: "UI ready" },
               { name: "Digest", status: "UI ready" },
-              { name: "Settings links", status: "Scaffolded" },
+              { name: "Settings links", status: "Chatwoot inbox links live" },
             ].map((item) => (
               <div key={item.name} className="rounded-lg border border-slate-800 p-3">
                 <p className="text-sm font-medium text-slate-100">{item.name}</p>

@@ -56,6 +56,10 @@ export interface JobsStatusResponse {
     usage_percent: number;
     table_bytes: Record<string, number>;
   };
+  source_links: Array<{
+    source_type: string;
+    count: number;
+  }>;
   watermarks: Array<{
     source: string;
     cursor_ts: string | null;
@@ -114,6 +118,20 @@ export interface Commitment {
   summary: string | null;
   evidence: string[];
   source: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ProjectSourceLink {
+  id: string;
+  project_id: string;
+  source_type: string;
+  source_account_id: string;
+  source_external_id: string;
+  source_url: string | null;
+  created_by: string | null;
+  metadata: Record<string, unknown>;
+  is_active: boolean;
   created_at: string;
   updated_at: string;
 }

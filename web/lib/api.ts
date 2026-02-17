@@ -3,6 +3,7 @@ import type {
   Conversation,
   JobsStatusResponse,
   MessageSnippet,
+  ProjectSourceLink,
   Project,
   ProjectsResponse,
   SearchResultItem,
@@ -44,6 +45,12 @@ function humanizeError(errorCode: string) {
     invalid_confidence: "Invalid confidence value.",
     invalid_due_at: "Invalid due date format.",
     invalid_evidence: "Evidence must be an array of source IDs.",
+    invalid_source_type: "Invalid source type.",
+    invalid_source_external_id: "Invalid source external ID.",
+    invalid_source_account_id: "Invalid source account ID.",
+    invalid_link_id: "Invalid link ID.",
+    link_not_found: "Link not found for selected project.",
+    source_already_linked_to_other_project: "This source is already linked to another project.",
     commitment_not_found: "Commitment not found for selected project.",
     project_not_found: "Project not found.",
   };
@@ -217,5 +224,30 @@ export function updateCommitment(id: string, payload: CommitmentPatch) {
   return apiFetch<{ ok: boolean; commitment: Commitment; request_id?: string }>(`/commitments/${id}`, {
     method: "PATCH",
     body: payload,
+  });
+}
+
+export function getProjectLinks(sourceType?: string) {
+  return apiFetch<{ ok: boolean; links: ProjectSourceLink[]; request_id?: string }>("/project-links", {
+    query: { source_type: sourceType },
+  });
+}
+
+export function createProjectLink(payload: {
+  source_type: string;
+  source_account_id?: string;
+  source_external_id: string;
+  source_url?: string;
+  metadata?: Record<string, unknown>;
+}) {
+  return apiFetch<{ ok: boolean; link: ProjectSourceLink; created: boolean; request_id?: string }>("/project-links", {
+    method: "POST",
+    body: payload,
+  });
+}
+
+export function deleteProjectLink(id: string) {
+  return apiFetch<{ ok: boolean; deleted_id: string; request_id?: string }>(`/project-links/${id}`, {
+    method: "DELETE",
   });
 }

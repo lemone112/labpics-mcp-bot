@@ -87,6 +87,17 @@ export default function JobsPage() {
   }
 
   const latestSync = status?.jobs?.find((job) => job.job_name === "chatwoot_sync");
+  const linkedInboxes =
+    status?.source_links?.find((link) => link.source_type === "chatwoot_inbox")?.count ?? 0;
+  const latestSyncMeta =
+    latestSync?.meta && typeof latestSync.meta === "object"
+      ? (latestSync.meta as Record<string, unknown>)
+      : null;
+  const latestSyncSkippedReason =
+    latestSyncMeta && typeof latestSyncMeta.skipped_reason === "string"
+      ? latestSyncMeta.skipped_reason
+      : null;
+  const canRunSync = Boolean(activeProject?.id) && linkedInboxes > 0;
 
   return (
     <PageShell
@@ -100,7 +111,7 @@ export default function JobsPage() {
           <Button variant="outline" onClick={() => void loadStatus()}>
             Refresh status
           </Button>
-          <Button disabled={Boolean(busyJob) || !activeProject?.id} onClick={() => void onRunSync()}>
+          <Button disabled={Boolean(busyJob) || !canRunSync} onClick={() => void onRunSync()}>
             {busyJob === "sync" ? "Running sync..." : "Run Chatwoot sync"}
           </Button>
           <Button
@@ -122,6 +133,32 @@ export default function JobsPage() {
         />
       ) : (
       <div className="space-y-6">
+        <Card>
+          <CardHeader className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+            <div>
+              <CardTitle>Source links</CardTitle>
+              <CardDescription>Sync is allowed only with explicit project-to-inbox mapping.</CardDescription>
+            </div>
+            <Badge variant={linkedInboxes > 0 ? "success" : "warning"}>
+              chatwoot_inbox links: {linkedInboxes}
+            </Badge>
+          </CardHeader>
+          {linkedInboxes === 0 ? (
+            <CardContent>
+              <p className="text-sm text-slate-300">
+                No linked inboxes. Go to Settings and add at least one Chatwoot inbox link.
+              </p>
+            </CardContent>
+          ) : null}
+          {latestSyncSkippedReason === "no_linked_inboxes" ? (
+            <CardContent>
+              <p className="text-xs text-amber-200">
+                Last sync was skipped because no linked inboxes were configured.
+              </p>
+            </CardContent>
+          ) : null}
+        </Card>
+
         <Card>
           <CardHeader className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
             <div>
@@ -152,7 +189,9 @@ export default function JobsPage() {
             <CardHeader>
               <CardDescription>Database size</CardDescription>
               <CardTitle>{formatRelativeStorage(status?.storage?.database_bytes)}</CardTitle>
-              <p className="text-xs text-slate-400">{status?.storage?.usage_percent ?? 0}% of budget</p>
+              <p className="text-xs text-slate-400">
+                {status?.storage?.usage_percent ?? 0}% of budget (global DB metric)
+              </p>
             </CardHeader>
           </Card>
         </div>

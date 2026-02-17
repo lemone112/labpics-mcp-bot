@@ -40,9 +40,15 @@ function toLimit(value, fallback = 100, max = 500) {
   return Math.max(1, Math.min(parsed, max));
 }
 
+function isUuid(value) {
+  const normalized = String(value || "").trim();
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(normalized);
+}
+
 const COMMITMENT_STATUSES = new Set(["active", "proposed", "closed", "done", "cancelled"]);
 const COMMITMENT_OWNERS = new Set(["studio", "client", "unknown"]);
 const COMMITMENT_CONFIDENCE = new Set(["high", "medium", "low"]);
+const SOURCE_TYPES = new Set(["chatwoot_inbox"]);
 
 function toTimestampOrNull(value) {
   if (value == null || value === "") return null;
@@ -67,6 +73,12 @@ function toCommitmentConfidence(value, fallback = "medium") {
   const normalized = String(value || "").trim().toLowerCase();
   if (!normalized) return fallback;
   return COMMITMENT_CONFIDENCE.has(normalized) ? normalized : null;
+}
+
+function toSourceType(value) {
+  const normalized = String(value || "").trim().toLowerCase();
+  if (!normalized) return null;
+  return SOURCE_TYPES.has(normalized) ? normalized : null;
 }
 
 function toEvidenceList(value, maxItems = 20) {
@@ -250,7 +262,9 @@ async function main() {
   app.post("/projects/:id/select", async (request, reply) => {
     const projectId = String(request.params?.id || "");
     const sid = request.auth?.session_id;
-    if (!projectId) return reply.code(400).send({ ok: false, error: "invalid_project_id", request_id: request.requestId });
+    if (!projectId || !isUuid(projectId)) {
+      return reply.code(400).send({ ok: false, error: "invalid_project_id", request_id: request.requestId });
+    }
 
     const project = await pool.query("SELECT id, name FROM projects WHERE id = $1 LIMIT 1", [projectId]);
     if (!project.rows[0]) {
@@ -259,6 +273,165 @@ async function main() {
 
     await pool.query("UPDATE sessions SET active_project_id = $2, last_seen_at = now() WHERE session_id = $1", [sid, projectId]);
     return { ok: true, active_project_id: projectId, project: project.rows[0], request_id: request.requestId };
+  });
+
+  app.get("/project-links", async (request, reply) => {
+    const projectId = requireActiveProject(request, reply);
+    if (!projectId) return;
+
+    const sourceTypeRaw = String(request.query?.source_type || "").trim();
+    const sourceType = sourceTypeRaw ? toSourceType(sourceTypeRaw) : null;
+    if (sourceTypeRaw && !sourceType) {
+      return reply.code(400).send({ ok: false, error: "invalid_source_type", request_id: request.requestId });
+    }
+
+    const { rows } = await pool.query(
+      `
+        SELECT
+          id,
+          project_id,
+          source_type,
+          source_account_id,
+          source_external_id,
+          source_url,
+          created_by,
+          metadata,
+          is_active,
+          created_at,
+          updated_at
+        FROM project_source_links
+        WHERE project_id = $1::uuid
+          AND is_active = true
+          AND ($2::text IS NULL OR source_type = $2::text)
+        ORDER BY source_type ASC, source_external_id ASC
+      `,
+      [projectId, sourceType]
+    );
+
+    return { ok: true, links: rows, request_id: request.requestId };
+  });
+
+  app.post("/project-links", async (request, reply) => {
+    const projectId = requireActiveProject(request, reply);
+    if (!projectId) return;
+
+    const body = request.body && typeof request.body === "object" ? request.body : {};
+    const sourceType = toSourceType(body?.source_type);
+    if (!sourceType) {
+      return reply.code(400).send({ ok: false, error: "invalid_source_type", request_id: request.requestId });
+    }
+
+    const sourceExternalId = String(body?.source_external_id || "").trim();
+    if (!sourceExternalId) {
+      return reply.code(400).send({ ok: false, error: "invalid_source_external_id", request_id: request.requestId });
+    }
+    if (sourceType === "chatwoot_inbox" && !/^\d{1,18}$/.test(sourceExternalId)) {
+      return reply.code(400).send({ ok: false, error: "invalid_source_external_id", request_id: request.requestId });
+    }
+
+    const sourceAccountId = String(body?.source_account_id || process.env.CHATWOOT_ACCOUNT_ID || "").trim();
+    if (!sourceAccountId) {
+      return reply.code(400).send({ ok: false, error: "invalid_source_account_id", request_id: request.requestId });
+    }
+
+    const sourceUrlRaw = body?.source_url == null ? "" : String(body.source_url).trim();
+    const sourceUrl = sourceUrlRaw ? sourceUrlRaw.slice(0, 400) : null;
+    const metadata = body?.metadata && typeof body.metadata === "object" ? body.metadata : {};
+
+    const existing = await pool.query(
+      `
+        SELECT
+          id,
+          project_id,
+          source_type,
+          source_account_id,
+          source_external_id,
+          source_url,
+          created_by,
+          metadata,
+          is_active,
+          created_at,
+          updated_at
+        FROM project_source_links
+        WHERE source_type = $1
+          AND source_account_id = $2
+          AND source_external_id = $3
+        LIMIT 1
+      `,
+      [sourceType, sourceAccountId, sourceExternalId]
+    );
+
+    if (existing.rows[0]) {
+      if (existing.rows[0].project_id !== projectId) {
+        return reply.code(409).send({
+          ok: false,
+          error: "source_already_linked_to_other_project",
+          linked_project_id: existing.rows[0].project_id,
+          request_id: request.requestId,
+        });
+      }
+
+      return { ok: true, link: existing.rows[0], created: false, request_id: request.requestId };
+    }
+
+    const { rows } = await pool.query(
+      `
+        INSERT INTO project_source_links(
+          project_id,
+          source_type,
+          source_account_id,
+          source_external_id,
+          source_url,
+          created_by,
+          metadata,
+          is_active,
+          created_at,
+          updated_at
+        )
+        VALUES($1::uuid, $2, $3, $4, $5, $6, $7::jsonb, true, now(), now())
+        RETURNING
+          id,
+          project_id,
+          source_type,
+          source_account_id,
+          source_external_id,
+          source_url,
+          created_by,
+          metadata,
+          is_active,
+          created_at,
+          updated_at
+      `,
+      [projectId, sourceType, sourceAccountId, sourceExternalId, sourceUrl, request.auth?.username || null, JSON.stringify(metadata)]
+    );
+
+    return { ok: true, link: rows[0], created: true, request_id: request.requestId };
+  });
+
+  app.delete("/project-links/:id", async (request, reply) => {
+    const projectId = requireActiveProject(request, reply);
+    if (!projectId) return;
+
+    const linkId = String(request.params?.id || "").trim();
+    if (!isUuid(linkId)) {
+      return reply.code(400).send({ ok: false, error: "invalid_link_id", request_id: request.requestId });
+    }
+
+    const { rows } = await pool.query(
+      `
+        DELETE FROM project_source_links
+        WHERE id = $1::uuid
+          AND project_id = $2::uuid
+        RETURNING id
+      `,
+      [linkId, projectId]
+    );
+
+    if (!rows[0]) {
+      return reply.code(404).send({ ok: false, error: "link_not_found", request_id: request.requestId });
+    }
+
+    return { ok: true, deleted_id: linkId, request_id: request.requestId };
   });
 
   app.get("/commitments", async (request, reply) => {
@@ -371,7 +544,7 @@ async function main() {
     if (!projectId) return;
 
     const commitmentId = String(request.params?.id || "").trim();
-    if (!commitmentId) {
+    if (!commitmentId || !isUuid(commitmentId)) {
       return reply.code(400).send({ ok: false, error: "invalid_commitment_id", request_id: request.requestId });
     }
 
@@ -497,9 +670,14 @@ async function main() {
               AND EXISTS (
                 SELECT 1
                 FROM cw_messages AS m
-                JOIN rag_chunks AS rc ON rc.message_global_id = m.id
+                JOIN cw_conversations AS c ON c.id = m.conversation_global_id
+                JOIN project_source_links AS psl
+                  ON psl.source_type = 'chatwoot_inbox'
+                 AND psl.source_account_id = c.account_id::text
+                 AND psl.source_external_id = c.inbox_id::text
+                 AND psl.project_id = $1::uuid
+                 AND psl.is_active = true
                 WHERE m.contact_global_id = cw_contacts.id
-                  AND rc.project_id = $1::uuid
               )
             ORDER BY updated_at DESC NULLS LAST
             LIMIT $3
@@ -514,9 +692,14 @@ async function main() {
             WHERE EXISTS (
               SELECT 1
               FROM cw_messages AS m
-              JOIN rag_chunks AS rc ON rc.message_global_id = m.id
+              JOIN cw_conversations AS c ON c.id = m.conversation_global_id
+              JOIN project_source_links AS psl
+                ON psl.source_type = 'chatwoot_inbox'
+               AND psl.source_account_id = c.account_id::text
+               AND psl.source_external_id = c.inbox_id::text
+               AND psl.project_id = $1::uuid
+               AND psl.is_active = true
               WHERE m.contact_global_id = cw_contacts.id
-                AND rc.project_id = $1::uuid
             )
             ORDER BY updated_at DESC NULLS LAST
             LIMIT $2
@@ -545,12 +728,16 @@ async function main() {
           updated_at,
           created_at
         FROM cw_conversations
-        WHERE EXISTS (
-          SELECT 1
-          FROM rag_chunks AS rc
-          WHERE rc.conversation_global_id = cw_conversations.id
-            AND rc.project_id = $1::uuid
-        )
+        WHERE inbox_id IS NOT NULL
+          AND EXISTS (
+            SELECT 1
+            FROM project_source_links AS psl
+            WHERE psl.project_id = $1::uuid
+              AND psl.source_type = 'chatwoot_inbox'
+              AND psl.source_account_id = cw_conversations.account_id::text
+              AND psl.source_external_id = cw_conversations.inbox_id::text
+              AND psl.is_active = true
+          )
         ORDER BY COALESCE(updated_at, created_at) DESC
         LIMIT $2
       `,
@@ -579,12 +766,16 @@ async function main() {
               created_at,
               updated_at
             FROM cw_messages
+            JOIN cw_conversations AS c ON c.id = cw_messages.conversation_global_id
             WHERE conversation_global_id = $2
               AND EXISTS (
                 SELECT 1
-                FROM rag_chunks AS rc
-                WHERE rc.message_global_id = cw_messages.id
-                  AND rc.project_id = $1::uuid
+                FROM project_source_links AS psl
+                WHERE psl.project_id = $1::uuid
+                  AND psl.source_type = 'chatwoot_inbox'
+                  AND psl.source_account_id = c.account_id::text
+                  AND psl.source_external_id = c.inbox_id::text
+                  AND psl.is_active = true
               )
             ORDER BY created_at DESC NULLS LAST
             LIMIT $3
@@ -603,11 +794,15 @@ async function main() {
               created_at,
               updated_at
             FROM cw_messages
+            JOIN cw_conversations AS c ON c.id = cw_messages.conversation_global_id
             WHERE EXISTS (
               SELECT 1
-              FROM rag_chunks AS rc
-              WHERE rc.message_global_id = cw_messages.id
-                AND rc.project_id = $1::uuid
+              FROM project_source_links AS psl
+              WHERE psl.project_id = $1::uuid
+                AND psl.source_type = 'chatwoot_inbox'
+                AND psl.source_account_id = c.account_id::text
+                AND psl.source_external_id = c.inbox_id::text
+                AND psl.is_active = true
             )
             ORDER BY created_at DESC NULLS LAST
             LIMIT $2

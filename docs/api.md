@@ -20,6 +20,9 @@ Project-scoped endpoints:
 - `GET /commitments`
 - `POST /commitments`
 - `PATCH /commitments/:id`
+- `GET /project-links`
+- `POST /project-links`
+- `DELETE /project-links/:id`
 - `POST /jobs/chatwoot/sync`
 - `POST /jobs/embeddings/run`
 - `GET /jobs/status`
@@ -71,6 +74,34 @@ Auth required.
 
 Sets `sessions.active_project_id`.
 
+## Project source links
+
+### `GET /project-links`
+Auth required + active project required.
+
+Query:
+- `source_type` (optional, currently supported: `chatwoot_inbox`)
+
+Returns active links for selected project.
+
+### `POST /project-links`
+Auth required + active project required.
+
+Body:
+- `source_type` (required, currently `chatwoot_inbox`)
+- `source_external_id` (required, inbox id for Chatwoot)
+- `source_account_id` (optional, defaults to `CHATWOOT_ACCOUNT_ID`)
+- `source_url` (optional)
+- `metadata` (optional object)
+
+If source is already linked to another project, returns:
+- `409 source_already_linked_to_other_project`
+
+### `DELETE /project-links/:id`
+Auth required + active project required.
+
+Removes link from selected project.
+
 ## Commitments
 
 ### `GET /commitments`
@@ -112,6 +143,10 @@ Runs Chatwoot poll sync. Writes:
 - creates `rag_chunks` (status `pending`) with `project_id = active_project_id`
 - updates `sync_watermarks`
 
+Important:
+- Sync uses only linked Chatwoot inboxes (`project-links` with `source_type=chatwoot_inbox`).
+- If no inbox links exist, sync is skipped with explicit metadata reason.
+
 ### `POST /jobs/embeddings/run`
 Auth required.
 
@@ -124,6 +159,7 @@ Returns:
 - latest project-scoped `job_runs` per job
 - project-scoped `rag_counts` by `embedding_status`
 - latest project-scoped `sync_watermarks`
+- active project source-link counts (`source_links`)
 
 ## Search
 

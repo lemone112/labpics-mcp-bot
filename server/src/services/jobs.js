@@ -73,7 +73,7 @@ export async function getJobsStatus(pool, projectId) {
   const scopedProjectId = String(projectId || "").trim();
   if (!scopedProjectId) throw new Error("active_project_required");
 
-  const [latestRuns, chunkStatusCounts, watermarks, entityCounts, storage] = await Promise.all([
+  const [latestRuns, chunkStatusCounts, watermarks, entityCounts, sourceLinks, storage] = await Promise.all([
     pool.query(
       `
         SELECT DISTINCT ON (job_name)
@@ -131,6 +131,18 @@ export async function getJobsStatus(pool, projectId) {
       `,
       [scopedProjectId]
     ),
+    pool.query(
+      `
+        SELECT
+          source_type,
+          count(*)::int AS count
+        FROM project_source_links
+        WHERE project_id = $1::uuid
+          AND is_active = true
+        GROUP BY source_type
+      `,
+      [scopedProjectId]
+    ),
     getStorageStats(pool),
   ]);
 
@@ -150,6 +162,7 @@ export async function getJobsStatus(pool, projectId) {
       rag_chunks: 0,
     },
     storage,
+    source_links: sourceLinks.rows,
     watermarks: watermarks.rows,
   };
 }
