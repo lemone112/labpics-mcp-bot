@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 
 import { API_BASE, apiFetch } from "@/lib/api";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -11,7 +11,6 @@ import { Toast } from "@/components/ui/toast";
 
 export default function LoginPage() {
   const router = useRouter();
-  const searchParams = useSearchParams();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
@@ -40,7 +39,8 @@ export default function LoginPage() {
   }, []);
 
   useEffect(() => {
-    const error = String(searchParams?.get("error") || "").trim();
+    const params = new URLSearchParams(window.location.search);
+    const error = String(params.get("error") || "").trim();
     if (!error) return;
 
     const messages = {
@@ -52,7 +52,7 @@ export default function LoginPage() {
       type: "error",
       message: messages[error] || "Login failed",
     });
-  }, [searchParams]);
+  }, []);
 
   async function onSubmit(event) {
     event.preventDefault();
