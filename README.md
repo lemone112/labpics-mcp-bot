@@ -16,6 +16,10 @@ Legacy bot/worker контур удален из кода и деплоя.
 
 - Auth/session:
   - `POST /auth/login`
+  - `GET /auth/signup/status`
+  - `POST /auth/signup/start`
+  - `POST /auth/signup/confirm`
+  - `POST /auth/telegram/webhook`
   - `POST /auth/logout`
   - `GET /auth/me`
 - Projects:
@@ -131,6 +135,9 @@ docker compose up --build
 - `POSTGRES_PASSWORD`
 - `AUTH_PASSWORD`
 - `EDGE_BASIC_AUTH_PASSWORD_HASH` (optional, для внешнего edge-gate)
+- `TELEGRAM_BOT_TOKEN` (optional, для signup через PIN)
+- `TELEGRAM_WEBHOOK_SECRET` (optional, для защиты Telegram webhook)
+- `SIGNUP_PIN_SECRET` (optional, дополнительный secret для hash PIN)
 - `OPENAI_API_KEY`
 - `CHATWOOT_API_TOKEN`
 
@@ -153,6 +160,8 @@ docker compose up --build
 - `CORS_ORIGIN`
 - `AUTH_USERNAME`
 - `SESSION_COOKIE_NAME`
+- `SIGNUP_PIN_TTL_MINUTES` (optional, default `10`)
+- `SIGNUP_PIN_MAX_ATTEMPTS` (optional, default `8`)
 - `CHATWOOT_BASE_URL`
 - `CHATWOOT_ACCOUNT_ID`
 - `CHATWOOT_CONVERSATIONS_LIMIT`
@@ -191,6 +200,25 @@ docker compose up --build
 ```bash
 docker run --rm caddy:2.9.1-alpine caddy hash-password --plaintext "STRONG_PASSWORD"
 ```
+
+### Signup via Telegram PIN (optional)
+
+1. Заполни в environment:
+   - `TELEGRAM_BOT_TOKEN` (Secret)
+   - `TELEGRAM_WEBHOOK_SECRET` (Secret)
+   - `SIGNUP_PIN_SECRET` (Secret, optional)
+2. Установи webhook для бота на backend:
+
+```bash
+curl -X POST "https://api.telegram.org/bot<TELEGRAM_BOT_TOKEN>/setWebhook" \
+  -d "url=https://dev.dashboard.lab.pics/api/auth/telegram/webhook?secret=<TELEGRAM_WEBHOOK_SECRET>" \
+  -d "secret_token=<TELEGRAM_WEBHOOK_SECRET>"
+```
+
+3. В личном чате с ботом отправь `/bind` (или любое сообщение) — backend зафиксирует твой `user_id/chat_id` как owner.
+4. После этого на `/login` станет доступна кнопка **Create account**:
+   - шаг 1: пользователь вводит `username/password`, backend шлет 6-digit PIN в твой Telegram
+   - шаг 2: ввод PIN завершает создание аккаунта.
 
 ---
 
