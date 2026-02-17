@@ -56,6 +56,13 @@
 3. upsert новых/изменённых записей в raw-таблицы,
 4. фиксация process events в `kag_event_log` (start/finish/error/duration/counters).
 
+Инварианты качества sync:
+
+- **Идемпотентность:** каждый raw-слой пишет через `ON CONFLICT ... DO UPDATE`, повторный sync не создаёт дублей.
+- **Полнота:** для Attio/Linear используется постраничная загрузка (не только `first/limit`), чтобы не терять записи при росте объёма.
+- **Прозрачность режима:** mock-режим явно логируется как `process_warning` (чтобы не спутать с production-данными).
+- **Reconciliation:** после sync Attio считаются coverage-метрики (сколько аккаунтов/сделок дошло до CRM-mirror и где есть разрывы ссылок).
+
 При ошибках:
 
 - запись в `connector_errors`,

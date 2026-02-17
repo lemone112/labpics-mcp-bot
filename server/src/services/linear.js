@@ -189,29 +189,58 @@ async function loadLinearApiSnapshot(config, logger) {
           team { id }
         }
       }
-      issues(first: $limit, orderBy: updatedAt) {
-        nodes {
-          id
-          title
-          priority
-          dueDate
-          updatedAt
-          completedAt
-          project { id }
-          state { id name type }
-          cycle { id number }
-          labels(first: 10) { nodes { id name } }
-          blockedByIssues(first: 10) { nodes { id } }
-          assignee { name }
-        }
-      }
     }
   `;
   const data = await linearGraphQL(config.baseUrl, config.apiToken, query, { limit: config.limit }, logger);
   const projects = Array.isArray(data?.projects?.nodes) ? data.projects.nodes : [];
   const states = Array.isArray(data?.workflowStates?.nodes) ? data.workflowStates.nodes : [];
   const cycles = Array.isArray(data?.cycles?.nodes) ? data.cycles.nodes : [];
-  const issues = Array.isArray(data?.issues?.nodes) ? data.issues.nodes : [];
+  const issues = [];
+  const seenIssueIds = new Set();
+  const maxPages = toPositiveInt(process.env.LINEAR_SYNC_MAX_PAGES, 100, 1, 1000);
+  let after = null;
+  for (let page = 0; page < maxPages; page++) {
+    const issuesData = await linearGraphQL(
+      config.baseUrl,
+      config.apiToken,
+      `
+        query PullLinearIssues($limit: Int!, $after: String) {
+          issues(first: $limit, orderBy: updatedAt, after: $after) {
+            nodes {
+              id
+              title
+              priority
+              dueDate
+              updatedAt
+              completedAt
+              project { id }
+              state { id name type }
+              cycle { id number }
+              labels(first: 10) { nodes { id name } }
+              blockedByIssues(first: 10) { nodes { id } }
+              assignee { name }
+            }
+            pageInfo {
+              hasNextPage
+              endCursor
+            }
+          }
+        }
+      `,
+      { limit: config.limit, after },
+      logger
+    );
+    const pageNodes = Array.isArray(issuesData?.issues?.nodes) ? issuesData.issues.nodes : [];
+    for (const issue of pageNodes) {
+      const key = String(issue?.id || "");
+      if (!key || seenIssueIds.has(key)) continue;
+      seenIssueIds.add(key);
+      issues.push(issue);
+    }
+    const pageInfo = issuesData?.issues?.pageInfo || {};
+    if (!pageInfo?.hasNextPage || !pageInfo?.endCursor) break;
+    after = pageInfo.endCursor;
+  }
   return {
     projects: projects.map((row) => normalizeLinearProject(config.workspaceId, row)).filter(Boolean),
     states: states.map((row) => normalizeLinearState(config.workspaceId, row)).filter(Boolean),
@@ -624,9 +653,12 @@ export async function runLinearSync(pool, scope, logger = console) {
     workspaceId,
     baseUrl: String(process.env.LINEAR_BASE_URL || "https://api.linear.app/graphql").replace(/\/+$/, ""),
     apiToken: String(process.env.LINEAR_API_TOKEN || "").trim(),
-    mockMode: boolFromEnv(process.env.LINEAR_MOCK_MODE, !process.env.LINEAR_API_TOKEN),
+    mockMode: boolFromEnv(process.env.LINEAR_MOCK_MODE, false),
     limit: toPositiveInt(process.env.LINEAR_SYNC_LIMIT, 200, 1, 1000),
   };
+  if (!config.apiToken && !config.mockMode) {
+    throw new Error("linear_api_token_missing_or_enable_mock_mode");
+  }
 
   const previousWatermark = await getWatermark(pool, scope, source);
   const snapshot = config.mockMode || !config.apiToken
