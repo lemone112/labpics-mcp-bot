@@ -697,7 +697,7 @@ function renderRecommendations({
               </div>
 
               <div className="space-y-2 rounded-md border p-3">
-                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Почему я это вижу</p>
+                <p className="text-xs font-semibold tracking-wide text-muted-foreground">Почему я это вижу</p>
                 <p className="text-sm">{selected.rationale || "Без rationale"}</p>
                 {selected.why_now ? <p className="text-sm text-muted-foreground">{selected.why_now}</p> : null}
                 {selected.expected_impact ? <p className="text-sm">Ожидаемый эффект: {selected.expected_impact}</p> : null}
@@ -714,7 +714,7 @@ function renderRecommendations({
               </div>
 
               <div className="space-y-2 rounded-md border p-3">
-                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Доказательства</p>
+                <p className="text-xs font-semibold tracking-wide text-muted-foreground">Доказательства</p>
                 {selectedEvidence.length ? (
                   <div className="space-y-2">
                     {selectedEvidence.map((ref, idx) => (
@@ -734,7 +734,7 @@ function renderRecommendations({
               </div>
 
               <div className="space-y-2">
-                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Действия</p>
+                <p className="text-xs font-semibold tracking-wide text-muted-foreground">Действия</p>
                 <div className="flex flex-wrap gap-2">
                   <Button
                     size="sm"
@@ -775,7 +775,7 @@ function renderRecommendations({
               </div>
 
               <div className="space-y-2 rounded-md border p-3">
-                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Лог действий</p>
+                <p className="text-xs font-semibold tracking-wide text-muted-foreground">Лог действий</p>
                 {selectedActions.length ? (
                   selectedActions.map((run) => {
                     const canRetry = run.status === "failed" && Number(run.attempts || 0) < Number(run.max_retries || 0);
