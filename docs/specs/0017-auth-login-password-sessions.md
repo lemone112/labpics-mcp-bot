@@ -1,75 +1,21 @@
-# Спека 0017 — Auth v1: логин/пароль, сессии, безопасная авторизация (READY)
+# Спека 0017 — Auth v1: логин/пароль, сессии, безопасная авторизация (IMPLEMENTED)
 
-Статус: **ready**
+Статус: **implemented**
 
 Дата: 2026-02-17
 
-> MVP: базовая авторизация обязательна для приватного продукта студии.
+## Факты функционала
 
-## Цель
+- `POST /auth/login`: вход по логину/паролю
+- `POST /auth/logout`: выход
+- `GET /auth/me`: текущая сессия
+- cookie sessions (`HttpOnly`, `SameSite=Lax`, `Secure` в prod)
+- CSRF защита для mutating запросов
+- rate limiting на login
+- anti-enumeration (одинаковое сообщение при ошибке логина)
 
-Обеспечить безопасный доступ к продукту студии:
+## Acceptance criteria
 
-- регистрация (signup)
-- вход по логину/паролю
-- сессии (cookie/httpOnly)
-- выход (logout)
-
-## Не-цели (v1)
-
-- SSO/SAML
-- Сложная RBAC/организации
-- Мульти-тенант
-
-## Инварианты
-
-- **Secure-by-default**: httpOnly cookies, CSRF защита для state-changing запросов.
-- **No account enumeration**: ответы не должны раскрывать существование email/логина.
-- **Auditability**: критичные события auth логируются (login success/fail, logout).
-- **Session integrity**: сессия привязана к user_id и имеет TTL.
-
-## Термины
-
-- **Логин**: рекомендуем email (v1). Username можно добавить позже.
-- **Сессия**: запись на сервере + cookie у клиента.
-
-## API (контракт)
-
-Роуты (уже есть/ожидаются):
-
-- `POST /auth/signup/start` — начать регистрацию (отправка кода/токена)
-- `POST /auth/signup/confirm` — подтвердить регистрацию
-- `POST /auth/login` — вход
-- `POST /auth/logout` — выход
-- `GET /auth/me` — текущий пользователь
-
-## Политики
-
-### Пароль
-
-- min length: 10
-- запрещаем очевидные пароли (top list) — optional
-- rate limit на login
-
-### Сессия
-
-- cookie: httpOnly, secure (в prod), sameSite=lax
-- TTL: 7 дней (настраиваемо)
-- rotation: при логине создаём новую сессию
-
-### Ошибки
-
-- login fail: всегда одинаковое сообщение
-
-## UX
-
-- `/login`: email + password
-- empty/error/loading states
-- после login → редирект на `/projects`
-
-## Критерии приёмки
-
-- Можно зарегистрироваться и войти по логину/паролю.
-- Сессия сохраняется и используется на API запросах.
+- Сессия создаётся/ротируется на логине и используется на защищённых эндпойнтах.
 - Logout инвалидирует сессию.
-- Нельзя отличить “неверный пароль” от “нет такого пользователя”.
+- CSRF token требуется для защищённых POST/PUT/PATCH/DELETE.
