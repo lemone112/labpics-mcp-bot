@@ -25,6 +25,7 @@ import { listUpsellRadar, refreshUpsellRadar, updateUpsellStatus } from "./servi
 import { applyContinuityActions, buildContinuityPreview, listContinuityActions } from "./services/continuity.js";
 import { getPortfolioMessages, getPortfolioOverview } from "./services/portfolio.js";
 import { syncLoopsContacts } from "./services/loops.js";
+import { listKagRecommendations, listKagScores, listKagSignals, runKagRecommendationRefresh } from "./services/kag.js";
 import {
   generateDailyDigest,
   generateWeeklyDigest,
@@ -1043,6 +1044,45 @@ async function main() {
       evidenceRefs: item.evidence_refs || [],
     });
     return sendOk(reply, request.requestId, { item });
+  });
+
+  registerPost("/kag/refresh", async (request, reply) => {
+    const scope = requireProjectScope(request);
+    const result = await runKagRecommendationRefresh(pool, scope);
+    await writeAuditEvent(pool, {
+      projectId: scope.projectId,
+      accountScopeId: scope.accountScopeId,
+      actorUsername: request.auth?.username || null,
+      action: "kag.refresh",
+      entityType: "kag_recommendation",
+      entityId: scope.projectId,
+      status: "ok",
+      requestId: request.requestId,
+      payload: result,
+      evidenceRefs: [],
+    });
+    return sendOk(reply, request.requestId, { result });
+  });
+
+  registerGet("/kag/signals", async (request, reply) => {
+    const scope = requireProjectScope(request);
+    const rows = await listKagSignals(pool, scope, request.query?.limit);
+    return sendOk(reply, request.requestId, { signals: rows });
+  });
+
+  registerGet("/kag/scores", async (request, reply) => {
+    const scope = requireProjectScope(request);
+    const rows = await listKagScores(pool, scope, request.query?.limit);
+    return sendOk(reply, request.requestId, { scores: rows });
+  });
+
+  registerGet("/kag/recommendations", async (request, reply) => {
+    const scope = requireProjectScope(request);
+    const rows = await listKagRecommendations(pool, scope, {
+      status: request.query?.status,
+      limit: request.query?.limit,
+    });
+    return sendOk(reply, request.requestId, { recommendations: rows });
   });
 
   registerPost("/upsell/radar/refresh", async (request, reply) => {

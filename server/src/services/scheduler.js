@@ -7,6 +7,7 @@ import { extractSignalsAndNba } from "./signals.js";
 import { refreshUpsellRadar } from "./upsell.js";
 import { generateDailyDigest, generateWeeklyDigest, refreshAnalytics, refreshRiskAndHealth } from "./intelligence.js";
 import { syncLoopsContacts } from "./loops.js";
+import { runKagRecommendationRefresh } from "./kag.js";
 
 function toPositiveInt(value, fallback, min = 1, max = 2_592_000) {
   const parsed = Number.parseInt(String(value ?? ""), 10);
@@ -42,6 +43,7 @@ function createHandlers(customHandlers = {}) {
           limit: 300,
         }
       ),
+    kag_recommendations_refresh: async ({ pool, scope }) => runKagRecommendationRefresh(pool, scope),
     ...customHandlers,
   };
 }
@@ -60,6 +62,7 @@ export async function ensureDefaultScheduledJobs(pool, scope) {
     { jobType: "campaign_scheduler", cadenceSeconds: 300 },
     { jobType: "analytics_aggregates", cadenceSeconds: 1800 },
     { jobType: "loops_contacts_sync", cadenceSeconds: 3600 },
+    { jobType: "kag_recommendations_refresh", cadenceSeconds: 900 },
   ];
 
   for (const item of defaults) {
