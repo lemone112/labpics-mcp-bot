@@ -2,219 +2,60 @@
 
 Operational playbooks for the MVP.
 
-> If you are new: start from [`docs/index.md`](./index.md) → run the MVP loop → then use this page when something breaks.
+Start from: [`docs/index.md`](./index.md)
 
-## Incident templates
+## MVP loop checklist
 
-Each runbook uses the same structure:
-
-- **Symptom**
-- **Impact**
-- **Checks** (UI, DB, logs, env)
-- **Fix**
-- **Evidence to capture** (for an issue)
-
----
+1. Login works
+2. Project selected
+3. Sync runs
+4. Embeddings run
+5. Search returns evidence-backed results
 
 ## Runbook: Search returns no results
 
-**Symptom**
-- `/search` returns empty results for queries that should match.
+Checks:
 
-**Impact**
-- Users cannot retrieve evidence-backed context.
+- Verify an active project is selected.
+- Verify `rag_chunks` exist for the project.
+- Verify embeddings have `ready > 0`.
+- Verify `OPENAI_API_KEY` is set.
 
-**Checks**
-1. Open `/jobs` and inspect latest runs.
-   - If there are pending sync runs: complete sync first.
-   - If embeddings show `ready = 0`: embeddings are missing.
-2. Confirm active project is selected in session.
-3. Confirm scoped data exists for selected project:
-   - `cw_messages` rows with matching `project_id`
-   - `rag_chunks` with `embedding_status='ready'` and matching `project_id`
-4. Verify environment
-   - `OPENAI_API_KEY` is set on the server.
+Fix:
 
-**Fix**
-- Run **Sync** job, then **Embeddings** job.
-- If embeddings keep failing: set `EMBED_BATCH_SIZE=20` and retry.
+- Run sync, then embeddings.
 
-**Evidence to capture**
-- Screenshot of `/jobs` status
-- The job run error text
-- Project id/name
+## Runbook: Chatwoot sync fails
 
----
+Checks:
 
-## Runbook: Chatwoot sync job fails
+- `CHATWOOT_BASE_URL`
+- `CHATWOOT_API_TOKEN`
+- `CHATWOOT_ACCOUNT_ID`
 
-**Symptom**
-- Sync job shows failed status.
+Fix:
 
-**Checks**
-- In `/jobs`, open the latest error details.
-- Verify env variables:
-  - `CHATWOOT_BASE_URL`
-  - `CHATWOOT_API_TOKEN`
-  - `CHATWOOT_ACCOUNT_ID`
-
-**Fix**
-- Correct env vars and re-run the sync job.
-
-**Evidence to capture**
-- The failing request/endpoint (if present in logs)
-- The account id and inbox id (if applicable)
-
----
+- Correct env vars and rerun the job.
 
 ## Runbook: Auth loop / unauthorized
 
-**Symptom**
-- UI redirects back to login or API returns 401/403.
+Checks:
 
-**Checks**
-- Browser devtools: cookie is set and sent.
-- Browser request headers include `x-csrf-token` for protected POST endpoints.
-- Server env: `CORS_ORIGIN` matches UI origin.
-- Reverse proxy: cookies are not stripped.
+- Session cookie is set and sent.
+- For protected POST requests: CSRF cookie + `x-csrf-token` header.
 
-**Fix**
-- Align `CORS_ORIGIN` and proxy settings, then re-login.
-- If 403 `csrf_invalid`: clear browser cookies and login again.
+Fix:
 
-**Evidence to capture**
-- Response headers
-- Server logs around auth
-
----
-
-## Runbook: Scheduler tick / worker jobs failing
-
-**Symptom**
-- `POST /jobs/scheduler/tick` returns failures or `worker_runs` show failed status.
-
-**Checks**
-- `GET /jobs/scheduler` for `last_error` and `next_run_at`.
-- `GET /jobs/status` for sync/embeddings backlog.
-- Validate project source bindings (`project_sources`) for Chatwoot jobs.
-
-**Fix**
-- Correct failing dependency (credentials/source binding/rate limits).
-- Re-run manual jobs (`/jobs/chatwoot/sync`, `/jobs/embeddings/run`) then scheduler tick.
-
-**Evidence to capture**
-- Scheduler result payload
-- `worker_runs` latest failed rows
-- Relevant upstream error (Chatwoot/OpenAI/outbound)
-
----
-
-## Runbook: Attio/Linear sync failing in Control Tower
-
-**Symptom**
-- `POST /jobs/attio/sync` or `POST /jobs/linear/sync` returns failed status.
-- Control Tower integration block shows stale or missing watermark for `attio:*` / `linear:*`.
-
-**Checks**
-- Validate environment variables:
-  - `ATTIO_BASE_URL`, `ATTIO_API_TOKEN`, `ATTIO_WORKSPACE_ID`
-  - `LINEAR_BASE_URL`, `LINEAR_API_TOKEN`, `LINEAR_WORKSPACE_ID`
-- Check `project_sources` for per-project bindings (`attio_workspace`, `linear_workspace`).
-- Check `sync_watermarks` by `project_id/account_scope_id`.
-- Check latest `job_runs` and `worker_runs` error payload.
-
-**Fix**
-- Correct credentials/source binding for project.
-- Re-run manual sync jobs from `/jobs`.
-- If upstream temporarily unavailable, switch to mock mode (`ATTIO_MOCK_MODE=1`, `LINEAR_MOCK_MODE=1`) to keep pipeline operational for demos/dev.
-
-**Evidence to capture**
-- failing `job_runs` row (`error`, `meta`)
-- source binding row from `project_sources`
-- current sync watermark rows
-
----
-
-## Runbook: Signals/NBA drift (too many stale proposed items)
-
-**Symptom**
-- Signals page accumulates stale `proposed` signals and NBAs.
-
-**Checks**
-- `POST /signals/extract` result (`generated_candidates`, `touched_signals`, `touched_nba`)
-- status distribution in `signals` / `next_best_actions`
-- dedupe quality (`dedupe_key` collisions / repeats)
-
-**Fix**
-- Run extraction and then triage statuses (`accepted/dismissed/done`).
-- Ensure continuity and upsell preview/apply loops are executed regularly.
-- Trigger `POST /risk/refresh` and digest generation after triage.
-
-**Evidence to capture**
-- before/after status counts
-- sample stale signal IDs + evidence refs
-
----
+- Clear cookies and login again.
+- Align `CORS_ORIGIN` with the UI origin.
 
 ## Runbook: Embeddings job fails
 
-**Symptom**
-- Embeddings job fails or stalls.
+Checks:
 
-**Checks**
-- Validate OpenAI key and quotas.
-- Inspect error logs from the job run.
+- OpenAI key/quota
+- job error payload
 
-**Fix**
-- Reduce `EMBED_BATCH_SIZE` to 20 and retry.
+Fix:
 
-**Evidence to capture**
-- Error message
-- Batch size
-- Approx message/chunk counts
-
----
-
-## Runbook: Login credentials invalid / secret format
-
-**Symptom**
-- On `/login`, valid credentials are rejected.
-
-**Checks**
-- Verify `AUTH_CREDENTIALS` is configured in format `login:password`.
-- Ensure no accidental leading/trailing spaces in secret value.
-- Confirm deploy workflow rendered `.env` with `AUTH_CREDENTIALS`.
-
-**Fix**
-- Update secret value and redeploy.
-- Keep `AUTH_USERNAME`/`AUTH_PASSWORD` only as optional fallback.
-
-**Evidence to capture**
-- `/auth/login` response payload
-- Effective auth env values (masked)
-- Backend logs around login validation
-
----
-
-## Runbook: Outbound delivery blocked or failing
-
-**Symptom**
-- Outbound remains `draft/approved/failed/blocked_opt_out` and does not reach `sent`.
-
-**Checks**
-- `GET /outbound` item status and `last_error`.
-- Verify policy row in `contact_channel_policies`:
-  - `opted_out`
-  - `stop_on_reply`
-  - frequency counters/caps
-- Check `outbound_attempts` history.
-
-**Fix**
-- For `blocked_opt_out`: only explicit opt-in policy change can unlock.
-- For `frequency_cap_reached`: wait for window reset or change cap.
-- For provider errors: fix payload/provider config and retry via `/outbound/process`.
-
-**Evidence to capture**
-- outbound payload + status history
-- policy values for affected contact/channel
-- related `audit_events` (`outbound.*` actions)
+- Reduce `EMBED_BATCH_SIZE` and retry.
