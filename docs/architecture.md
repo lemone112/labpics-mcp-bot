@@ -121,6 +121,8 @@
 
 ## 8) Смежные документы
 
+- Продуктовый обзор: [`docs/product/overview.md`](./product/overview.md)
+- Frontend + дизайн: [`docs/frontend-design.md`](./frontend-design.md)
 - Платформенные инварианты: [`docs/platform-architecture.md`](./platform-architecture.md)
 - Модель БД: [`docs/data-model.md`](./data-model.md)
 - Пайплайны/расписание: [`docs/pipelines.md`](./pipelines.md)
