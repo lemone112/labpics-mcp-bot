@@ -46,7 +46,7 @@ export default function CrmFeaturePage() {
       setAccounts(Array.isArray(accountsResp?.accounts) ? accountsResp.accounts : []);
       setOpportunities(Array.isArray(opportunitiesResp?.opportunities) ? opportunitiesResp.opportunities : []);
     } catch (error) {
-      setToast({ type: "error", message: error?.message || "Failed to load CRM data" });
+      setToast({ type: "error", message: error?.message || "Ошибка загрузки данных CRM" });
     } finally {
       setBusy(false);
     }
@@ -76,7 +76,7 @@ export default function CrmFeaturePage() {
           .map((item) => ({
             id: item.id,
             title: item.title,
-            subtitle: item.account_name || "Unlinked account",
+            subtitle: item.account_name || "Без аккаунта",
             status: item.stage,
             meta: item.amount_estimate ? `$${Number(item.amount_estimate).toLocaleString()}` : "$0",
           })),
@@ -92,10 +92,10 @@ export default function CrmFeaturePage() {
         body: { name: newAccountName.trim() },
       });
       setNewAccountName("");
-      setToast({ type: "success", message: "Account created" });
+      setToast({ type: "success", message: "Аккаунт создан" });
       await load();
     } catch (error) {
-      setToast({ type: "error", message: error?.message || "Failed to create account" });
+      setToast({ type: "error", message: error?.message || "Ошибка создания аккаунта" });
     }
   }
 
@@ -113,16 +113,16 @@ export default function CrmFeaturePage() {
         },
       });
       setNewOpportunityTitle("");
-      setToast({ type: "success", message: "Opportunity created" });
+      setToast({ type: "success", message: "Возможность создана" });
       await load();
     } catch (error) {
-      setToast({ type: "error", message: error?.message || "Failed to create opportunity" });
+      setToast({ type: "error", message: error?.message || "Ошибка создания возможности" });
     }
   }
 
   if (loading || !session || loadingProjects) {
     return (
-      <PageShell title="CRM" subtitle="Accounts/Opportunities with kanban stages and next-step discipline">
+      <PageShell title="CRM" subtitle="Аккаунты и возможности с kanban-стадиями и дисциплиной следующего шага">
         <PageLoadingSkeleton />
       </PageShell>
     );
@@ -130,7 +130,7 @@ export default function CrmFeaturePage() {
 
   if (!hasProject) {
     return (
-      <PageShell title="CRM" subtitle="Accounts, opportunities and stage progression">
+      <PageShell title="CRM" subtitle="Аккаунты, возможности и прогресс стадий">
         <ProjectScopeRequired
           title="Сначала выберите активный проект"
           description="CRM сущности и стадии ведутся в рамках выбранного проекта."
@@ -140,51 +140,51 @@ export default function CrmFeaturePage() {
   }
 
   return (
-    <PageShell title="CRM" subtitle="Accounts/Opportunities with kanban stages and next-step discipline">
+    <PageShell title="CRM" subtitle="Аккаунты и возможности с kanban-стадиями и дисциплиной следующего шага">
       <div className="space-y-4">
         <Card data-motion-item>
           <CardHeader className="flex-row items-center justify-between">
-            <CardTitle>CRM overview</CardTitle>
+            <CardTitle>Обзор CRM</CardTitle>
             <Button size="sm" variant="outline" onClick={load} disabled={busy}>
-              {busy ? "Refreshing..." : "Refresh"}
+              {busy ? "Обновление..." : "Обновить"}
             </Button>
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-              <StatTile label="Accounts" value={overview?.accounts ?? 0} />
+              <StatTile label="Аккаунты" value={overview?.accounts ?? 0} />
               <StatTile
-                label="Open opportunities"
+                label="Открытые возможности"
                 value={filteredOpportunities.filter((item) => !["won", "lost"].includes(item.stage)).length}
               />
-              <StatTile label="Identity links" value={overview?.links_by_status?.[0]?.count ?? 0} />
+              <StatTile label="Identity-связи" value={overview?.links_by_status?.[0]?.count ?? 0} />
             </div>
           </CardContent>
         </Card>
 
         <Card data-motion-item>
           <CardHeader>
-            <CardTitle>Create records</CardTitle>
+            <CardTitle>Создание записей</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
             <div className="flex flex-col gap-2 md:flex-row">
               <Input
                 value={newAccountName}
                 onChange={(event) => setNewAccountName(event.target.value)}
-                placeholder="New account name"
+                placeholder="Название аккаунта"
                 className="md:max-w-sm"
               />
-              <Button onClick={createAccount}>Create account</Button>
+              <Button onClick={createAccount}>Создать аккаунт</Button>
             </div>
             <div className="flex flex-col gap-2 md:flex-row">
               <Input
                 value={newOpportunityTitle}
                 onChange={(event) => setNewOpportunityTitle(event.target.value)}
-                placeholder="Opportunity title"
+                placeholder="Название возможности"
                 className="md:max-w-sm"
               />
               <Select value={newOpportunityAccountId} onValueChange={setNewOpportunityAccountId}>
                 <SelectTrigger className="md:max-w-sm">
-                  <SelectValue placeholder="Select account" />
+                  <SelectValue placeholder="Выбрать аккаунт" />
                 </SelectTrigger>
                 <SelectContent>
                   {accounts.map((account) => (
@@ -194,17 +194,17 @@ export default function CrmFeaturePage() {
                   ))}
                 </SelectContent>
               </Select>
-              <Button onClick={createOpportunity}>Create opportunity</Button>
+              <Button onClick={createOpportunity}>Создать возможность</Button>
             </div>
           </CardContent>
         </Card>
 
         <Card data-motion-item>
           <CardHeader>
-            <CardTitle>Opportunity kanban</CardTitle>
+            <CardTitle>Kanban возможностей</CardTitle>
           </CardHeader>
           <CardContent>
-            <Filters queryValue={query} onQueryChange={setQuery} queryPlaceholder="Search opportunities..." />
+            <Filters queryValue={query} onQueryChange={setQuery} queryPlaceholder="Поиск возможностей..." />
             <div className="mt-3">
               <Kanban columns={columns} />
             </div>
@@ -213,16 +213,16 @@ export default function CrmFeaturePage() {
 
         <Card data-motion-item>
           <CardHeader>
-            <CardTitle>Accounts</CardTitle>
+            <CardTitle>Аккаунты</CardTitle>
           </CardHeader>
           <CardContent>
             <Table aria-label="CRM accounts">
               <TableHeader>
                 <TableRow>
-                  <TableHead>Name</TableHead>
-                  <TableHead>Domain</TableHead>
-                  <TableHead>Stage</TableHead>
-                  <TableHead>Updated</TableHead>
+                  <TableHead>Название</TableHead>
+                  <TableHead>Домен</TableHead>
+                  <TableHead>Стадия</TableHead>
+                  <TableHead>Обновлён</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -236,7 +236,7 @@ export default function CrmFeaturePage() {
                 ))}
                 {!accounts.length ? (
                   <TableRow>
-                    <TableCell colSpan={4}>No accounts yet.</TableCell>
+                    <TableCell colSpan={4}>Аккаунтов пока нет.</TableCell>
                   </TableRow>
                 ) : null}
               </TableBody>

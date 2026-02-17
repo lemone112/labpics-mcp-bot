@@ -27,10 +27,10 @@ export default function ProjectsFeaturePage() {
     try {
       await apiFetch("/projects", { method: "POST", body: { name } });
       setName("");
-      setToast({ type: "success", message: "Project created" });
+      setToast({ type: "success", message: "Проект создан" });
       await refreshProjects();
     } catch (error) {
-      setToast({ type: "error", message: error?.message || "Create failed" });
+      setToast({ type: "error", message: error?.message || "Ошибка создания" });
     } finally {
       setCreating(false);
     }
@@ -39,39 +39,39 @@ export default function ProjectsFeaturePage() {
   async function onSelect(projectId) {
     try {
       await activateProject(projectId);
-      setToast({ type: "success", message: "Active project updated" });
+      setToast({ type: "success", message: "Активный проект обновлён" });
     } catch (error) {
-      setToast({ type: "error", message: error?.message || "Select failed" });
+      setToast({ type: "error", message: error?.message || "Ошибка выбора" });
     }
   }
 
   if (loading || !session || loadingProjects) {
     return (
-      <PageShell title="Projects" subtitle="Create and select active project for session">
+      <PageShell title="Проекты" subtitle="Создание и выбор активного проекта для сессии">
         <PageLoadingSkeleton />
       </PageShell>
     );
   }
 
   return (
-    <PageShell title="Projects" subtitle="Create and select active project for session">
+    <PageShell title="Проекты" subtitle="Создание и выбор активного проекта для сессии">
       <div className="space-y-4">
         <Card data-motion-item>
           <CardHeader>
-            <CardTitle>New project</CardTitle>
+            <CardTitle>Новый проект</CardTitle>
           </CardHeader>
           <CardContent>
             <form className="flex flex-col gap-3 md:flex-row" onSubmit={onCreate}>
               <Input
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                placeholder="Project name"
+                placeholder="Название проекта"
                 required
                 minLength={2}
                 maxLength={160}
               />
               <Button type="submit" disabled={busy}>
-                Create
+                Создать
               </Button>
             </form>
           </CardContent>
@@ -79,16 +79,16 @@ export default function ProjectsFeaturePage() {
 
         <Card data-motion-item>
           <CardHeader>
-            <CardTitle>Project list</CardTitle>
+            <CardTitle>Список проектов</CardTitle>
           </CardHeader>
           <CardContent>
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Name</TableHead>
+                  <TableHead>Название</TableHead>
                   <TableHead>ID</TableHead>
-                  <TableHead>Created</TableHead>
-                  <TableHead>Action</TableHead>
+                  <TableHead>Создан</TableHead>
+                  <TableHead>Действие</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -105,10 +105,10 @@ export default function ProjectsFeaturePage() {
                         onClick={() => onSelect(project.id)}
                       >
                         {activatingProjectId === String(project.id)
-                          ? "Switching..."
+                          ? "Переключение..."
                           : activeProjectId === project.id
-                            ? "Active"
-                            : "Select"}
+                            ? "Активен"
+                            : "Выбрать"}
                       </Button>
                     </TableCell>
                   </TableRow>
@@ -116,7 +116,7 @@ export default function ProjectsFeaturePage() {
                 {!projects.length ? (
                   <TableRow>
                     <TableCell colSpan={4} className="text-muted-foreground">
-                      No projects yet.
+                      Проектов пока нет.
                     </TableCell>
                   </TableRow>
                 ) : null}

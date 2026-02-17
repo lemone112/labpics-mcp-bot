@@ -10,12 +10,12 @@ export function Toast({ type = "info", message, className }) {
     type === "error"
       ? "border-destructive/40 bg-destructive/10 text-destructive"
       : type === "success"
-        ? "border-primary/30 bg-primary/10 text-primary"
+        ? "border-success/30 bg-success/10 text-success"
         : "border-border bg-muted text-foreground";
 
   return (
     <Alert data-motion-item className={cn("border text-sm", tone, className)}>
-      <AlertTitle>{type === "error" ? "Error" : type === "success" ? "Success" : "Info"}</AlertTitle>
+      <AlertTitle>{type === "error" ? "Ошибка" : type === "success" ? "Готово" : "Информация"}</AlertTitle>
       <AlertDescription>{message}</AlertDescription>
     </Alert>
   );

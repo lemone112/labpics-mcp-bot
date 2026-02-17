@@ -29,7 +29,7 @@ export default function DigestsFeaturePage() {
       setDaily(Array.isArray(dailyResp?.digests) ? dailyResp.digests : []);
       setWeekly(Array.isArray(weeklyResp?.digests) ? weeklyResp.digests : []);
     } catch (error) {
-      setToast({ type: "error", message: error?.message || "Failed to load digests" });
+      setToast({ type: "error", message: error?.message || "Ошибка загрузки дайджестов" });
     } finally {
       setBusy(false);
     }
@@ -44,26 +44,26 @@ export default function DigestsFeaturePage() {
   async function generateDaily() {
     try {
       await apiFetch("/digests/daily/generate", { method: "POST" });
-      setToast({ type: "success", message: "Daily digest generated" });
+      setToast({ type: "success", message: "Ежедневный дайджест сгенерирован" });
       await load();
     } catch (error) {
-      setToast({ type: "error", message: error?.message || "Failed to generate daily digest" });
+      setToast({ type: "error", message: error?.message || "Ошибка генерации ежедневного дайджеста" });
     }
   }
 
   async function generateWeekly() {
     try {
       await apiFetch("/digests/weekly/generate", { method: "POST" });
-      setToast({ type: "success", message: "Weekly digest generated" });
+      setToast({ type: "success", message: "Еженедельный дайджест сгенерирован" });
       await load();
     } catch (error) {
-      setToast({ type: "error", message: error?.message || "Failed to generate weekly digest" });
+      setToast({ type: "error", message: error?.message || "Ошибка генерации еженедельного дайджеста" });
     }
   }
 
   if (loading || !session || loadingProjects) {
     return (
-      <PageShell title="Digests" subtitle="Daily operations digest + weekly portfolio digest">
+      <PageShell title="Дайджесты" subtitle="Ежедневный операционный дайджест и еженедельный портфельный">
         <PageLoadingSkeleton />
       </PageShell>
     );
@@ -71,7 +71,7 @@ export default function DigestsFeaturePage() {
 
   if (!hasProject) {
     return (
-      <PageShell title="Digests" subtitle="Daily and weekly project intelligence">
+      <PageShell title="Дайджесты" subtitle="Ежедневная и еженедельная аналитика проекта">
         <ProjectScopeRequired
           title="Сначала выберите активный проект"
           description="Дайджесты формируются в рамках конкретного проекта."
@@ -81,34 +81,34 @@ export default function DigestsFeaturePage() {
   }
 
   return (
-    <PageShell title="Digests" subtitle="Daily operations digest + weekly portfolio digest">
+    <PageShell title="Дайджесты" subtitle="Ежедневный операционный дайджест и еженедельный портфельный">
       <div className="space-y-4">
         <Card data-motion-item>
           <CardHeader className="flex-row items-center justify-between">
-            <CardTitle>Generate digests</CardTitle>
+            <CardTitle>Генерация дайджестов</CardTitle>
             <Button variant="outline" size="sm" onClick={load} disabled={busy}>
-              {busy ? "Refreshing..." : "Refresh"}
+              {busy ? "Обновление..." : "Обновить"}
             </Button>
           </CardHeader>
           <CardContent className="flex flex-wrap gap-2">
-            <Button onClick={generateDaily}>Generate daily</Button>
+            <Button onClick={generateDaily}>Генерировать ежедневный</Button>
             <Button variant="secondary" onClick={generateWeekly}>
-              Generate weekly
+              Генерировать еженедельный
             </Button>
           </CardContent>
         </Card>
 
         <Card data-motion-item>
           <CardHeader>
-            <CardTitle>Daily digest history</CardTitle>
+            <CardTitle>История ежедневных дайджестов</CardTitle>
           </CardHeader>
           <CardContent>
             <Table aria-label="Daily digests">
               <TableHeader>
                 <TableRow>
-                  <TableHead>Date</TableHead>
-                  <TableHead>Highlights</TableHead>
-                  <TableHead>Top actions</TableHead>
+                  <TableHead>Дата</TableHead>
+                  <TableHead>Основные события</TableHead>
+                  <TableHead>Главные действия</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -116,7 +116,7 @@ export default function DigestsFeaturePage() {
                   <TableRow key={row.id}>
                     <TableCell>{row.digest_date}</TableCell>
                     <TableCell>
-                      Proposed signals: {row.summary?.highlights?.proposed_signals ?? 0}, overdue issues:{" "}
+                      Предложено сигналов: {row.summary?.highlights?.proposed_signals ?? 0}, просроченных задач:{" "}
                       {row.summary?.highlights?.overdue_issues ?? 0}
                     </TableCell>
                     <TableCell>{row.summary?.top_nba?.length ?? 0}</TableCell>
@@ -124,7 +124,7 @@ export default function DigestsFeaturePage() {
                 ))}
                 {!daily.length ? (
                   <TableRow>
-                    <TableCell colSpan={3}>No daily digests yet.</TableCell>
+                    <TableCell colSpan={3}>Ежедневных дайджестов пока нет.</TableCell>
                   </TableRow>
                 ) : null}
               </TableBody>
@@ -134,15 +134,15 @@ export default function DigestsFeaturePage() {
 
         <Card data-motion-item>
           <CardHeader>
-            <CardTitle>Weekly digest history</CardTitle>
+            <CardTitle>История еженедельных дайджестов</CardTitle>
           </CardHeader>
           <CardContent>
             <Table aria-label="Weekly digests">
               <TableHeader>
                 <TableRow>
-                  <TableHead>Week start</TableHead>
-                  <TableHead>Open pipeline</TableHead>
-                  <TableHead>Top risks</TableHead>
+                  <TableHead>Начало недели</TableHead>
+                  <TableHead>Открытый пайплайн</TableHead>
+                  <TableHead>Главные риски</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -155,7 +155,7 @@ export default function DigestsFeaturePage() {
                 ))}
                 {!weekly.length ? (
                   <TableRow>
-                    <TableCell colSpan={3}>No weekly digests yet.</TableCell>
+                    <TableCell colSpan={3}>Еженедельных дайджестов пока нет.</TableCell>
                   </TableRow>
                 ) : null}
               </TableBody>

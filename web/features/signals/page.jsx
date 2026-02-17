@@ -9,6 +9,7 @@ import { PageLoadingSkeleton } from "@/components/ui/page-loading-skeleton";
 import { ProjectScopeRequired } from "@/components/project-scope-required";
 import { Toast } from "@/components/ui/toast";
 import { StatusChip } from "@/components/ui/status-chip";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Filters } from "@/components/ui/filters";
 import { apiFetch } from "@/lib/api";
@@ -46,7 +47,7 @@ export default function SignalsFeaturePage() {
       setIdentitySuggestions(Array.isArray(suggestionsResp?.suggestions) ? suggestionsResp.suggestions : []);
       setContinuityActions(Array.isArray(continuityResp?.actions) ? continuityResp.actions : []);
     } catch (error) {
-      setToast({ type: "error", message: error?.message || "Failed to load signals stack" });
+      setToast({ type: "error", message: error?.message || "Не удалось загрузить данные сигналов" });
     } finally {
       setBusy(false);
     }
@@ -69,30 +70,30 @@ export default function SignalsFeaturePage() {
   async function runExtraction() {
     try {
       await apiFetch("/signals/extract", { method: "POST" });
-      setToast({ type: "success", message: "Signals extraction completed" });
+      setToast({ type: "success", message: "Извлечение сигналов завершено" });
       await load();
     } catch (error) {
-      setToast({ type: "error", message: error?.message || "Signals extraction failed" });
+      setToast({ type: "error", message: error?.message || "Ошибка извлечения сигналов" });
     }
   }
 
   async function refreshUpsell() {
     try {
       await apiFetch("/upsell/radar/refresh", { method: "POST" });
-      setToast({ type: "success", message: "Upsell radar refreshed" });
+      setToast({ type: "success", message: "Радар допродаж обновлён" });
       await load();
     } catch (error) {
-      setToast({ type: "error", message: error?.message || "Upsell refresh failed" });
+      setToast({ type: "error", message: error?.message || "Ошибка обновления радара" });
     }
   }
 
   async function previewIdentity() {
     try {
       await apiFetch("/identity/suggestions/preview", { method: "POST", body: { limit: 120 } });
-      setToast({ type: "success", message: "Identity suggestions updated" });
+      setToast({ type: "success", message: "Предложения identity обновлены" });
       await load();
     } catch (error) {
-      setToast({ type: "error", message: error?.message || "Identity preview failed" });
+      setToast({ type: "error", message: error?.message || "Ошибка preview identity" });
     }
   }
 
@@ -105,20 +106,20 @@ export default function SignalsFeaturePage() {
         body: { suggestion_ids: ids },
       });
       setSelectedSuggestions({});
-      setToast({ type: "success", message: "Identity links applied" });
+      setToast({ type: "success", message: "Identity-связи применены" });
       await load();
     } catch (error) {
-      setToast({ type: "error", message: error?.message || "Identity apply failed" });
+      setToast({ type: "error", message: error?.message || "Ошибка применения identity" });
     }
   }
 
   async function previewContinuity() {
     try {
       await apiFetch("/continuity/preview", { method: "POST" });
-      setToast({ type: "success", message: "Continuity preview generated" });
+      setToast({ type: "success", message: "Предпросмотр continuity сгенерирован" });
       await load();
     } catch (error) {
-      setToast({ type: "error", message: error?.message || "Continuity preview failed" });
+      setToast({ type: "error", message: error?.message || "Ошибка предпросмотра continuity" });
     }
   }
 
@@ -128,10 +129,10 @@ export default function SignalsFeaturePage() {
     try {
       await apiFetch("/continuity/apply", { method: "POST", body: { action_ids: ids } });
       setSelectedContinuity({});
-      setToast({ type: "success", message: "Continuity actions applied to Linear backlog" });
+      setToast({ type: "success", message: "Continuity-действия применены к бэклогу Linear" });
       await load();
     } catch (error) {
-      setToast({ type: "error", message: error?.message || "Continuity apply failed" });
+      setToast({ type: "error", message: error?.message || "Ошибка применения continuity" });
     }
   }
 
@@ -140,13 +141,13 @@ export default function SignalsFeaturePage() {
       await apiFetch(`/nba/${id}/status`, { method: "POST", body: { status } });
       await load();
     } catch (error) {
-      setToast({ type: "error", message: error?.message || "Failed to update NBA status" });
+      setToast({ type: "error", message: error?.message || "Не удалось обновить статус NBA" });
     }
   }
 
   if (loading || !session || loadingProjects) {
     return (
-      <PageShell title="Signals + NBA" subtitle="Extraction, deduplication, identity graph and actionable next-best-actions">
+      <PageShell title="Signals" subtitle="Извлечение, дедупликация, граф идентификации и next-best-actions">
         <PageLoadingSkeleton />
       </PageShell>
     );
@@ -154,7 +155,7 @@ export default function SignalsFeaturePage() {
 
   if (!hasProject) {
     return (
-      <PageShell title="Signals" subtitle="Signals, NBA and identity graph linking">
+      <PageShell title="Signals" subtitle="Сигналы, NBA и граф идентификации">
         <ProjectScopeRequired
           title="Сначала выберите активный проект"
           description="Сигналы и NBA считаются в проектном контексте. Выберите проект и обновите страницу."
@@ -164,58 +165,57 @@ export default function SignalsFeaturePage() {
   }
 
   return (
-    <PageShell title="Signals + NBA" subtitle="Extraction, deduplication, identity graph and actionable next-best-actions">
+    <PageShell title="Signals" subtitle="Извлечение, дедупликация, граф идентификации и next-best-actions">
       <div className="space-y-4">
         <Card data-motion-item>
           <CardHeader className="flex-row items-center justify-between">
-            <CardTitle>Actions</CardTitle>
+            <CardTitle>Действия</CardTitle>
             <Button size="sm" variant="outline" onClick={load} disabled={busy}>
-              {busy ? "Refreshing..." : "Refresh"}
+              {busy ? "Обновление..." : "Обновить"}
             </Button>
           </CardHeader>
           <CardContent className="flex flex-wrap gap-2">
-            <Button onClick={runExtraction}>Extract signals</Button>
+            <Button onClick={runExtraction}>Извлечь сигналы</Button>
             <Button variant="secondary" onClick={refreshUpsell}>
-              Refresh upsell radar
+              Обновить радар допродаж
             </Button>
             <Button variant="secondary" onClick={previewIdentity}>
-              Preview identity links
+              Предпросмотр identity-связей
             </Button>
             <Button variant="outline" onClick={applyIdentity}>
-              Apply selected links
+              Применить выбранные связи
             </Button>
             <Button variant="secondary" onClick={previewContinuity}>
-              Preview deal→delivery
+              Предпросмотр deal→delivery
             </Button>
             <Button variant="outline" onClick={applyContinuity}>
-              Apply selected continuity
+              Применить выбранные continuity
             </Button>
           </CardContent>
         </Card>
 
         <Card data-motion-item>
           <CardHeader>
-            <CardTitle>Identity link suggestions</CardTitle>
+            <CardTitle>Предложения identity-связей</CardTitle>
           </CardHeader>
           <CardContent>
-            <Table aria-label="Identity graph suggestions">
+            <Table aria-label="Предложения идентификации">
               <TableHeader>
                 <TableRow>
-                  <TableHead>Pick</TableHead>
-                  <TableHead>Link</TableHead>
-                  <TableHead>Confidence</TableHead>
-                  <TableHead>Status</TableHead>
+                  <TableHead className="w-10"></TableHead>
+                  <TableHead>Связь</TableHead>
+                  <TableHead>Уверенность</TableHead>
+                  <TableHead>Статус</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {identitySuggestions.map((row) => (
                   <TableRow key={row.id}>
                     <TableCell>
-                      <input
-                        type="checkbox"
+                      <Checkbox
                         checked={Boolean(selectedSuggestions[row.id])}
-                        onChange={(event) =>
-                          setSelectedSuggestions((prev) => ({ ...prev, [row.id]: event.target.checked }))
+                        onCheckedChange={(checked) =>
+                          setSelectedSuggestions((prev) => ({ ...prev, [row.id]: checked }))
                         }
                       />
                     </TableCell>
@@ -230,7 +230,7 @@ export default function SignalsFeaturePage() {
                 ))}
                 {!identitySuggestions.length ? (
                   <TableRow>
-                    <TableCell colSpan={4}>No suggestions yet.</TableCell>
+                    <TableCell colSpan={4} className="text-muted-foreground">Предложений пока нет.</TableCell>
                   </TableRow>
                 ) : null}
               </TableBody>
@@ -240,19 +240,19 @@ export default function SignalsFeaturePage() {
 
         <Card data-motion-item>
           <CardHeader>
-            <CardTitle>Detected signals</CardTitle>
+            <CardTitle>Обнаруженные сигналы</CardTitle>
           </CardHeader>
           <CardContent>
-            <Filters queryValue={query} onQueryChange={setQuery} queryPlaceholder="Filter signal summary/type..." />
+            <Filters queryValue={query} onQueryChange={setQuery} queryPlaceholder="Фильтр по типу или описанию сигнала..." />
             <div className="mt-3">
-              <Table aria-label="Signals">
+              <Table aria-label="Сигналы">
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Type</TableHead>
-                    <TableHead>Summary</TableHead>
-                    <TableHead>Severity</TableHead>
-                    <TableHead>Confidence</TableHead>
-                    <TableHead>Status</TableHead>
+                    <TableHead>Тип</TableHead>
+                    <TableHead>Описание</TableHead>
+                    <TableHead>Критичность</TableHead>
+                    <TableHead>Уверенность</TableHead>
+                    <TableHead>Статус</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -269,7 +269,7 @@ export default function SignalsFeaturePage() {
                   ))}
                   {!filteredSignals.length ? (
                     <TableRow>
-                      <TableCell colSpan={5}>No signals yet. Run extraction.</TableCell>
+                      <TableCell colSpan={5} className="text-muted-foreground">Сигналов пока нет. Запустите извлечение.</TableCell>
                     </TableRow>
                   ) : null}
                 </TableBody>
@@ -283,13 +283,13 @@ export default function SignalsFeaturePage() {
             <CardTitle>Next Best Actions</CardTitle>
           </CardHeader>
           <CardContent>
-            <Table aria-label="NBA list">
+            <Table aria-label="Список NBA">
               <TableHeader>
                 <TableRow>
-                  <TableHead>Summary</TableHead>
-                  <TableHead>Priority</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Action</TableHead>
+                  <TableHead>Описание</TableHead>
+                  <TableHead>Приоритет</TableHead>
+                  <TableHead>Статус</TableHead>
+                  <TableHead>Действие</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -303,10 +303,10 @@ export default function SignalsFeaturePage() {
                     <TableCell>
                       <div className="flex gap-2">
                         <Button size="sm" variant="secondary" onClick={() => setNbaStatus(row.id, "accepted")}>
-                          Accept
+                          Принять
                         </Button>
                         <Button size="sm" variant="outline" onClick={() => setNbaStatus(row.id, "done")}>
-                          Done
+                          Выполнено
                         </Button>
                       </div>
                     </TableCell>
@@ -314,7 +314,7 @@ export default function SignalsFeaturePage() {
                 ))}
                 {!nba.length ? (
                   <TableRow>
-                    <TableCell colSpan={4}>No NBA yet.</TableCell>
+                    <TableCell colSpan={4} className="text-muted-foreground">NBA пока нет.</TableCell>
                   </TableRow>
                 ) : null}
               </TableBody>
@@ -324,16 +324,16 @@ export default function SignalsFeaturePage() {
 
         <Card data-motion-item>
           <CardHeader>
-            <CardTitle>Upsell radar</CardTitle>
+            <CardTitle>Радар допродаж</CardTitle>
           </CardHeader>
           <CardContent>
-            <Table aria-label="Upsell radar">
+            <Table aria-label="Радар допродаж">
               <TableHeader>
                 <TableRow>
-                  <TableHead>Title</TableHead>
-                  <TableHead>Score</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Suggested outbound</TableHead>
+                  <TableHead>Название</TableHead>
+                  <TableHead>Оценка</TableHead>
+                  <TableHead>Статус</TableHead>
+                  <TableHead>Предложенное сообщение</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -349,7 +349,7 @@ export default function SignalsFeaturePage() {
                 ))}
                 {!upsell.length ? (
                   <TableRow>
-                    <TableCell colSpan={4}>No upsell opportunities yet.</TableCell>
+                    <TableCell colSpan={4} className="text-muted-foreground">Возможностей допродаж пока нет.</TableCell>
                   </TableRow>
                 ) : null}
               </TableBody>
@@ -359,27 +359,26 @@ export default function SignalsFeaturePage() {
 
         <Card data-motion-item>
           <CardHeader>
-            <CardTitle>Deal→Delivery continuity preview</CardTitle>
+            <CardTitle>Предпросмотр deal→delivery continuity</CardTitle>
           </CardHeader>
           <CardContent>
-            <Table aria-label="Continuity actions">
+            <Table aria-label="Continuity-действия">
               <TableHeader>
                 <TableRow>
-                  <TableHead>Pick</TableHead>
-                  <TableHead>Title</TableHead>
-                  <TableHead>Source</TableHead>
-                  <TableHead>Status</TableHead>
+                  <TableHead className="w-10"></TableHead>
+                  <TableHead>Название</TableHead>
+                  <TableHead>Источник</TableHead>
+                  <TableHead>Статус</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {continuityActions.map((row) => (
                   <TableRow key={row.id}>
                     <TableCell>
-                      <input
-                        type="checkbox"
+                      <Checkbox
                         checked={Boolean(selectedContinuity[row.id])}
-                        onChange={(event) =>
-                          setSelectedContinuity((prev) => ({ ...prev, [row.id]: event.target.checked }))
+                        onCheckedChange={(checked) =>
+                          setSelectedContinuity((prev) => ({ ...prev, [row.id]: checked }))
                         }
                       />
                     </TableCell>
@@ -392,7 +391,7 @@ export default function SignalsFeaturePage() {
                 ))}
                 {!continuityActions.length ? (
                   <TableRow>
-                    <TableCell colSpan={4}>No continuity previews yet.</TableCell>
+                    <TableCell colSpan={4} className="text-muted-foreground">Предпросмотров continuity пока нет.</TableCell>
                   </TableRow>
                 ) : null}
               </TableBody>

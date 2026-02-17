@@ -5,79 +5,111 @@ import { Badge } from "@/components/ui/badge";
 
 const statusMap = {
   pending: {
-    label: "Pending",
-    className: "border-secondary bg-secondary/40 text-secondary-foreground",
+    label: "Ожидание",
+    className: "border-warning/30 bg-warning/10 text-warning",
   },
   processing: {
-    label: "Processing",
+    label: "Обработка",
     className: "border-primary/30 bg-primary/10 text-primary",
   },
   ready: {
-    label: "Ready",
-    className: "border-primary/30 bg-primary/10 text-primary",
+    label: "Готов",
+    className: "border-success/30 bg-success/10 text-success",
   },
   completed: {
-    label: "Completed",
-    className: "border-primary/30 bg-primary/10 text-primary",
+    label: "Завершён",
+    className: "border-success/30 bg-success/10 text-success",
   },
   failed: {
-    label: "Failed",
+    label: "Ошибка",
     className: "border-destructive/40 bg-destructive/10 text-destructive",
   },
   running: {
-    label: "Running",
+    label: "Выполняется",
     className: "border-primary/30 bg-primary/10 text-primary",
   },
   proposed: {
-    label: "Proposed",
+    label: "Предложено",
     className: "border-primary/30 bg-primary/10 text-primary",
   },
   accepted: {
-    label: "Accepted",
-    className: "border-primary/30 bg-primary/10 text-primary",
+    label: "Принято",
+    className: "border-success/30 bg-success/10 text-success",
   },
   dismissed: {
-    label: "Dismissed",
+    label: "Отклонено",
     className: "border-border bg-muted text-muted-foreground",
   },
   done: {
-    label: "Done",
-    className: "border-primary/30 bg-primary/10 text-primary",
+    label: "Выполнено",
+    className: "border-success/30 bg-success/10 text-success",
   },
   cancelled: {
-    label: "Cancelled",
+    label: "Отменено",
     className: "border-border bg-muted text-muted-foreground",
   },
   draft: {
-    label: "Draft",
-    className: "border-secondary bg-secondary/40 text-secondary-foreground",
+    label: "Черновик",
+    className: "border-border bg-secondary/40 text-secondary-foreground",
   },
   approved: {
-    label: "Approved",
-    className: "border-primary/30 bg-primary/10 text-primary",
+    label: "Утверждено",
+    className: "border-success/30 bg-success/10 text-success",
   },
   sent: {
-    label: "Sent",
-    className: "border-primary/30 bg-primary/10 text-primary",
+    label: "Отправлено",
+    className: "border-success/30 bg-success/10 text-success",
   },
   blocked_opt_out: {
-    label: "Blocked (Opt-out)",
+    label: "Заблокировано (Opt-out)",
     className: "border-destructive/40 bg-destructive/10 text-destructive",
   },
   blocked_stop_on_reply: {
-    label: "Blocked (Reply)",
+    label: "Заблокировано (Ответ)",
     className: "border-destructive/40 bg-destructive/10 text-destructive",
   },
   blocked_frequency_cap: {
-    label: "Blocked (Cap)",
-    className: "border-secondary bg-secondary/40 text-secondary-foreground",
+    label: "Заблокировано (Лимит)",
+    className: "border-warning/30 bg-warning/10 text-warning",
+  },
+  succeeded: {
+    label: "Успешно",
+    className: "border-success/30 bg-success/10 text-success",
+  },
+  discovery: {
+    label: "Discovery",
+    className: "border-border bg-secondary/40 text-secondary-foreground",
+  },
+  qualified: {
+    label: "Qualified",
+    className: "border-primary/30 bg-primary/10 text-primary",
+  },
+  proposal: {
+    label: "Proposal",
+    className: "border-primary/30 bg-primary/10 text-primary",
+  },
+  negotiation: {
+    label: "Negotiation",
+    className: "border-warning/30 bg-warning/10 text-warning",
+  },
+  won: {
+    label: "Won",
+    className: "border-success/30 bg-success/10 text-success",
+  },
+  lost: {
+    label: "Lost",
+    className: "border-destructive/40 bg-destructive/10 text-destructive",
+  },
+  previewed: {
+    label: "Предпросмотр",
+    className: "border-primary/30 bg-primary/10 text-primary",
   },
 };
 
 export function StatusChip({ status, className }) {
   const normalized = String(status || "").toLowerCase();
   const chip = statusMap[normalized] || {
-    label: status || "Unknown",
+    label: status || "Неизвестно",
     className: "border-border bg-muted text-foreground",
   };
 

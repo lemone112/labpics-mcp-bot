@@ -36,7 +36,7 @@ export default function AnalyticsFeaturePage() {
       setRisk(riskResp);
       setEvidence(Array.isArray(evidenceResp?.evidence) ? evidenceResp.evidence : []);
     } catch (error) {
-      setToast({ type: "error", message: error?.message || "Failed to load analytics" });
+      setToast({ type: "error", message: error?.message || "Ошибка загрузки аналитики" });
     } finally {
       setBusy(false);
     }
@@ -51,26 +51,26 @@ export default function AnalyticsFeaturePage() {
   async function refreshAnalytics() {
     try {
       await apiFetch("/analytics/refresh", { method: "POST", body: { period_days: 30 } });
-      setToast({ type: "success", message: "Analytics snapshots refreshed" });
+      setToast({ type: "success", message: "Снэпшоты аналитики обновлены" });
       await load();
     } catch (error) {
-      setToast({ type: "error", message: error?.message || "Failed to refresh analytics" });
+      setToast({ type: "error", message: error?.message || "Ошибка обновления аналитики" });
     }
   }
 
   async function refreshRisk() {
     try {
       await apiFetch("/risk/refresh", { method: "POST" });
-      setToast({ type: "success", message: "Risk/health refreshed" });
+      setToast({ type: "success", message: "Риски/здоровье обновлены" });
       await load();
     } catch (error) {
-      setToast({ type: "error", message: error?.message || "Failed to refresh risk" });
+      setToast({ type: "error", message: error?.message || "Ошибка обновления рисков" });
     }
   }
 
   if (loading || !session || loadingProjects) {
     return (
-      <PageShell title="Analytics + Risk" subtitle="Pipeline forecast, delivery/comms metrics and drill-down evidence">
+      <PageShell title="Аналитика и риски" subtitle="Прогноз пайплайна, метрики delivery/коммуникаций и drill-down evidence">
         <PageLoadingSkeleton />
       </PageShell>
     );
@@ -78,7 +78,7 @@ export default function AnalyticsFeaturePage() {
 
   if (!hasProject) {
     return (
-      <PageShell title="Analytics" subtitle="Forecast, delivery, communications and risk metrics">
+      <PageShell title="Аналитика" subtitle="Прогноз, delivery, коммуникации и метрики рисков">
         <ProjectScopeRequired
           title="Сначала выберите активный проект"
           description="Аналитика и risk-модели строятся по выбранному проекту."
@@ -88,31 +88,31 @@ export default function AnalyticsFeaturePage() {
   }
 
   return (
-    <PageShell title="Analytics + Risk" subtitle="Pipeline forecast, delivery/comms metrics and drill-down evidence">
+    <PageShell title="Аналитика и риски" subtitle="Прогноз пайплайна, метрики delivery/коммуникаций и drill-down evidence">
       <div className="space-y-4">
         <Card data-motion-item>
           <CardHeader className="flex-row items-center justify-between">
-            <CardTitle>Refresh snapshots</CardTitle>
+            <CardTitle>Обновить снэпшоты</CardTitle>
             <Button variant="outline" size="sm" onClick={load} disabled={busy}>
-              {busy ? "Refreshing..." : "Refresh"}
+              {busy ? "Обновление..." : "Обновить"}
             </Button>
           </CardHeader>
           <CardContent className="flex flex-wrap gap-2">
-            <Button onClick={refreshAnalytics}>Refresh analytics</Button>
+            <Button onClick={refreshAnalytics}>Обновить аналитику</Button>
             <Button variant="secondary" onClick={refreshRisk}>
-              Refresh risk/health
+              Обновить риски/здоровье
             </Button>
           </CardContent>
         </Card>
 
         <Card data-motion-item>
           <CardHeader>
-            <CardTitle>Portfolio metrics</CardTitle>
+            <CardTitle>Метрики портфеля</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
               <StatTile
-                label="Pipeline (30/60/90)"
+                label="Пайплайн (30/60/90)"
                 value={
                   Array.isArray(overview?.revenue)
                     ? `$${overview.revenue.reduce((sum, item) => sum + Number(item.pipeline_amount || 0), 0).toLocaleString()}`
@@ -120,31 +120,31 @@ export default function AnalyticsFeaturePage() {
                 }
               />
               <StatTile
-                label="Expected revenue"
+                label="Ожидаемая выручка"
                 value={
                   Array.isArray(overview?.revenue)
                     ? `$${overview.revenue.reduce((sum, item) => sum + Number(item.expected_revenue || 0), 0).toLocaleString()}`
                     : "$0"
                 }
               />
-              <StatTile label="Open issues" value={overview?.delivery?.open_issues ?? 0} />
-              <StatTile label="Health score" value={risk?.health?.score ?? "N/A"} />
+              <StatTile label="Открытые задачи" value={overview?.delivery?.open_issues ?? 0} />
+              <StatTile label="Индекс здоровья" value={risk?.health?.score ?? "N/A"} />
             </div>
           </CardContent>
         </Card>
 
         <Card data-motion-item>
           <CardHeader>
-            <CardTitle>Revenue forecast snapshots</CardTitle>
+            <CardTitle>Снэпшоты прогноза выручки</CardTitle>
           </CardHeader>
           <CardContent>
             <Table aria-label="Forecast snapshots">
               <TableHeader>
                 <TableRow>
-                  <TableHead>Horizon</TableHead>
-                  <TableHead>Pipeline</TableHead>
-                  <TableHead>Expected</TableHead>
-                  <TableHead>Generated</TableHead>
+                  <TableHead>Горизонт</TableHead>
+                  <TableHead>Пайплайн</TableHead>
+                  <TableHead>Ожидание</TableHead>
+                  <TableHead>Сгенерировано</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -158,7 +158,7 @@ export default function AnalyticsFeaturePage() {
                 ))}
                 {!overview?.revenue?.length ? (
                   <TableRow>
-                    <TableCell colSpan={4}>No snapshots yet.</TableCell>
+                    <TableCell colSpan={4}>Снэпшотов пока нет.</TableCell>
                   </TableRow>
                 ) : null}
               </TableBody>
@@ -168,16 +168,16 @@ export default function AnalyticsFeaturePage() {
 
         <Card data-motion-item>
           <CardHeader>
-            <CardTitle>Risk radar</CardTitle>
+            <CardTitle>Радар рисков</CardTitle>
           </CardHeader>
           <CardContent>
             <Table aria-label="Risk radar">
               <TableHeader>
                 <TableRow>
-                  <TableHead>Title</TableHead>
-                  <TableHead>Severity</TableHead>
-                  <TableHead>Probability</TableHead>
-                  <TableHead>Mitigation</TableHead>
+                  <TableHead>Название</TableHead>
+                  <TableHead>Критичность</TableHead>
+                  <TableHead>Вероятность</TableHead>
+                  <TableHead>Митигация</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -191,7 +191,7 @@ export default function AnalyticsFeaturePage() {
                 ))}
                 {!risk?.risks?.length ? (
                   <TableRow>
-                    <TableCell colSpan={4}>No risk radar items yet.</TableCell>
+                    <TableCell colSpan={4}>Рисков пока нет.</TableCell>
                   </TableRow>
                 ) : null}
               </TableBody>
@@ -201,16 +201,16 @@ export default function AnalyticsFeaturePage() {
 
         <Card data-motion-item>
           <CardHeader>
-            <CardTitle>Evidence drill-down</CardTitle>
+            <CardTitle>Drill-down доказательств</CardTitle>
           </CardHeader>
           <CardContent>
             <Table aria-label="Evidence list">
               <TableHeader>
                 <TableRow>
-                  <TableHead>Source</TableHead>
+                  <TableHead>Источник</TableHead>
                   <TableHead>PK</TableHead>
-                  <TableHead>Snippet</TableHead>
-                  <TableHead>Created</TableHead>
+                  <TableHead>Фрагмент</TableHead>
+                  <TableHead>Создан</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -224,7 +224,7 @@ export default function AnalyticsFeaturePage() {
                 ))}
                 {!evidence.length ? (
                   <TableRow>
-                    <TableCell colSpan={4}>No evidence yet.</TableCell>
+                    <TableCell colSpan={4}>Доказательств пока нет.</TableCell>
                   </TableRow>
                 ) : null}
               </TableBody>

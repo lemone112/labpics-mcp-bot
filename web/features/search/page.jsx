@@ -39,9 +39,9 @@ export default function SearchFeaturePage() {
         embedding_model: data?.embedding_model,
         topK: data?.topK,
       });
-      setToast({ type: "success", message: `Found ${data?.results?.length || 0} chunks` });
+      setToast({ type: "success", message: `Найдено ${data?.results?.length || 0} фрагментов` });
     } catch (error) {
-      setToast({ type: "error", message: error?.message || "Search failed" });
+      setToast({ type: "error", message: error?.message || "Ошибка поиска" });
     } finally {
       setBusy(false);
     }
@@ -49,7 +49,7 @@ export default function SearchFeaturePage() {
 
   if (loading || !session || loadingProjects) {
     return (
-      <PageShell title="Search" subtitle="Vector similarity search over ready embeddings">
+      <PageShell title="Поиск" subtitle="Векторный поиск по готовым эмбеддингам">
         <PageLoadingSkeleton />
       </PageShell>
     );
@@ -57,28 +57,28 @@ export default function SearchFeaturePage() {
 
   if (!hasProject) {
     return (
-      <PageShell title="Search" subtitle="Vector similarity search over ready embeddings">
+      <PageShell title="Поиск" subtitle="Векторный поиск по готовым эмбеддингам">
         <ProjectScopeRequired
           title="Сначала выберите активный проект"
-          description="Search выполняется в project scope. Выберите проект перед поиском по embeddings."
+          description="Поиск выполняется в project scope. Выберите проект перед поиском по embeddings."
         />
       </PageShell>
     );
   }
 
   return (
-    <PageShell title="Search" subtitle="Vector similarity search over ready embeddings">
+    <PageShell title="Поиск" subtitle="Векторный поиск по готовым эмбеддингам">
       <div className="space-y-4">
         <Card data-motion-item>
           <CardHeader>
-            <CardTitle>Search form</CardTitle>
+            <CardTitle>Форма поиска</CardTitle>
           </CardHeader>
           <CardContent>
             <form className="grid grid-cols-1 gap-3 md:grid-cols-[1fr_120px_120px]" onSubmit={onSearch}>
               <Input
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder="What did client promise about timeline?"
+                placeholder="Что клиент обещал по срокам?"
                 required
               />
               <Input
@@ -89,13 +89,13 @@ export default function SearchFeaturePage() {
                 onChange={(e) => setTopK(e.target.value)}
               />
               <Button type="submit" disabled={busy}>
-                {busy ? "Searching..." : "Search"}
+                {busy ? "Поиск..." : "Найти"}
               </Button>
             </form>
 
             {meta ? (
               <div className="mt-3 text-sm text-muted-foreground">
-                model: {meta.embedding_model || "-"} • topK: {meta.topK || "-"}
+                модель: {meta.embedding_model || "-"} • topK: {meta.topK || "-"}
               </div>
             ) : null}
           </CardContent>
@@ -103,16 +103,16 @@ export default function SearchFeaturePage() {
 
         <Card data-motion-item>
           <CardHeader>
-            <CardTitle>Results</CardTitle>
+            <CardTitle>Результаты</CardTitle>
           </CardHeader>
           <CardContent>
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Distance</TableHead>
-                  <TableHead>Conversation</TableHead>
-                  <TableHead>Message</TableHead>
-                  <TableHead>Chunk</TableHead>
+                  <TableHead>Расстояние</TableHead>
+                  <TableHead>Диалог</TableHead>
+                  <TableHead>Сообщение</TableHead>
+                  <TableHead>Фрагмент</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -127,7 +127,7 @@ export default function SearchFeaturePage() {
                 {!results.length ? (
                   <TableRow>
                     <TableCell colSpan={4} className="text-muted-foreground">
-                      No results yet.
+                      Результатов пока нет.
                     </TableCell>
                   </TableRow>
                 ) : null}
