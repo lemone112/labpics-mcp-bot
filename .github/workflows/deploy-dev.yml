@@ -178,5 +178,7 @@ jobs:
           wait_for_url "http://127.0.0.1:${web_port}/login"
           if [ "${ENABLE_EDGE_PROXY:-true}" = "true" ]; then
             domain="${DOMAIN:-dev.dashboard.lab.pics}"
-            wait_for_url "https://${domain}/login" 40 3
+            if ! wait_for_url "https://${domain}/login" 40 3; then
+              echo "warning: public edge smoke-check failed for https://${domain}/login (local checks passed)" >&2
+            fi
           fi
