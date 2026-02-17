@@ -104,7 +104,27 @@ export async function getPortfolioOverview(pool, options = {}) {
 
   const selectedProjectIds = projects.map((row) => String(row.id));
 
-  const [dashboardRows, trendRows, messagesRows, agreementsRows, risksRows, financeRows, upsellRows, offerRows, loopsRows] =
+  const [
+    dashboardRows,
+    trendRows,
+    messagesRows,
+    agreementsRows,
+    risksRows,
+    financeRows,
+    upsellRows,
+    offerRows,
+    loopsRows,
+    healthTrendRows,
+    velocityRows,
+    blockersRows,
+    responseRows,
+    agreementsCreatedRows,
+    agreementsCompletedRows,
+    risksTrendRows,
+    burnBudgetRows,
+    upsellTrendRows,
+    financeStageRows,
+  ] =
     await Promise.all([
       pool.query(
         `
@@ -391,6 +411,160 @@ export async function getPortfolioOverview(pool, options = {}) {
         `,
         [accountScopeId, selectedProjectIds]
       ),
+      pool.query(
+        `
+          SELECT
+            date_trunc('day', generated_at)::date::text AS point,
+            avg(score)::numeric(6,2) AS value
+          FROM health_scores
+          WHERE account_scope_id = $1
+            AND project_id::text = ANY($2::text[])
+            AND generated_at > now() - interval '60 days'
+          GROUP BY 1
+          ORDER BY 1 ASC
+          LIMIT 60
+        `,
+        [accountScopeId, selectedProjectIds]
+      ),
+      pool.query(
+        `
+          SELECT
+            date_trunc('week', completed_at)::date::text AS point,
+            count(*)::int AS value
+          FROM linear_issues_raw
+          WHERE account_scope_id = $1
+            AND project_id::text = ANY($2::text[])
+            AND completed_at IS NOT NULL
+            AND completed_at > now() - interval '120 days'
+          GROUP BY 1
+          ORDER BY 1 ASC
+          LIMIT 24
+        `,
+        [accountScopeId, selectedProjectIds]
+      ),
+      pool.query(
+        `
+          SELECT
+            date_trunc('week', due_date)::date::text AS point,
+            count(*)::int AS value
+          FROM linear_issues_raw
+          WHERE account_scope_id = $1
+            AND project_id::text = ANY($2::text[])
+            AND completed_at IS NULL
+            AND due_date IS NOT NULL
+            AND due_date < current_date
+          GROUP BY 1
+          ORDER BY 1 ASC
+          LIMIT 24
+        `,
+        [accountScopeId, selectedProjectIds]
+      ),
+      pool.query(
+        `
+          SELECT
+            period_start::text AS point,
+            avg(avg_response_minutes)::numeric(10,2) AS value
+          FROM analytics_comms_snapshots
+          WHERE account_scope_id = $1
+            AND project_id::text = ANY($2::text[])
+          GROUP BY 1
+          ORDER BY 1 ASC
+          LIMIT 24
+        `,
+        [accountScopeId, selectedProjectIds]
+      ),
+      pool.query(
+        `
+          SELECT
+            date_trunc('week', created_at)::date::text AS point,
+            count(*)::int AS value
+          FROM evidence_items
+          WHERE account_scope_id = $1
+            AND project_id::text = ANY($2::text[])
+            AND (
+              COALESCE(snippet, '') ILIKE ANY($3::text[])
+              OR COALESCE(payload::text, '') ILIKE ANY($3::text[])
+            )
+          GROUP BY 1
+          ORDER BY 1 ASC
+          LIMIT 24
+        `,
+        [accountScopeId, selectedProjectIds, ["%agreement%", "%договор%", "%соглас%", "%commit%", "%услов%", "%deadline%", "%срок%"]]
+      ),
+      pool.query(
+        `
+          SELECT
+            date_trunc('week', updated_at)::date::text AS point,
+            count(*)::int AS value
+          FROM offers
+          WHERE account_scope_id = $1
+            AND project_id::text = ANY($2::text[])
+            AND status = 'signed'
+          GROUP BY 1
+          ORDER BY 1 ASC
+          LIMIT 24
+        `,
+        [accountScopeId, selectedProjectIds]
+      ),
+      pool.query(
+        `
+          SELECT
+            date_trunc('week', created_at)::date::text AS point,
+            count(*)::int AS count,
+            avg(severity)::numeric(6,2) AS severity_avg
+          FROM risk_radar_items
+          WHERE account_scope_id = $1
+            AND project_id::text = ANY($2::text[])
+          GROUP BY 1
+          ORDER BY 1 ASC
+          LIMIT 24
+        `,
+        [accountScopeId, selectedProjectIds]
+      ),
+      pool.query(
+        `
+          SELECT
+            period_start::text AS point,
+            COALESCE(sum(costs_amount), 0)::numeric(14,2) AS burn,
+            COALESCE(sum(pipeline_amount), 0)::numeric(14,2) AS budget
+          FROM analytics_revenue_snapshots
+          WHERE account_scope_id = $1
+            AND project_id::text = ANY($2::text[])
+          GROUP BY 1
+          ORDER BY 1 ASC
+          LIMIT 24
+        `,
+        [accountScopeId, selectedProjectIds]
+      ),
+      pool.query(
+        `
+          SELECT
+            date_trunc('week', created_at)::date::text AS point,
+            avg(score)::numeric(6,4) AS value
+          FROM upsell_opportunities
+          WHERE account_scope_id = $1
+            AND project_id::text = ANY($2::text[])
+          GROUP BY 1
+          ORDER BY 1 ASC
+          LIMIT 24
+        `,
+        [accountScopeId, selectedProjectIds]
+      ),
+      pool.query(
+        `
+          SELECT
+            stage,
+            count(*)::int AS opportunities,
+            COALESCE(sum(amount_estimate), 0)::numeric(14,2) AS amount
+          FROM crm_opportunities
+          WHERE account_scope_id = $1
+            AND project_id::text = ANY($2::text[])
+          GROUP BY stage
+          ORDER BY opportunities DESC, amount DESC
+          LIMIT 20
+        `,
+        [accountScopeId, selectedProjectIds]
+      ),
     ]);
 
   const dashboardByProject = dashboardRows.rows.map((row) => {
@@ -489,6 +663,92 @@ export async function getPortfolioOverview(pool, options = {}) {
     max_discount_pct: toDiscountLimit(project.client_value_score),
   }));
 
+  const dashboardCharts = {
+    health_score: healthTrendRows.rows.map((row) => ({
+      point: row.point,
+      value: toNumber(row.value, 0),
+    })),
+    velocity_completed_issues: velocityRows.rows.map((row) => ({
+      point: row.point,
+      value: toNumber(row.value, 0),
+    })),
+    blockers_count: blockersRows.rows.map((row) => ({
+      point: row.point,
+      value: toNumber(row.value, 0),
+    })),
+    client_responsiveness_minutes: responseRows.rows.map((row) => ({
+      point: row.point,
+      value: toNumber(row.value, 0),
+    })),
+    agreements_created_vs_completed: agreementsCreatedRows.rows.map((row) => {
+      const point = row.point;
+      const completed = agreementsCompletedRows.rows.find((entry) => entry.point === point);
+      return {
+        point,
+        created: toNumber(row.value, 0),
+        completed: toNumber(completed?.value, 0),
+      };
+    }),
+    risks_trend: risksTrendRows.rows.map((row) => ({
+      point: row.point,
+      count: toNumber(row.count, 0),
+      severity_avg: toNumber(row.severity_avg, 0),
+    })),
+    burn_vs_budget: burnBudgetRows.rows.map((row) => ({
+      point: row.point,
+      burn: toNumber(row.burn, 0),
+      budget: toNumber(row.budget, 0),
+    })),
+    upsell_potential_score: upsellTrendRows.rows.map((row) => ({
+      point: row.point,
+      value: toNumber(row.value, 0),
+    })),
+  };
+
+  const financeCharts = {
+    revenue_by_project: financesByProject.map((row) => ({
+      project_id: row.project_id,
+      project_name: row.project_name,
+      value: row.expected_revenue,
+    })),
+    costs_by_project: financesByProject.map((row) => ({
+      project_id: row.project_id,
+      project_name: row.project_name,
+      value: row.costs_amount,
+    })),
+    margin_by_project: financesByProject.map((row) => ({
+      project_id: row.project_id,
+      project_name: row.project_name,
+      value: row.gross_margin,
+    })),
+    burn_rate_trend: burnBudgetRows.rows.map((row) => ({
+      point: row.point,
+      burn: toNumber(row.burn, 0),
+      budget: toNumber(row.budget, 0),
+    })),
+    forecast_completion_days: financesByProject.map((row) => ({
+      project_id: row.project_id,
+      project_name: row.project_name,
+      value: row.forecast_days,
+    })),
+    budget_vs_actual: burnBudgetRows.rows.map((row) => ({
+      point: row.point,
+      budget: toNumber(row.budget, 0),
+      actual: toNumber(row.burn, 0),
+    })),
+    unit_economics_proxy: dashboardByProject.map((row) => ({
+      project_id: row.project_id,
+      project_name: row.project_name,
+      client_value_score: row.client_value_score,
+      expected_revenue: row.expected_revenue,
+    })),
+    funnel_nodes: financeStageRows.rows.map((row) => ({
+      stage: row.stage,
+      opportunities: toNumber(row.opportunities, 0),
+      amount: toNumber(row.amount, 0),
+    })),
+  };
+
   return {
     projects,
     selected_project_ids: selectedProjectIds,
@@ -508,6 +768,7 @@ export async function getPortfolioOverview(pool, options = {}) {
       },
       by_project: dashboardByProject,
       trend: dashboardTrend,
+      charts: dashboardCharts,
     },
     messages: messagesRows.rows,
     agreements: agreementsRows.rows,
@@ -527,6 +788,7 @@ export async function getPortfolioOverview(pool, options = {}) {
         gross_margin: Number(financeTotals.gross_margin.toFixed(2)),
       },
       by_project: financesByProject,
+      charts: financeCharts,
     },
     offers: {
       upsell: upsellRows.rows.map((row) => ({
@@ -542,5 +804,125 @@ export async function getPortfolioOverview(pool, options = {}) {
       discount_policy: discountPolicy,
     },
     loops: loopsRows.rows[0] || { contacts_with_email: 0, unique_emails: 0 },
+  };
+}
+
+function normalizeMessageAttachments(rawAttachments) {
+  if (!Array.isArray(rawAttachments)) return [];
+  return rawAttachments
+    .slice(0, 8)
+    .map((item) => {
+      if (!item || typeof item !== "object") return null;
+      return {
+        id: String(item.id || item.file_id || item.url || item.data_url || ""),
+        name: String(item.file_name || item.filename || item.name || "attachment"),
+        url: String(item.data_url || item.url || item.download_url || ""),
+        content_type: String(item.file_type || item.content_type || item.mime_type || "file"),
+      };
+    })
+    .filter((item) => item && item.id);
+}
+
+export async function getPortfolioMessages(pool, options = {}) {
+  const accountScopeId = String(options.accountScopeId || "");
+  const requestedProjectId = String(options.projectId || "").trim();
+  if (!requestedProjectId) {
+    fail(400, "project_id_required", "project_id is required");
+  }
+
+  const scopedProjects = await resolveScopedProjects(pool, accountScopeId, [requestedProjectId], null);
+  const project = scopedProjects[0];
+  if (!project) {
+    fail(404, "project_not_found", "Project not found in current account scope");
+  }
+
+  const limit = toPositiveInt(options.limit, 200, 20, 500);
+  const requestedContactId = String(options.contactGlobalId || "").trim() || null;
+
+  const personsRows = await pool.query(
+    `
+      SELECT
+        id AS contact_global_id,
+        COALESCE(NULLIF(btrim(name), ''), NULLIF(btrim(email), ''), NULLIF(btrim(identifier), ''), contact_id::text) AS person_name,
+        email
+      FROM cw_contacts
+      WHERE project_id = $1
+        AND account_scope_id = $2
+      ORDER BY person_name ASC
+      LIMIT 200
+    `,
+    [project.id, accountScopeId]
+  );
+
+  const persons = personsRows.rows.map((row) => ({
+    contact_global_id: row.contact_global_id,
+    person_name: row.person_name || "Контакт",
+    email: row.email || null,
+  }));
+  const personSet = new Set(persons.map((row) => String(row.contact_global_id || "")));
+  const selectedContactGlobalId =
+    requestedContactId && personSet.has(requestedContactId)
+      ? requestedContactId
+      : persons[0]?.contact_global_id || null;
+
+  const messagesResult = await pool.query(
+    `
+      SELECT
+        m.id,
+        m.project_id::text AS project_id,
+        m.contact_global_id,
+        m.conversation_global_id,
+        m.sender_type,
+        m.created_at,
+        COALESCE(m.content, '') AS content,
+        m.data
+      FROM cw_messages AS m
+      WHERE m.project_id = $1
+        AND m.account_scope_id = $2
+        AND (
+          $3::text IS NULL
+          OR m.contact_global_id = $3
+        )
+      ORDER BY m.created_at ASC NULLS LAST
+      LIMIT $4
+    `,
+    [project.id, accountScopeId, selectedContactGlobalId, limit]
+  );
+
+  const personMap = new Map(persons.map((row) => [String(row.contact_global_id || ""), row.person_name]));
+  const messages = messagesResult.rows.map((row) => {
+    const data = row.data && typeof row.data === "object" ? row.data : {};
+    const senderType = String(row.sender_type || "").toLowerCase();
+    const isClient = senderType === "contact" || senderType === "customer" || senderType === "client";
+    const authorName = isClient
+      ? personMap.get(String(row.contact_global_id || "")) || "Клиент"
+      : String(data?.sender?.name || data?.sender_name || "Команда");
+    const channel = String(data?.channel || data?.source || "chatwoot");
+    const attachments = normalizeMessageAttachments(data?.attachments || data?.attachment || []);
+
+    return {
+      id: row.id,
+      project_id: row.project_id,
+      project_name: project.name,
+      contact_global_id: row.contact_global_id,
+      conversation_global_id: row.conversation_global_id,
+      sender_type: senderType || "unknown",
+      author_name: authorName,
+      channel,
+      created_at: row.created_at,
+      content: String(row.content || ""),
+      attachments,
+    };
+  });
+
+  return {
+    project: {
+      id: String(project.id),
+      name: String(project.name),
+      account_scope_id: String(project.account_scope_id),
+    },
+    persons,
+    selected_contact_global_id: selectedContactGlobalId,
+    messages,
   };
 }

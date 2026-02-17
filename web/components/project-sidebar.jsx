@@ -2,52 +2,50 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Check, Circle, Loader2, LogOut } from "lucide-react";
+import { Layers, Loader2, LogOut } from "lucide-react";
 import { useTheme } from "next-themes";
 
 import { apiFetch } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { useProjectPortfolio } from "@/hooks/use-project-portfolio";
+import { projectDotClass } from "@/lib/project-colors";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 export function ProjectSidebar({ open = true }) {
   const router = useRouter();
   const [activatingId, setActivatingId] = useState("");
-  const [updatingSelection, setUpdatingSelection] = useState(false);
   const {
     projects,
-    selectedProjectIds,
+    inPortfolio,
+    currentSection,
+    selectedProject,
+    isAllProjects,
+    canSelectAll,
     loadingProjects,
     error,
-    activeProjectId,
-    toggleProjectSelection,
+    projectIdSet,
     selectAllProjects,
-    clearSelection,
+    selectProject,
     refreshProjects,
   } = useProjectPortfolio();
   const { theme, setTheme } = useTheme();
 
-  const selectedLookup = useMemo(() => new Set(selectedProjectIds), [selectedProjectIds]);
+  const selectedProjectId = useMemo(
+    () => (isAllProjects ? null : selectedProject?.id ? String(selectedProject.id) : null),
+    [isAllProjects, selectedProject]
+  );
 
   async function onSetActiveProject(projectId) {
     const normalized = String(projectId || "").trim();
-    if (!normalized) return;
+    if (!normalized || !projectIdSet.has(normalized)) return;
     setActivatingId(normalized);
     try {
       await apiFetch(`/projects/${normalized}/select`, { method: "POST" });
+      selectProject(normalized);
       await refreshProjects();
     } finally {
       setActivatingId("");
-    }
-  }
-
-  async function onToggleProject(projectId) {
-    setUpdatingSelection(true);
-    try {
-      toggleProjectSelection(projectId);
-    } finally {
-      setTimeout(() => setUpdatingSelection(false), 0);
     }
   }
 
@@ -63,30 +61,54 @@ export function ProjectSidebar({ open = true }) {
   return (
     <aside
       className={cn(
-        "min-h-svh shrink-0 overflow-hidden border-r bg-sidebar transition-[width,opacity] duration-200 ease-linear",
+        "sticky top-0 h-svh shrink-0 overflow-hidden border-r bg-sidebar transition-[width,opacity] duration-200 ease-linear",
         open ? "w-[18.5rem] opacity-100" : "w-0 opacity-0"
       )}
     >
-      <div className={cn("flex h-full min-h-svh flex-col p-3", !open && "pointer-events-none")}>
+      <div className={cn("flex h-full flex-col p-3", !open && "pointer-events-none")}>
         <div className="space-y-2 pb-3">
           <p className="text-sm font-semibold text-sidebar-foreground">Проекты</p>
-          <p className="text-xs text-sidebar-foreground/70">
-            Выбрано: {selectedProjectIds.length} из {projects.length}
-          </p>
+          <p className="text-xs text-sidebar-foreground/70">Выбор: {isAllProjects ? "Все проекты" : selectedProject?.name || "-"}</p>
           <div className="flex items-center gap-2">
-            <Button type="button" size="sm" variant="outline" onClick={selectAllProjects} disabled={!projects.length}>
-              Все
-            </Button>
-            <Button type="button" size="sm" variant="outline" onClick={clearSelection} disabled={!selectedProjectIds.length}>
-              Очистить
-            </Button>
             <Button type="button" size="sm" variant="outline" onClick={refreshProjects} disabled={loadingProjects}>
               Обновить
             </Button>
+            {inPortfolio && canSelectAll ? (
+              <Button type="button" size="sm" variant="outline" onClick={selectAllProjects} disabled={!projects.length || isAllProjects}>
+                Все проекты
+              </Button>
+            ) : null}
           </div>
         </div>
 
         <div className="flex-1 space-y-2 overflow-y-auto pr-1">
+          {inPortfolio && canSelectAll ? (
+            <button
+              type="button"
+              onClick={selectAllProjects}
+              className={cn(
+                "w-full rounded-md border p-2 text-left transition-colors",
+                isAllProjects ? "border-sidebar-primary/60 bg-sidebar-accent/60" : "border-sidebar-border hover:bg-sidebar-accent/40"
+              )}
+            >
+              <div className="flex items-center gap-2">
+                <span className="inline-flex size-5 items-center justify-center rounded-full border border-border bg-muted">
+                  <Layers className="size-3.5" />
+                </span>
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-medium">Все проекты</p>
+                  <p className="text-xs text-sidebar-foreground/70">Агрегированный портфельный режим</p>
+                </div>
+              </div>
+            </button>
+          ) : null}
+
+          {inPortfolio && currentSection === "messages" ? (
+            <div className="rounded-md border px-3 py-2 text-xs text-sidebar-foreground/70">
+              Для страницы «Переписки» доступен только выбор одного проекта.
+            </div>
+          ) : null}
+
           {loadingProjects ? (
             <div className="rounded-md border px-3 py-2 text-xs text-sidebar-foreground/70">Загрузка проектов...</div>
           ) : null}
@@ -96,39 +118,24 @@ export function ProjectSidebar({ open = true }) {
           {!loadingProjects &&
             projects.map((project) => {
               const projectId = String(project.id);
-              const selected = selectedLookup.has(projectId);
-              const isActive = activeProjectId && projectId === String(activeProjectId);
+              const selected = selectedProjectId === projectId;
               const activating = activatingId === projectId;
               return (
-                <div
+                <button
                   key={projectId}
+                  type="button"
+                  onClick={() => onSetActiveProject(projectId)}
                   className={cn(
-                    "rounded-md border px-2 py-2",
-                    selected ? "border-sidebar-primary/50 bg-sidebar-accent/50" : "border-sidebar-border"
+                    "w-full rounded-md border px-2 py-2 text-left transition-colors",
+                    selected ? "border-sidebar-primary/60 bg-sidebar-accent/60" : "border-sidebar-border hover:bg-sidebar-accent/40"
                   )}
                 >
                   <div className="flex items-start gap-2">
-                    <button
-                      type="button"
-                      onClick={() => onToggleProject(projectId)}
-                      className={cn(
-                        "mt-0.5 flex size-5 shrink-0 items-center justify-center rounded border text-sidebar-foreground",
-                        selected ? "border-sidebar-primary bg-sidebar-primary text-sidebar-primary-foreground" : "border-sidebar-border"
-                      )}
-                      aria-label={selected ? `Убрать ${project.name} из выборки` : `Добавить ${project.name} в выборку`}
-                    >
-                      {selected ? <Check className="size-3.5" /> : <Circle className="size-3.5" />}
-                    </button>
+                    <span className={cn("mt-1 h-2.5 w-2.5 shrink-0 rounded-full", projectDotClass(projectId))} />
                     <div className="min-w-0 flex-1">
-                      <button
-                        type="button"
-                        onClick={() => onSetActiveProject(projectId)}
-                        className="w-full truncate text-left text-sm text-sidebar-foreground hover:text-sidebar-accent-foreground"
-                      >
-                        {project.name}
-                      </button>
+                      <p className="truncate text-sm text-sidebar-foreground">{project.name}</p>
                       <div className="mt-1 flex items-center gap-2 text-xs text-sidebar-foreground/70">
-                        {isActive ? <span className="rounded border px-1.5 py-0.5">Активный</span> : null}
+                        {selected ? <span className="rounded border px-1.5 py-0.5">Выбран</span> : null}
                         {activating ? (
                           <span className="inline-flex items-center gap-1">
                             <Loader2 className="size-3 animate-spin" />
@@ -138,7 +145,7 @@ export function ProjectSidebar({ open = true }) {
                       </div>
                     </div>
                   </div>
-                </div>
+                </button>
               );
             })}
 
@@ -169,8 +176,6 @@ export function ProjectSidebar({ open = true }) {
           </div>
         </div>
       </div>
-
-      {updatingSelection ? <span className="sr-only">Обновление выборки проектов</span> : null}
     </aside>
   );
 }

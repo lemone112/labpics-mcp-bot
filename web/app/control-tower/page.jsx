@@ -1,5 +1,5 @@
-import ControlTowerFeaturePage from "@/features/control-tower/page";
+import { redirect } from "next/navigation";
 
 export default function ControlTowerPage() {
-  return <ControlTowerFeaturePage />;
+  redirect("/control-tower/dashboard");
 }

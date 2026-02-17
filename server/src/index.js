@@ -23,7 +23,7 @@ import { applyIdentitySuggestions, listIdentityLinks, listIdentitySuggestions, p
 import { extractSignalsAndNba, getTopNba, listNba, listSignals, updateNbaStatus, updateSignalStatus } from "./services/signals.js";
 import { listUpsellRadar, refreshUpsellRadar, updateUpsellStatus } from "./services/upsell.js";
 import { applyContinuityActions, buildContinuityPreview, listContinuityActions } from "./services/continuity.js";
-import { getPortfolioOverview } from "./services/portfolio.js";
+import { getPortfolioMessages, getPortfolioOverview } from "./services/portfolio.js";
 import { syncLoopsContacts } from "./services/loops.js";
 import {
   generateDailyDigest,
@@ -882,6 +882,21 @@ async function main() {
       projectIds: parseProjectIdsInput(request.query?.project_ids, 100),
       messageLimit: request.query?.message_limit,
       cardLimit: request.query?.card_limit,
+    });
+    return sendOk(reply, request.requestId, payload);
+  });
+
+  registerGet("/portfolio/messages", async (request, reply) => {
+    const accountScopeId = request.auth?.account_scope_id || null;
+    if (!accountScopeId) {
+      fail(409, "account_scope_required", "Account scope is required");
+    }
+
+    const payload = await getPortfolioMessages(pool, {
+      accountScopeId,
+      projectId: request.query?.project_id,
+      contactGlobalId: request.query?.contact_global_id,
+      limit: request.query?.limit,
     });
     return sendOk(reply, request.requestId, payload);
   });

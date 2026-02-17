@@ -37,12 +37,12 @@ export function PageShell({ title, subtitle, children }) {
   const [projectsSidebarOpen, setProjectsSidebarOpen] = useState(true);
 
   return (
-    <div className="flex min-h-svh w-full bg-background">
+    <div className="flex h-svh w-full overflow-hidden bg-background">
       <NavRail />
-      <div className="flex min-w-0 flex-1">
+      <div className="flex min-w-0 flex-1 overflow-hidden">
         <ProjectSidebar open={projectsSidebarOpen} />
-        <main className="flex min-w-0 flex-1 flex-col">
-          <header className="flex h-16 shrink-0 items-center gap-2 px-4">
+        <main className="flex h-svh min-w-0 flex-1 flex-col overflow-hidden">
+          <header className="sticky top-0 z-20 flex h-16 shrink-0 items-center gap-2 border-b bg-background/95 px-4 backdrop-blur">
             <Button
               type="button"
               variant="ghost"
@@ -57,7 +57,7 @@ export function PageShell({ title, subtitle, children }) {
             <Breadcrumb>
               <BreadcrumbList>
                 <BreadcrumbItem className="hidden md:block">
-                  <BreadcrumbLink href="/control-tower">Портфель</BreadcrumbLink>
+                  <BreadcrumbLink href="/control-tower/dashboard">Портфель</BreadcrumbLink>
                 </BreadcrumbItem>
                 <BreadcrumbSeparator className="hidden md:block" />
                 <BreadcrumbItem>
@@ -67,7 +67,7 @@ export function PageShell({ title, subtitle, children }) {
             </Breadcrumb>
           </header>
 
-          <MotionGroup className="flex flex-1 flex-col gap-4 p-4 pt-0 lg:p-6 lg:pt-0">
+          <MotionGroup className="flex flex-1 flex-col gap-4 overflow-y-auto p-4 pt-0 lg:p-6 lg:pt-0">
             <div className="space-y-4">
               {subtitle ? <p className="text-sm text-muted-foreground">{subtitle}</p> : null}
               {children}

@@ -1,0 +1,732 @@
+"use client";
+
+import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  Area,
+  AreaChart,
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Line,
+  LineChart,
+  Pie,
+  PieChart,
+  XAxis,
+  YAxis,
+} from "recharts";
+
+import { useAuthGuard } from "@/hooks/use-auth-guard";
+import { usePortfolioMessages } from "@/hooks/use-portfolio-messages";
+import { usePortfolioOverview } from "@/hooks/use-portfolio-overview";
+import { useProjectPortfolio } from "@/hooks/use-project-portfolio";
+import { PageShell } from "@/components/page-shell";
+import { ProjectBadge } from "@/components/project-badge";
+import { Badge } from "@/components/ui/badge";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { ChartContainer, ChartLegend, ChartLegendContent, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
+import { EmptyState } from "@/components/ui/empty-state";
+import { PageLoadingSkeleton } from "@/components/ui/page-loading-skeleton";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { StatTile } from "@/components/ui/stat-tile";
+import { Toast } from "@/components/ui/toast";
+import { normalizePortfolioSection } from "@/lib/portfolio-sections";
+import { cn } from "@/lib/utils";
+
+const TITLES = {
+  dashboard: "Дашборд",
+  messages: "Переписки",
+  agreements: "Договоренности",
+  risks: "Риски",
+  finance: "Финансы и экономика",
+  offers: "Офферы",
+};
+
+const SUBTITLES = {
+  dashboard: "Ключевые графики состояния проектов",
+  messages: "Лента сообщений по выбранному проекту и персоне",
+  agreements: "Договоренности, извлеченные из RAG/Evidence",
+  risks: "Карточки рисков и паттернов",
+  finance: "Финансовые и юнит-экономические метрики",
+  offers: "Офферы и допродажи по ценности клиента",
+};
+
+function toRuDateLabel(point, options = { month: "short", day: "numeric" }) {
+  if (!point) return "-";
+  const date = new Date(point);
+  if (Number.isNaN(date.getTime())) return "-";
+  return date.toLocaleDateString("ru-RU", options);
+}
+
+function numberValue(value) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function useFormatters() {
+  const moneyFormatter = useMemo(
+    () =>
+      new Intl.NumberFormat("ru-RU", {
+        style: "currency",
+        currency: "USD",
+        maximumFractionDigits: 0,
+      }),
+    []
+  );
+  const numberFormatter = useMemo(() => new Intl.NumberFormat("ru-RU"), []);
+  return { moneyFormatter, numberFormatter };
+}
+
+function LinkifiedText({ text }) {
+  const source = String(text || "");
+  const urlRegex = /(https?:\/\/[^\s]+)/g;
+  const parts = source.split(urlRegex);
+
+  return (
+    <p className="whitespace-pre-wrap break-words text-sm leading-relaxed">
+      {parts.map((part, idx) => {
+        if (/^https?:\/\/\S+$/.test(part)) {
+          return (
+            <a key={`link-${idx}`} href={part} target="_blank" rel="noreferrer" className="text-primary underline">
+              {part}
+            </a>
+          );
+        }
+        return <span key={`text-${idx}`}>{part}</span>;
+      })}
+    </p>
+  );
+}
+
+function renderDashboardCharts(payload, moneyFormatter, numberFormatter) {
+  const charts = payload?.dashboard?.charts || {};
+  const health = Array.isArray(charts.health_score) ? charts.health_score : [];
+  const velocity = Array.isArray(charts.velocity_completed_issues) ? charts.velocity_completed_issues : [];
+  const blockers = Array.isArray(charts.blockers_count) ? charts.blockers_count : [];
+  const responsiveness = Array.isArray(charts.client_responsiveness_minutes) ? charts.client_responsiveness_minutes : [];
+  const agreements = Array.isArray(charts.agreements_created_vs_completed) ? charts.agreements_created_vs_completed : [];
+  const risks = Array.isArray(charts.risks_trend) ? charts.risks_trend : [];
+  const burnBudget = Array.isArray(charts.burn_vs_budget) ? charts.burn_vs_budget : [];
+  const upsell = Array.isArray(charts.upsell_potential_score) ? charts.upsell_potential_score : [];
+
+  return (
+    <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 xl:grid-cols-3">
+      <Card data-motion-item>
+        <CardHeader>
+          <CardTitle>Project Health Score</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <ChartContainer config={{ value: { label: "Health score", markerClassName: "bg-primary" } }}>
+            <AreaChart data={health.map((item) => ({ ...item, label: toRuDateLabel(item.point) }))}>
+              <CartesianGrid vertical={false} />
+              <XAxis dataKey="label" tickLine={false} axisLine={false} minTickGap={24} />
+              <YAxis tickLine={false} axisLine={false} domain={[0, 100]} />
+              <ChartTooltip content={<ChartTooltipContent formatter={(value) => numberFormatter.format(numberValue(value))} />} />
+              <Area dataKey="value" type="monotone" stroke="hsl(var(--primary))" fill="hsl(var(--primary))" fillOpacity={0.15} />
+            </AreaChart>
+          </ChartContainer>
+        </CardContent>
+      </Card>
+
+      <Card data-motion-item>
+        <CardHeader>
+          <CardTitle>Velocity / Completed issues</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <ChartContainer config={{ value: { label: "Completed", markerClassName: "bg-chart-2" } }}>
+            <BarChart data={velocity.map((item) => ({ ...item, label: toRuDateLabel(item.point) }))}>
+              <CartesianGrid vertical={false} />
+              <XAxis dataKey="label" tickLine={false} axisLine={false} minTickGap={24} />
+              <YAxis tickLine={false} axisLine={false} />
+              <ChartTooltip content={<ChartTooltipContent formatter={(value) => numberFormatter.format(numberValue(value))} />} />
+              <Bar dataKey="value" fill="hsl(var(--chart-2))" radius={[4, 4, 0, 0]} />
+            </BarChart>
+          </ChartContainer>
+        </CardContent>
+      </Card>
+
+      <Card data-motion-item>
+        <CardHeader>
+          <CardTitle>Blockers count</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <ChartContainer config={{ value: { label: "Blockers", markerClassName: "bg-destructive" } }}>
+            <LineChart data={blockers.map((item) => ({ ...item, label: toRuDateLabel(item.point) }))}>
+              <CartesianGrid vertical={false} />
+              <XAxis dataKey="label" tickLine={false} axisLine={false} minTickGap={24} />
+              <YAxis tickLine={false} axisLine={false} />
+              <ChartTooltip content={<ChartTooltipContent formatter={(value) => numberFormatter.format(numberValue(value))} />} />
+              <Line dataKey="value" type="monotone" stroke="hsl(var(--destructive))" strokeWidth={2} dot={false} />
+            </LineChart>
+          </ChartContainer>
+        </CardContent>
+      </Card>
+
+      <Card data-motion-item>
+        <CardHeader>
+          <CardTitle>Client responsiveness (avg minutes)</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <ChartContainer config={{ value: { label: "Avg min", markerClassName: "bg-chart-3" } }}>
+            <LineChart data={responsiveness.map((item) => ({ ...item, label: toRuDateLabel(item.point) }))}>
+              <CartesianGrid vertical={false} />
+              <XAxis dataKey="label" tickLine={false} axisLine={false} minTickGap={24} />
+              <YAxis tickLine={false} axisLine={false} />
+              <ChartTooltip content={<ChartTooltipContent formatter={(value) => numberFormatter.format(numberValue(value))} />} />
+              <Line dataKey="value" type="monotone" stroke="hsl(var(--chart-3))" strokeWidth={2} dot={false} />
+            </LineChart>
+          </ChartContainer>
+        </CardContent>
+      </Card>
+
+      <Card data-motion-item>
+        <CardHeader>
+          <CardTitle>Agreements created vs completed</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <ChartContainer
+            config={{
+              created: { label: "Created", markerClassName: "bg-chart-1" },
+              completed: { label: "Completed", markerClassName: "bg-chart-4" },
+            }}
+          >
+            <BarChart data={agreements.map((item) => ({ ...item, label: toRuDateLabel(item.point) }))}>
+              <CartesianGrid vertical={false} />
+              <XAxis dataKey="label" tickLine={false} axisLine={false} minTickGap={24} />
+              <YAxis tickLine={false} axisLine={false} />
+              <ChartTooltip content={<ChartTooltipContent formatter={(value) => numberFormatter.format(numberValue(value))} />} />
+              <ChartLegend content={<ChartLegendContent />} />
+              <Bar dataKey="created" stackId="a" fill="hsl(var(--chart-1))" radius={[4, 4, 0, 0]} />
+              <Bar dataKey="completed" stackId="a" fill="hsl(var(--chart-4))" radius={[4, 4, 0, 0]} />
+            </BarChart>
+          </ChartContainer>
+        </CardContent>
+      </Card>
+
+      <Card data-motion-item>
+        <CardHeader>
+          <CardTitle>Risks trend</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <ChartContainer
+            config={{
+              count: { label: "Risk count", markerClassName: "bg-destructive" },
+              severity_avg: { label: "Severity avg", markerClassName: "bg-chart-5" },
+            }}
+          >
+            <LineChart data={risks.map((item) => ({ ...item, label: toRuDateLabel(item.point) }))}>
+              <CartesianGrid vertical={false} />
+              <XAxis dataKey="label" tickLine={false} axisLine={false} minTickGap={24} />
+              <YAxis tickLine={false} axisLine={false} />
+              <ChartTooltip content={<ChartTooltipContent formatter={(value) => numberFormatter.format(numberValue(value))} />} />
+              <ChartLegend content={<ChartLegendContent />} />
+              <Line dataKey="count" type="monotone" stroke="hsl(var(--destructive))" strokeWidth={2} dot={false} />
+              <Line dataKey="severity_avg" type="monotone" stroke="hsl(var(--chart-5))" strokeWidth={2} dot={false} />
+            </LineChart>
+          </ChartContainer>
+        </CardContent>
+      </Card>
+
+      <Card data-motion-item>
+        <CardHeader>
+          <CardTitle>Finance burn vs budget</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <ChartContainer
+            config={{
+              burn: { label: "Burn", markerClassName: "bg-destructive" },
+              budget: { label: "Budget", markerClassName: "bg-primary" },
+            }}
+          >
+            <AreaChart data={burnBudget.map((item) => ({ ...item, label: toRuDateLabel(item.point) }))}>
+              <CartesianGrid vertical={false} />
+              <XAxis dataKey="label" tickLine={false} axisLine={false} minTickGap={24} />
+              <YAxis tickLine={false} axisLine={false} />
+              <ChartTooltip content={<ChartTooltipContent formatter={(value) => moneyFormatter.format(numberValue(value))} />} />
+              <ChartLegend content={<ChartLegendContent />} />
+              <Area dataKey="burn" type="monotone" stroke="hsl(var(--destructive))" fill="hsl(var(--destructive))" fillOpacity={0.12} />
+              <Area dataKey="budget" type="monotone" stroke="hsl(var(--primary))" fill="hsl(var(--primary))" fillOpacity={0.1} />
+            </AreaChart>
+          </ChartContainer>
+        </CardContent>
+      </Card>
+
+      <Card data-motion-item>
+        <CardHeader>
+          <CardTitle>Upsell potential score</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <ChartContainer config={{ value: { label: "Upsell score", markerClassName: "bg-primary" } }}>
+            <BarChart data={upsell.map((item) => ({ ...item, label: toRuDateLabel(item.point), value: numberValue(item.value) * 100 }))}>
+              <CartesianGrid vertical={false} />
+              <XAxis dataKey="label" tickLine={false} axisLine={false} minTickGap={24} />
+              <YAxis tickLine={false} axisLine={false} domain={[0, 100]} />
+              <ChartTooltip content={<ChartTooltipContent formatter={(value) => `${Math.round(numberValue(value))}%`} />} />
+              <Bar dataKey="value" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
+            </BarChart>
+          </ChartContainer>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+function renderAgreements(agreements, isAllProjects) {
+  return (
+    <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+      {agreements.map((item) => (
+        <Card key={item.id} data-motion-item>
+          <CardContent className="space-y-2 pt-4">
+            <div className="flex items-center justify-between gap-2">
+              {isAllProjects ? <ProjectBadge projectId={item.project_id} projectName={item.project_name} /> : <Badge variant="outline">{item.project_name}</Badge>}
+              <span className="text-xs text-muted-foreground">{item.created_at ? new Date(item.created_at).toLocaleDateString("ru-RU") : "-"}</span>
+            </div>
+            <p className="text-sm">{item.summary}</p>
+            <p className="text-xs text-muted-foreground">
+              {item.source_table} • {item.source_pk}
+            </p>
+          </CardContent>
+        </Card>
+      ))}
+      {!agreements.length ? <p className="text-sm text-muted-foreground">По выбранному фильтру договоренности не найдены.</p> : null}
+    </div>
+  );
+}
+
+function renderRisks(risks, isAllProjects) {
+  return (
+    <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+      {risks.map((risk) => (
+        <Card key={`${risk.source}-${risk.id}`} data-motion-item>
+          <CardContent className="space-y-2 pt-4">
+            <div className="flex flex-wrap items-center gap-2">
+              {isAllProjects ? <ProjectBadge projectId={risk.project_id} projectName={risk.project_name} /> : <Badge variant="outline">{risk.project_name}</Badge>}
+              <Badge variant={numberValue(risk.severity) >= 4 ? "destructive" : "secondary"}>Severity {Math.round(numberValue(risk.severity))}</Badge>
+              <Badge variant="outline">{risk.source}</Badge>
+            </div>
+            <p className="text-sm">{risk.title}</p>
+            <p className="text-xs text-muted-foreground">
+              Вероятность: {Math.round(numberValue(risk.probability) * 100)}% • {risk.updated_at ? new Date(risk.updated_at).toLocaleDateString("ru-RU") : "-"}
+            </p>
+          </CardContent>
+        </Card>
+      ))}
+      {!risks.length ? <p className="text-sm text-muted-foreground">Риски по выбранному фильтру не найдены.</p> : null}
+    </div>
+  );
+}
+
+function renderFinance(financePayload, moneyFormatter, numberFormatter) {
+  const totals = financePayload?.totals || {};
+  const byProject = Array.isArray(financePayload?.by_project) ? financePayload.by_project : [];
+  const charts = financePayload?.charts || {};
+
+  const revenueByProject = Array.isArray(charts.revenue_by_project) ? charts.revenue_by_project : [];
+  const costsByProject = Array.isArray(charts.costs_by_project) ? charts.costs_by_project : [];
+  const marginByProject = Array.isArray(charts.margin_by_project) ? charts.margin_by_project : [];
+  const burnTrend = Array.isArray(charts.burn_rate_trend) ? charts.burn_rate_trend : [];
+  const forecastCompletion = Array.isArray(charts.forecast_completion_days) ? charts.forecast_completion_days : [];
+  const budgetActual = Array.isArray(charts.budget_vs_actual) ? charts.budget_vs_actual : [];
+  const unitEconomics = Array.isArray(charts.unit_economics_proxy) ? charts.unit_economics_proxy : [];
+  const funnelNodes = Array.isArray(charts.funnel_nodes) ? charts.funnel_nodes : [];
+
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-3 xl:grid-cols-6">
+        <StatTile label="Сумма сделок" value={moneyFormatter.format(numberValue(totals.deal_amount))} />
+        <StatTile label="Pipeline" value={moneyFormatter.format(numberValue(totals.pipeline_amount))} />
+        <StatTile label="Expected revenue" value={moneyFormatter.format(numberValue(totals.expected_revenue))} />
+        <StatTile label="Signed total" value={moneyFormatter.format(numberValue(totals.signed_total))} />
+        <StatTile label="Costs" value={moneyFormatter.format(numberValue(totals.costs_amount))} />
+        <StatTile label="Gross margin" value={moneyFormatter.format(numberValue(totals.gross_margin))} />
+      </div>
+
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 xl:grid-cols-3">
+        <Card data-motion-item>
+          <CardHeader><CardTitle>Revenue по проектам</CardTitle></CardHeader>
+          <CardContent>
+            <ChartContainer>
+              <BarChart data={revenueByProject}>
+                <CartesianGrid vertical={false} />
+                <XAxis dataKey="project_name" tickLine={false} axisLine={false} minTickGap={12} />
+                <YAxis tickLine={false} axisLine={false} />
+                <ChartTooltip content={<ChartTooltipContent formatter={(value) => moneyFormatter.format(numberValue(value))} />} />
+                <Bar dataKey="value" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
+              </BarChart>
+            </ChartContainer>
+          </CardContent>
+        </Card>
+
+        <Card data-motion-item>
+          <CardHeader><CardTitle>Costs по проектам</CardTitle></CardHeader>
+          <CardContent>
+            <ChartContainer>
+              <BarChart data={costsByProject}>
+                <CartesianGrid vertical={false} />
+                <XAxis dataKey="project_name" tickLine={false} axisLine={false} minTickGap={12} />
+                <YAxis tickLine={false} axisLine={false} />
+                <ChartTooltip content={<ChartTooltipContent formatter={(value) => moneyFormatter.format(numberValue(value))} />} />
+                <Bar dataKey="value" fill="hsl(var(--destructive))" radius={[4, 4, 0, 0]} />
+              </BarChart>
+            </ChartContainer>
+          </CardContent>
+        </Card>
+
+        <Card data-motion-item>
+          <CardHeader><CardTitle>Margin</CardTitle></CardHeader>
+          <CardContent>
+            <ChartContainer>
+              <BarChart data={marginByProject}>
+                <CartesianGrid vertical={false} />
+                <XAxis dataKey="project_name" tickLine={false} axisLine={false} minTickGap={12} />
+                <YAxis tickLine={false} axisLine={false} />
+                <ChartTooltip content={<ChartTooltipContent formatter={(value) => moneyFormatter.format(numberValue(value))} />} />
+                <Bar dataKey="value" fill="hsl(var(--chart-2))" radius={[4, 4, 0, 0]} />
+              </BarChart>
+            </ChartContainer>
+          </CardContent>
+        </Card>
+
+        <Card data-motion-item>
+          <CardHeader><CardTitle>Burn rate</CardTitle></CardHeader>
+          <CardContent>
+            <ChartContainer>
+              <LineChart data={burnTrend.map((item) => ({ ...item, label: toRuDateLabel(item.point) }))}>
+                <CartesianGrid vertical={false} />
+                <XAxis dataKey="label" tickLine={false} axisLine={false} minTickGap={24} />
+                <YAxis tickLine={false} axisLine={false} />
+                <ChartTooltip content={<ChartTooltipContent formatter={(value) => moneyFormatter.format(numberValue(value))} />} />
+                <Line dataKey="burn" type="monotone" stroke="hsl(var(--destructive))" strokeWidth={2} dot={false} />
+              </LineChart>
+            </ChartContainer>
+          </CardContent>
+        </Card>
+
+        <Card data-motion-item>
+          <CardHeader><CardTitle>Forecast completion date proxy</CardTitle></CardHeader>
+          <CardContent>
+            <ChartContainer>
+              <BarChart data={forecastCompletion}>
+                <CartesianGrid vertical={false} />
+                <XAxis dataKey="project_name" tickLine={false} axisLine={false} minTickGap={12} />
+                <YAxis tickLine={false} axisLine={false} />
+                <ChartTooltip content={<ChartTooltipContent formatter={(value) => `${numberFormatter.format(numberValue(value))} дн.`} />} />
+                <Bar dataKey="value" fill="hsl(var(--chart-4))" radius={[4, 4, 0, 0]} />
+              </BarChart>
+            </ChartContainer>
+          </CardContent>
+        </Card>
+
+        <Card data-motion-item>
+          <CardHeader><CardTitle>Budget vs Actual</CardTitle></CardHeader>
+          <CardContent>
+            <ChartContainer
+              config={{
+                budget: { label: "Budget", markerClassName: "bg-primary" },
+                actual: { label: "Actual", markerClassName: "bg-destructive" },
+              }}
+            >
+              <BarChart data={budgetActual.map((item) => ({ ...item, label: toRuDateLabel(item.point) }))}>
+                <CartesianGrid vertical={false} />
+                <XAxis dataKey="label" tickLine={false} axisLine={false} minTickGap={24} />
+                <YAxis tickLine={false} axisLine={false} />
+                <ChartTooltip content={<ChartTooltipContent formatter={(value) => moneyFormatter.format(numberValue(value))} />} />
+                <ChartLegend content={<ChartLegendContent />} />
+                <Bar dataKey="budget" stackId="a" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="actual" stackId="a" fill="hsl(var(--destructive))" radius={[4, 4, 0, 0]} />
+              </BarChart>
+            </ChartContainer>
+          </CardContent>
+        </Card>
+
+        <Card data-motion-item>
+          <CardHeader><CardTitle>Unit economics proxy</CardTitle></CardHeader>
+          <CardContent>
+            <ChartContainer>
+              <BarChart data={unitEconomics}>
+                <CartesianGrid vertical={false} />
+                <XAxis dataKey="project_name" tickLine={false} axisLine={false} minTickGap={12} />
+                <YAxis tickLine={false} axisLine={false} domain={[0, 100]} />
+                <ChartTooltip content={<ChartTooltipContent formatter={(value) => numberFormatter.format(numberValue(value))} />} />
+                <Bar dataKey="client_value_score" fill="hsl(var(--chart-5))" radius={[4, 4, 0, 0]} />
+              </BarChart>
+            </ChartContainer>
+          </CardContent>
+        </Card>
+
+        <Card data-motion-item>
+          <CardHeader><CardTitle>Funnel / Nodes (стадии)</CardTitle></CardHeader>
+          <CardContent>
+            <ChartContainer>
+              <PieChart>
+                <Pie data={funnelNodes} dataKey="amount" nameKey="stage" outerRadius={80} fill="hsl(var(--chart-2))" />
+                <ChartTooltip content={<ChartTooltipContent formatter={(value) => moneyFormatter.format(numberValue(value))} />} />
+              </PieChart>
+            </ChartContainer>
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="space-y-2">
+        {byProject.map((row) => (
+          <Card key={row.project_id} data-motion-item>
+            <CardContent className="pt-4">
+              <div className="flex items-center justify-between gap-2">
+                <ProjectBadge projectId={row.project_id} projectName={row.project_name} />
+                <span className="text-xs text-muted-foreground">Прогноз: {Math.round(numberValue(row.forecast_days))} дн.</span>
+              </div>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function renderOffers(payload, isAllProjects, moneyFormatter) {
+  const offers = payload?.offers || { upsell: [], recent_offers: [], discount_policy: [] };
+  const loopsStats = payload?.loops || { contacts_with_email: 0, unique_emails: 0 };
+
+  return (
+    <div className="space-y-4">
+      <Card data-motion-item>
+        <CardHeader><CardTitle>Loops база</CardTitle></CardHeader>
+        <CardContent className="text-sm text-muted-foreground">
+          Контактов с email: {numberValue(loopsStats.contacts_with_email)}, уникальных email: {numberValue(loopsStats.unique_emails)}
+        </CardContent>
+      </Card>
+
+      <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+        <Card data-motion-item>
+          <CardHeader><CardTitle>Upsell opportunities</CardTitle></CardHeader>
+          <CardContent className="space-y-2">
+            {(offers.upsell || []).map((item) => (
+              <div key={item.id} className="rounded-md border p-2">
+                <div className="mb-1 flex items-center justify-between gap-2">
+                  {isAllProjects ? <ProjectBadge projectId={item.project_id} projectName={item.project_name} /> : <Badge variant="outline">{item.project_name}</Badge>}
+                  <Badge variant="secondary">{Math.round(numberValue(item.score) * 100)}%</Badge>
+                </div>
+                <p className="text-sm">{item.title}</p>
+                <p className="text-xs text-muted-foreground">{item.rationale || "Без описания"}</p>
+              </div>
+            ))}
+            {!offers.upsell?.length ? <p className="text-sm text-muted-foreground">Пока нет upsell opportunities.</p> : null}
+          </CardContent>
+        </Card>
+
+        <Card data-motion-item>
+          <CardHeader><CardTitle>Политика скидок</CardTitle></CardHeader>
+          <CardContent className="space-y-2">
+            {(offers.discount_policy || []).map((item) => (
+              <div key={item.project_id} className="rounded-md border p-2">
+                <div className="mb-1 flex items-center justify-between gap-2">
+                  <ProjectBadge projectId={item.project_id} projectName={item.project_name} />
+                  <Badge variant="outline">Макс. скидка {numberValue(item.max_discount_pct)}%</Badge>
+                </div>
+                <p className="text-xs text-muted-foreground">Ценность клиента: {numberValue(item.client_value_score)}</p>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      </div>
+
+      <Card data-motion-item>
+        <CardHeader><CardTitle>Последние офферы</CardTitle></CardHeader>
+        <CardContent className="space-y-2">
+          {(offers.recent_offers || []).map((item) => (
+            <div key={item.id} className="flex flex-wrap items-center justify-between gap-2 rounded-md border p-2">
+              <div>
+                <p className="text-sm">{item.title}</p>
+                {isAllProjects ? (
+                  <ProjectBadge projectId={item.project_id} projectName={item.project_name} className="mt-1" />
+                ) : (
+                  <p className="text-xs text-muted-foreground">{item.project_name}</p>
+                )}
+              </div>
+              <div className="text-right">
+                <p className="text-sm">{moneyFormatter.format(numberValue(item.total))}</p>
+                <p className="text-xs text-muted-foreground">Скидка {numberValue(item.discount_pct)}%</p>
+              </div>
+            </div>
+          ))}
+          {!offers.recent_offers?.length ? <p className="text-sm text-muted-foreground">Офферы не найдены.</p> : null}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+function MessagesSection({ messagesPayload, selectedPersonId, setSelectedPersonId, loadingMessages }) {
+  const project = messagesPayload?.project || null;
+  const persons = Array.isArray(messagesPayload?.persons) ? messagesPayload.persons : [];
+  const messages = Array.isArray(messagesPayload?.messages) ? messagesPayload.messages : [];
+  const bottomRef = useRef(null);
+
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+  }, [project?.id, selectedPersonId, messages.length]);
+
+  const personName = persons.find((item) => item.contact_global_id === selectedPersonId)?.person_name || "Не выбран";
+
+  return (
+    <Card data-motion-item className="overflow-hidden">
+      <CardHeader className="border-b">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <CardTitle>Переписки</CardTitle>
+          <Badge variant="outline">{project?.name || "-"}</Badge>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="w-full max-w-xs">
+            <Select
+              value={selectedPersonId || persons[0]?.contact_global_id || "none"}
+              onValueChange={(value) => setSelectedPersonId(value === "none" ? "" : value)}
+            >
+              <SelectTrigger aria-label="Выбрать персону клиента">
+                <SelectValue placeholder="Выбрать персону" />
+              </SelectTrigger>
+              <SelectContent>
+                {!persons.length ? <SelectItem value="none">Персоны не найдены</SelectItem> : null}
+                {persons.map((person) => (
+                  <SelectItem key={person.contact_global_id} value={person.contact_global_id}>
+                    {person.person_name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <span className="text-xs text-muted-foreground">Текущая персона: {personName}</span>
+        </div>
+      </CardHeader>
+      <CardContent className="p-0">
+        <div className="max-h-[70svh] overflow-y-auto px-4 py-3">
+          <div className="sticky top-0 z-10 mb-3 rounded-md border bg-background/95 px-3 py-2 text-xs backdrop-blur">
+            <span className="font-medium">{project?.name || "-"}</span>
+            <span className="mx-2 text-muted-foreground">•</span>
+            <span className="text-muted-foreground">{personName}</span>
+          </div>
+
+          <div className="space-y-3">
+            {loadingMessages ? <p className="text-sm text-muted-foreground">Загрузка переписки...</p> : null}
+            {!loadingMessages &&
+              messages.map((message) => {
+                const incoming = message.sender_type === "contact" || message.sender_type === "client";
+                return (
+                  <div key={message.id} className={cn("flex", incoming ? "justify-start" : "justify-end")}>
+                    <div
+                      className={cn(
+                        "max-w-[80%] rounded-2xl border px-3 py-2",
+                        incoming ? "rounded-bl-sm bg-muted" : "rounded-br-sm bg-primary text-primary-foreground"
+                      )}
+                    >
+                      <div className="mb-1 flex items-center gap-2 text-[11px] opacity-80">
+                        <span>{message.author_name || (incoming ? "Клиент" : "Команда")}</span>
+                        <span>•</span>
+                        <span>{message.channel || "-"}</span>
+                      </div>
+                      <LinkifiedText text={message.content} />
+                      {Array.isArray(message.attachments) && message.attachments.length ? (
+                        <div className="mt-2 flex flex-wrap gap-1.5">
+                          {message.attachments.map((file) => (
+                            <Badge key={file.id} variant="outline" className="text-[11px]">
+                              attachment: {file.name}
+                            </Badge>
+                          ))}
+                        </div>
+                      ) : null}
+                      <div className="mt-2 text-right text-[11px] opacity-80">
+                        {message.created_at ? new Date(message.created_at).toLocaleString("ru-RU") : "-"}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            {!loadingMessages && !messages.length ? <p className="text-sm text-muted-foreground">Сообщений не найдено.</p> : null}
+            <div ref={bottomRef} />
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+export default function ControlTowerSectionPage({ section }) {
+  const normalizedSection = normalizePortfolioSection(section);
+  const { loading, session } = useAuthGuard();
+  const { selectedProjectIds, selectedProject, isAllProjects, loadingProjects } = useProjectPortfolio();
+  const { moneyFormatter, numberFormatter } = useFormatters();
+  const [selectedPersonId, setSelectedPersonId] = useState("");
+
+  const overview = usePortfolioOverview({
+    projectIds: selectedProjectIds,
+    enabled: normalizedSection !== "messages" && selectedProjectIds.length > 0,
+    messageLimit: 80,
+    cardLimit: 30,
+  });
+
+  const messages = usePortfolioMessages({
+    projectId: selectedProject?.id,
+    contactGlobalId: selectedPersonId,
+    enabled: normalizedSection === "messages" && Boolean(selectedProject?.id),
+    limit: 300,
+  });
+
+  useEffect(() => {
+    if (normalizedSection !== "messages") return;
+    const persons = Array.isArray(messages.payload?.persons) ? messages.payload.persons : [];
+    if (!persons.length) {
+      if (selectedPersonId) setSelectedPersonId("");
+      return;
+    }
+    const valid = persons.some((person) => person.contact_global_id === selectedPersonId);
+    if (!valid) {
+      setSelectedPersonId(messages.payload?.selected_contact_global_id || persons[0]?.contact_global_id || "");
+    }
+  }, [normalizedSection, messages.payload, selectedPersonId]);
+
+  if (loading || !session || loadingProjects) {
+    return (
+      <PageShell title={TITLES[normalizedSection]} subtitle={SUBTITLES[normalizedSection]}>
+        <PageLoadingSkeleton />
+      </PageShell>
+    );
+  }
+
+  if (!selectedProjectIds.length) {
+    return (
+      <PageShell title={TITLES[normalizedSection]} subtitle={SUBTITLES[normalizedSection]}>
+        <Card data-motion-item>
+          <CardContent>
+            <EmptyState title="Нет доступных проектов" description="Создайте проект и выберите его в правом сайдбаре." />
+          </CardContent>
+        </Card>
+      </PageShell>
+    );
+  }
+
+  const overviewPayload = overview.payload;
+  const agreements = Array.isArray(overviewPayload?.agreements) ? overviewPayload.agreements : [];
+  const risks = Array.isArray(overviewPayload?.risks) ? overviewPayload.risks : [];
+
+  return (
+    <PageShell title={TITLES[normalizedSection]} subtitle={SUBTITLES[normalizedSection]}>
+      <div className="space-y-4">
+        {normalizedSection === "dashboard" ? renderDashboardCharts(overviewPayload, moneyFormatter, numberFormatter) : null}
+        {normalizedSection === "messages"
+          ? (
+            <MessagesSection
+              messagesPayload={messages.payload}
+              selectedPersonId={selectedPersonId}
+              setSelectedPersonId={setSelectedPersonId}
+              loadingMessages={messages.loading}
+            />
+          )
+          : null}
+        {normalizedSection === "agreements" ? renderAgreements(agreements, isAllProjects) : null}
+        {normalizedSection === "risks" ? renderRisks(risks, isAllProjects) : null}
+        {normalizedSection === "finance" ? renderFinance(overviewPayload?.finances, moneyFormatter, numberFormatter) : null}
+        {normalizedSection === "offers" ? renderOffers(overviewPayload, isAllProjects, moneyFormatter) : null}
+
+        {(overview.error || messages.error) ? <Toast type="error" message={overview.error || messages.error} /> : null}
+      </div>
+    </PageShell>
+  );
+}
