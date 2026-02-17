@@ -1,21 +1,22 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import Link from "next/link";
-
 import { PageShell } from "@/components/page-shell";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { PageLoadingSkeleton } from "@/components/ui/page-loading-skeleton";
+import { ProjectScopeRequired } from "@/components/project-scope-required";
 import { StatTile } from "@/components/ui/stat-tile";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { StatusChip } from "@/components/ui/status-chip";
 import { Toast } from "@/components/ui/toast";
 import { apiFetch } from "@/lib/api";
 import { useAuthGuard } from "@/hooks/use-auth-guard";
+import { useProjectGate } from "@/hooks/use-project-gate";
 
 export default function JobsFeaturePage() {
   const { loading, session } = useAuthGuard();
+  const { hasProject, loadingProjects } = useProjectGate();
   const [status, setStatus] = useState(null);
   const [toast, setToast] = useState({ type: "info", message: "" });
   const [busyJob, setBusyJob] = useState("");
@@ -30,10 +31,10 @@ export default function JobsFeaturePage() {
   }, []);
 
   useEffect(() => {
-    if (!loading && session?.authenticated) {
+    if (!loading && !loadingProjects && session?.authenticated && hasProject) {
       loadStatus();
     }
-  }, [loading, session, loadStatus]);
+  }, [loading, loadingProjects, session, hasProject, loadStatus]);
 
   async function runJob(path, name) {
     setBusyJob(name);
@@ -48,7 +49,7 @@ export default function JobsFeaturePage() {
     }
   }
 
-  if (loading || !session) {
+  if (loading || !session || loadingProjects) {
     return (
       <PageShell title="Jobs" subtitle="Run ingestion, sync and enrichment jobs">
         <PageLoadingSkeleton />
@@ -56,22 +57,13 @@ export default function JobsFeaturePage() {
     );
   }
 
-  if (!session?.active_project_id) {
+  if (!hasProject) {
     return (
       <PageShell title="Jobs" subtitle="Trigger Chatwoot sync and embeddings jobs">
-        <Card data-motion-item>
-          <CardHeader>
-            <CardTitle>Select active project first</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <p className="text-sm text-muted-foreground">
-              Jobs are strictly project-scoped. Select an active project before running sync or embeddings.
-            </p>
-            <Link href="/projects">
-              <Button>Go to Projects</Button>
-            </Link>
-          </CardContent>
-        </Card>
+        <ProjectScopeRequired
+          title="Сначала выберите активный проект"
+          description="Jobs выполняются в контексте проекта. Выберите проект и повторите запуск."
+        />
       </PageShell>
     );
   }

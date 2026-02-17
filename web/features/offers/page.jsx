@@ -1,22 +1,23 @@
 "use client";
 
-import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
 import { PageShell } from "@/components/page-shell";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
 import { PageLoadingSkeleton } from "@/components/ui/page-loading-skeleton";
+import { ProjectScopeRequired } from "@/components/project-scope-required";
 import { Toast } from "@/components/ui/toast";
 import { StatusChip } from "@/components/ui/status-chip";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { apiFetch } from "@/lib/api";
 import { useAuthGuard } from "@/hooks/use-auth-guard";
+import { useProjectGate } from "@/hooks/use-project-gate";
 
 export default function OffersFeaturePage() {
   const { loading, session } = useAuthGuard();
+  const { hasProject, loadingProjects } = useProjectGate();
   const [offers, setOffers] = useState([]);
   const [outbound, setOutbound] = useState([]);
   const [busy, setBusy] = useState(false);
@@ -24,7 +25,7 @@ export default function OffersFeaturePage() {
   const [form, setForm] = useState({ title: "", subtotal: "12000", discount_pct: "0" });
 
   const load = useCallback(async () => {
-    if (!session?.active_project_id) return;
+    if (!hasProject) return;
     setBusy(true);
     try {
       const [offersResp, outboundResp] = await Promise.all([apiFetch("/offers"), apiFetch("/outbound")]);
@@ -35,24 +36,24 @@ export default function OffersFeaturePage() {
     } finally {
       setBusy(false);
     }
-  }, [session?.active_project_id]);
+  }, [hasProject]);
 
   useEffect(() => {
-    if (!loading && session?.authenticated && session?.active_project_id) {
+    if (!loading && !loadingProjects && session?.authenticated && hasProject) {
       load();
     }
-  }, [loading, session, load]);
+  }, [loading, loadingProjects, session, hasProject, load]);
 
   async function createOffer() {
     if (!form.title.trim()) return;
     try {
       await apiFetch("/offers", {
         method: "POST",
-        body: JSON.stringify({
+        body: {
           title: form.title.trim(),
           subtotal: Number(form.subtotal || 0),
           discount_pct: Number(form.discount_pct || 0),
-        }),
+        },
       });
       setForm({ title: "", subtotal: "12000", discount_pct: "0" });
       setToast({ type: "success", message: "Offer created" });
@@ -64,7 +65,7 @@ export default function OffersFeaturePage() {
 
   async function approveDiscount(id) {
     try {
-      await apiFetch(`/offers/${id}/approve-discount`, { method: "POST", body: JSON.stringify({}) });
+      await apiFetch(`/offers/${id}/approve-discount`, { method: "POST", body: {} });
       setToast({ type: "success", message: "Discount approved" });
       await load();
     } catch (error) {
@@ -74,7 +75,7 @@ export default function OffersFeaturePage() {
 
   async function approveAndSend(id) {
     try {
-      await apiFetch(`/offers/${id}/approve-send`, { method: "POST", body: JSON.stringify({}) });
+      await apiFetch(`/offers/${id}/approve-send`, { method: "POST", body: {} });
       setToast({ type: "success", message: "Offer marked as sent" });
       await load();
     } catch (error) {
@@ -86,12 +87,12 @@ export default function OffersFeaturePage() {
     try {
       await apiFetch("/outbound/draft", {
         method: "POST",
-        body: JSON.stringify({
+        body: {
           channel: "email",
           recipient_ref: "client@example.com",
           body_text: "Prepared updated offer and next steps for your review.",
           idempotency_key: `offer-draft-${Date.now()}`,
-        }),
+        },
       });
       setToast({ type: "success", message: "Outbound draft created" });
       await load();
@@ -102,7 +103,7 @@ export default function OffersFeaturePage() {
 
   async function approveOutbound(id) {
     try {
-      await apiFetch(`/outbound/${id}/approve`, { method: "POST", body: JSON.stringify({}) });
+      await apiFetch(`/outbound/${id}/approve`, { method: "POST", body: {} });
       await load();
     } catch (error) {
       setToast({ type: "error", message: error?.message || "Outbound approve failed" });
@@ -111,14 +112,14 @@ export default function OffersFeaturePage() {
 
   async function sendOutbound(id) {
     try {
-      await apiFetch(`/outbound/${id}/send`, { method: "POST", body: JSON.stringify({}) });
+      await apiFetch(`/outbound/${id}/send`, { method: "POST", body: {} });
       await load();
     } catch (error) {
       setToast({ type: "error", message: error?.message || "Outbound send failed" });
     }
   }
 
-  if (loading || !session) {
+  if (loading || !session || loadingProjects) {
     return (
       <PageShell title="Offers + Outbox" subtitle="Draft→approve→send lifecycle with idempotency and rate-limit policies">
         <PageLoadingSkeleton />
@@ -126,22 +127,13 @@ export default function OffersFeaturePage() {
     );
   }
 
-  if (!session.active_project_id) {
+  if (!hasProject) {
     return (
       <PageShell title="Offers" subtitle="Offer builder + outbound approval pipeline">
-        <Card data-motion-item>
-          <CardContent>
-            <EmptyState
-              title="Select active project first"
-              description="Offers and outbound policies are scoped to active project/account."
-              actions={
-                <Link href="/projects">
-                  <Button>Go to Projects</Button>
-                </Link>
-              }
-            />
-          </CardContent>
-        </Card>
+        <ProjectScopeRequired
+          title="Сначала выберите активный проект"
+          description="Offers и Outbox используют project scope для расчётов и политик отправки."
+        />
       </PageShell>
     );
   }

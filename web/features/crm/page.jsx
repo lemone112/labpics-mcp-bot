@@ -1,15 +1,14 @@
 "use client";
 
-import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { PageShell } from "@/components/page-shell";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageLoadingSkeleton } from "@/components/ui/page-loading-skeleton";
+import { ProjectScopeRequired } from "@/components/project-scope-required";
 import { StatTile } from "@/components/ui/stat-tile";
 import { Toast } from "@/components/ui/toast";
 import { Button } from "@/components/ui/button";
-import { EmptyState } from "@/components/ui/empty-state";
 import { Kanban } from "@/components/ui/kanban";
 import { Filters } from "@/components/ui/filters";
 import { Input } from "@/components/ui/input";
@@ -17,11 +16,13 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { apiFetch } from "@/lib/api";
 import { useAuthGuard } from "@/hooks/use-auth-guard";
+import { useProjectGate } from "@/hooks/use-project-gate";
 
 const stages = ["discovery", "qualified", "proposal", "negotiation", "won", "lost"];
 
 export default function CrmFeaturePage() {
   const { loading, session } = useAuthGuard();
+  const { hasProject, loadingProjects } = useProjectGate();
   const [overview, setOverview] = useState(null);
   const [accounts, setAccounts] = useState([]);
   const [opportunities, setOpportunities] = useState([]);
@@ -33,7 +34,7 @@ export default function CrmFeaturePage() {
   const [newOpportunityAccountId, setNewOpportunityAccountId] = useState("");
 
   const load = useCallback(async () => {
-    if (!session?.active_project_id) return;
+    if (!hasProject) return;
     setBusy(true);
     try {
       const [overviewResp, accountsResp, opportunitiesResp] = await Promise.all([
@@ -49,13 +50,13 @@ export default function CrmFeaturePage() {
     } finally {
       setBusy(false);
     }
-  }, [session?.active_project_id]);
+  }, [hasProject]);
 
   useEffect(() => {
-    if (!loading && session?.authenticated && session?.active_project_id) {
+    if (!loading && !loadingProjects && session?.authenticated && hasProject) {
       load();
     }
-  }, [loading, session, load]);
+  }, [loading, loadingProjects, session, hasProject, load]);
 
   const filteredOpportunities = useMemo(() => {
     if (!query) return opportunities;
@@ -88,7 +89,7 @@ export default function CrmFeaturePage() {
     try {
       await apiFetch("/crm/accounts", {
         method: "POST",
-        body: JSON.stringify({ name: newAccountName.trim() }),
+        body: { name: newAccountName.trim() },
       });
       setNewAccountName("");
       setToast({ type: "success", message: "Account created" });
@@ -103,13 +104,13 @@ export default function CrmFeaturePage() {
     try {
       await apiFetch("/crm/opportunities", {
         method: "POST",
-        body: JSON.stringify({
+        body: {
           title: newOpportunityTitle.trim(),
           account_id: newOpportunityAccountId,
           next_step: "Qualify needs and scope",
           amount_estimate: 5000,
           probability: 0.35,
-        }),
+        },
       });
       setNewOpportunityTitle("");
       setToast({ type: "success", message: "Opportunity created" });
@@ -119,7 +120,7 @@ export default function CrmFeaturePage() {
     }
   }
 
-  if (loading || !session) {
+  if (loading || !session || loadingProjects) {
     return (
       <PageShell title="CRM" subtitle="Accounts/Opportunities with kanban stages and next-step discipline">
         <PageLoadingSkeleton />
@@ -127,22 +128,13 @@ export default function CrmFeaturePage() {
     );
   }
 
-  if (!session.active_project_id) {
+  if (!hasProject) {
     return (
       <PageShell title="CRM" subtitle="Accounts, opportunities and stage progression">
-        <Card data-motion-item>
-          <CardContent>
-            <EmptyState
-              title="Select active project first"
-              description="CRM entities are strictly project scoped."
-              actions={
-                <Link href="/projects">
-                  <Button>Go to Projects</Button>
-                </Link>
-              }
-            />
-          </CardContent>
-        </Card>
+        <ProjectScopeRequired
+          title="Сначала выберите активный проект"
+          description="CRM сущности и стадии ведутся в рамках выбранного проекта."
+        />
       </PageShell>
     );
   }

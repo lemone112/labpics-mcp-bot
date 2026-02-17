@@ -45,8 +45,8 @@ export function PageShell({ title, subtitle, children }) {
       <div className="flex min-w-0 flex-1 overflow-hidden">
         <ProjectSidebar open={projectsSidebarOpen} />
         <Sheet open={mobileProjectsSheetOpen} onOpenChange={setMobileProjectsSheetOpen}>
-          <SheetContent side="left" className="w-[18.5rem] border-r bg-sidebar p-0 md:hidden">
-            <ProjectSidebarPanel open onRequestClose={() => setMobileProjectsSheetOpen(false)} />
+          <SheetContent side="left" className="z-[70] w-[18.5rem] border-r bg-sidebar p-0 md:hidden">
+            <ProjectSidebarPanel onRequestClose={() => setMobileProjectsSheetOpen(false)} />
           </SheetContent>
         </Sheet>
         <main className="flex h-svh min-w-0 flex-1 flex-col overflow-hidden">
@@ -87,7 +87,7 @@ export function PageShell({ title, subtitle, children }) {
           </MotionGroup>
         </main>
       </div>
-      <MobileControlTowerTabbar />
+      {!mobileProjectsSheetOpen ? <MobileControlTowerTabbar /> : null}
     </div>
   );
 }

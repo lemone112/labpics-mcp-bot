@@ -37,6 +37,8 @@ export function ProjectPortfolioProvider({ children }) {
   const [selectedScopeId, setSelectedScopeId] = useState(null);
   const [lastConcreteProjectId, setLastConcreteProjectId] = useState(null);
   const [activeProjectId, setActiveProjectId] = useState(null);
+  const [activatingProjectId, setActivatingProjectId] = useState("");
+  const [activationError, setActivationError] = useState("");
   const [loadingProjects, setLoadingProjects] = useState(true);
   const [error, setError] = useState("");
 
@@ -62,6 +64,7 @@ export function ProjectPortfolioProvider({ children }) {
   const refreshProjects = useCallback(async () => {
     setLoadingProjects(true);
     setError("");
+    setActivationError("");
     try {
       const data = await apiFetch("/projects");
       const nextProjects = Array.isArray(data?.projects) ? data.projects : [];
@@ -89,25 +92,12 @@ export function ProjectPortfolioProvider({ children }) {
 
       setLastConcreteProjectId(nextLastConcrete);
       setSelectedScopeId(nextScope);
-
-      const candidateActiveProjectId =
-        (nextActiveProjectId && nextProjectIdSet.has(nextActiveProjectId) ? nextActiveProjectId : null) ||
-        (nextLastConcrete && nextProjectIdSet.has(nextLastConcrete) ? nextLastConcrete : null) ||
-        nextProjectIds[0] ||
-        null;
-      if (!nextActiveProjectId && candidateActiveProjectId) {
-        try {
-          await apiFetch(`/projects/${candidateActiveProjectId}/select`, { method: "POST" });
-          setActiveProjectId(candidateActiveProjectId);
-        } catch {
-          // keep UI responsive; user can still choose project manually
-        }
-      }
     } catch (requestError) {
       setError(requestError?.message || "Не удалось загрузить список проектов");
       setProjects([]);
       setSelectedScopeId(null);
       setLastConcreteProjectId(null);
+      setActiveProjectId(null);
     } finally {
       setLoadingProjects(false);
     }
@@ -163,14 +153,42 @@ export function ProjectPortfolioProvider({ children }) {
     (projectId) => {
       const normalized = normalizeProjectId(projectId);
       if (!normalized || !projectIdSet.has(normalized)) return;
+      setActivationError("");
       setSelectedScopeId(normalized);
       setLastConcreteProjectId(normalized);
     },
     [projectIdSet]
   );
 
+  const activateProject = useCallback(
+    async (projectId) => {
+      const normalized = normalizeProjectId(projectId);
+      if (!normalized || !projectIdSet.has(normalized)) {
+        throw new Error("Проект недоступен для выбора");
+      }
+      setActivationError("");
+      setActivatingProjectId(normalized);
+      try {
+        if (normalizeProjectId(activeProjectId) !== normalized) {
+          await apiFetch(`/projects/${normalized}/select`, { method: "POST" });
+        }
+        setActiveProjectId(normalized);
+        setSelectedScopeId(normalized);
+        setLastConcreteProjectId(normalized);
+      } catch (requestError) {
+        const message = requestError?.message || "Не удалось переключить проект";
+        setActivationError(message);
+        throw requestError;
+      } finally {
+        setActivatingProjectId("");
+      }
+    },
+    [projectIdSet, activeProjectId]
+  );
+
   const selectAllProjects = useCallback(() => {
     if (!canSelectAll || !projectIds.length) return;
+    setActivationError("");
     setSelectedScopeId(ALL_PROJECTS_SCOPE);
   }, [canSelectAll, projectIds.length]);
 
@@ -211,12 +229,14 @@ export function ProjectPortfolioProvider({ children }) {
       selectedProject,
       lastConcreteProjectId,
       activeProjectId,
+      activatingProjectId,
+      activationError,
       loadingProjects,
       error,
       refreshProjects,
       selectProject,
+      activateProject,
       selectAllProjects,
-      setActiveProjectId,
     }),
     [
       projects,
@@ -232,10 +252,13 @@ export function ProjectPortfolioProvider({ children }) {
       selectedProject,
       lastConcreteProjectId,
       activeProjectId,
+      activatingProjectId,
+      activationError,
       loadingProjects,
       error,
       refreshProjects,
       selectProject,
+      activateProject,
       selectAllProjects,
     ]
   );

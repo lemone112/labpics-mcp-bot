@@ -1,20 +1,22 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
 
 import { PageShell } from "@/components/page-shell";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageLoadingSkeleton } from "@/components/ui/page-loading-skeleton";
+import { ProjectScopeRequired } from "@/components/project-scope-required";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Toast } from "@/components/ui/toast";
 import { apiFetch } from "@/lib/api";
 import { useAuthGuard } from "@/hooks/use-auth-guard";
+import { useProjectGate } from "@/hooks/use-project-gate";
 
 export default function SearchFeaturePage() {
   const { loading, session } = useAuthGuard();
+  const { hasProject, loadingProjects } = useProjectGate();
   const [query, setQuery] = useState("");
   const [topK, setTopK] = useState(10);
   const [results, setResults] = useState([]);
@@ -45,7 +47,7 @@ export default function SearchFeaturePage() {
     }
   }
 
-  if (loading || !session) {
+  if (loading || !session || loadingProjects) {
     return (
       <PageShell title="Search" subtitle="Vector similarity search over ready embeddings">
         <PageLoadingSkeleton />
@@ -53,22 +55,13 @@ export default function SearchFeaturePage() {
     );
   }
 
-  if (!session?.active_project_id) {
+  if (!hasProject) {
     return (
       <PageShell title="Search" subtitle="Vector similarity search over ready embeddings">
-        <Card data-motion-item>
-          <CardHeader>
-            <CardTitle>Select active project first</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <p className="text-sm text-muted-foreground">
-              Search is strictly project-scoped. Choose an active project before querying evidence.
-            </p>
-            <Link href="/projects">
-              <Button>Go to Projects</Button>
-            </Link>
-          </CardContent>
-        </Card>
+        <ProjectScopeRequired
+          title="Сначала выберите активный проект"
+          description="Search выполняется в project scope. Выберите проект перед поиском по embeddings."
+        />
       </PageShell>
     );
   }

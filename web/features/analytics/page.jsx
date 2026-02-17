@@ -1,21 +1,22 @@
 "use client";
 
-import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
 import { PageShell } from "@/components/page-shell";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { EmptyState } from "@/components/ui/empty-state";
 import { PageLoadingSkeleton } from "@/components/ui/page-loading-skeleton";
+import { ProjectScopeRequired } from "@/components/project-scope-required";
 import { Toast } from "@/components/ui/toast";
 import { StatTile } from "@/components/ui/stat-tile";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { apiFetch } from "@/lib/api";
 import { useAuthGuard } from "@/hooks/use-auth-guard";
+import { useProjectGate } from "@/hooks/use-project-gate";
 
 export default function AnalyticsFeaturePage() {
   const { loading, session } = useAuthGuard();
+  const { hasProject, loadingProjects } = useProjectGate();
   const [overview, setOverview] = useState(null);
   const [risk, setRisk] = useState(null);
   const [evidence, setEvidence] = useState([]);
@@ -23,7 +24,7 @@ export default function AnalyticsFeaturePage() {
   const [toast, setToast] = useState({ type: "info", message: "" });
 
   const load = useCallback(async () => {
-    if (!session?.active_project_id) return;
+    if (!hasProject) return;
     setBusy(true);
     try {
       const [overviewResp, riskResp, evidenceResp] = await Promise.all([
@@ -39,17 +40,17 @@ export default function AnalyticsFeaturePage() {
     } finally {
       setBusy(false);
     }
-  }, [session?.active_project_id]);
+  }, [hasProject]);
 
   useEffect(() => {
-    if (!loading && session?.authenticated && session?.active_project_id) {
+    if (!loading && !loadingProjects && session?.authenticated && hasProject) {
       load();
     }
-  }, [loading, session, load]);
+  }, [loading, loadingProjects, session, hasProject, load]);
 
   async function refreshAnalytics() {
     try {
-      await apiFetch("/analytics/refresh", { method: "POST", body: JSON.stringify({ period_days: 30 }) });
+      await apiFetch("/analytics/refresh", { method: "POST", body: { period_days: 30 } });
       setToast({ type: "success", message: "Analytics snapshots refreshed" });
       await load();
     } catch (error) {
@@ -67,7 +68,7 @@ export default function AnalyticsFeaturePage() {
     }
   }
 
-  if (loading || !session) {
+  if (loading || !session || loadingProjects) {
     return (
       <PageShell title="Analytics + Risk" subtitle="Pipeline forecast, delivery/comms metrics and drill-down evidence">
         <PageLoadingSkeleton />
@@ -75,22 +76,13 @@ export default function AnalyticsFeaturePage() {
     );
   }
 
-  if (!session.active_project_id) {
+  if (!hasProject) {
     return (
       <PageShell title="Analytics" subtitle="Forecast, delivery, communications and risk metrics">
-        <Card data-motion-item>
-          <CardContent>
-            <EmptyState
-              title="Select active project first"
-              description="Analytics snapshots are scoped to active project/account."
-              actions={
-                <Link href="/projects">
-                  <Button>Go to Projects</Button>
-                </Link>
-              }
-            />
-          </CardContent>
-        </Card>
+        <ProjectScopeRequired
+          title="Сначала выберите активный проект"
+          description="Аналитика и risk-модели строятся по выбранному проекту."
+        />
       </PageShell>
     );
   }

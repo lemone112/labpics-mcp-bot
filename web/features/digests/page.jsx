@@ -1,27 +1,28 @@
 "use client";
 
-import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
 import { PageShell } from "@/components/page-shell";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { EmptyState } from "@/components/ui/empty-state";
 import { PageLoadingSkeleton } from "@/components/ui/page-loading-skeleton";
+import { ProjectScopeRequired } from "@/components/project-scope-required";
 import { Toast } from "@/components/ui/toast";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { apiFetch } from "@/lib/api";
 import { useAuthGuard } from "@/hooks/use-auth-guard";
+import { useProjectGate } from "@/hooks/use-project-gate";
 
 export default function DigestsFeaturePage() {
   const { loading, session } = useAuthGuard();
+  const { hasProject, loadingProjects } = useProjectGate();
   const [daily, setDaily] = useState([]);
   const [weekly, setWeekly] = useState([]);
   const [busy, setBusy] = useState(false);
   const [toast, setToast] = useState({ type: "info", message: "" });
 
   const load = useCallback(async () => {
-    if (!session?.active_project_id) return;
+    if (!hasProject) return;
     setBusy(true);
     try {
       const [dailyResp, weeklyResp] = await Promise.all([apiFetch("/digests/daily"), apiFetch("/digests/weekly")]);
@@ -32,13 +33,13 @@ export default function DigestsFeaturePage() {
     } finally {
       setBusy(false);
     }
-  }, [session?.active_project_id]);
+  }, [hasProject]);
 
   useEffect(() => {
-    if (!loading && session?.authenticated && session?.active_project_id) {
+    if (!loading && !loadingProjects && session?.authenticated && hasProject) {
       load();
     }
-  }, [loading, session, load]);
+  }, [loading, loadingProjects, session, hasProject, load]);
 
   async function generateDaily() {
     try {
@@ -60,7 +61,7 @@ export default function DigestsFeaturePage() {
     }
   }
 
-  if (loading || !session) {
+  if (loading || !session || loadingProjects) {
     return (
       <PageShell title="Digests" subtitle="Daily operations digest + weekly portfolio digest">
         <PageLoadingSkeleton />
@@ -68,22 +69,13 @@ export default function DigestsFeaturePage() {
     );
   }
 
-  if (!session.active_project_id) {
+  if (!hasProject) {
     return (
       <PageShell title="Digests" subtitle="Daily and weekly project intelligence">
-        <Card data-motion-item>
-          <CardContent>
-            <EmptyState
-              title="Select active project first"
-              description="Digests are generated per active project/account."
-              actions={
-                <Link href="/projects">
-                  <Button>Go to Projects</Button>
-                </Link>
-              }
-            />
-          </CardContent>
-        </Card>
+        <ProjectScopeRequired
+          title="Сначала выберите активный проект"
+          description="Дайджесты формируются в рамках конкретного проекта."
+        />
       </PageShell>
     );
   }

@@ -1,22 +1,23 @@
 "use client";
 
-import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { PageShell } from "@/components/page-shell";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { EmptyState } from "@/components/ui/empty-state";
 import { PageLoadingSkeleton } from "@/components/ui/page-loading-skeleton";
+import { ProjectScopeRequired } from "@/components/project-scope-required";
 import { Toast } from "@/components/ui/toast";
 import { StatusChip } from "@/components/ui/status-chip";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Filters } from "@/components/ui/filters";
 import { apiFetch } from "@/lib/api";
 import { useAuthGuard } from "@/hooks/use-auth-guard";
+import { useProjectGate } from "@/hooks/use-project-gate";
 
 export default function SignalsFeaturePage() {
   const { loading, session } = useAuthGuard();
+  const { hasProject, loadingProjects } = useProjectGate();
   const [signals, setSignals] = useState([]);
   const [nba, setNba] = useState([]);
   const [upsell, setUpsell] = useState([]);
@@ -29,7 +30,7 @@ export default function SignalsFeaturePage() {
   const [selectedContinuity, setSelectedContinuity] = useState({});
 
   const load = useCallback(async () => {
-    if (!session?.active_project_id) return;
+    if (!hasProject) return;
     setBusy(true);
     try {
       const [signalsResp, nbaResp, upsellResp, suggestionsResp, continuityResp] = await Promise.all([
@@ -49,13 +50,13 @@ export default function SignalsFeaturePage() {
     } finally {
       setBusy(false);
     }
-  }, [session?.active_project_id]);
+  }, [hasProject]);
 
   useEffect(() => {
-    if (!loading && session?.authenticated && session?.active_project_id) {
+    if (!loading && !loadingProjects && session?.authenticated && hasProject) {
       load();
     }
-  }, [loading, session, load]);
+  }, [loading, loadingProjects, session, hasProject, load]);
 
   const filteredSignals = useMemo(() => {
     if (!query) return signals;
@@ -87,7 +88,7 @@ export default function SignalsFeaturePage() {
 
   async function previewIdentity() {
     try {
-      await apiFetch("/identity/suggestions/preview", { method: "POST", body: JSON.stringify({ limit: 120 }) });
+      await apiFetch("/identity/suggestions/preview", { method: "POST", body: { limit: 120 } });
       setToast({ type: "success", message: "Identity suggestions updated" });
       await load();
     } catch (error) {
@@ -101,7 +102,7 @@ export default function SignalsFeaturePage() {
     try {
       await apiFetch("/identity/suggestions/apply", {
         method: "POST",
-        body: JSON.stringify({ suggestion_ids: ids }),
+        body: { suggestion_ids: ids },
       });
       setSelectedSuggestions({});
       setToast({ type: "success", message: "Identity links applied" });
@@ -125,7 +126,7 @@ export default function SignalsFeaturePage() {
     const ids = Object.keys(selectedContinuity).filter((id) => selectedContinuity[id]);
     if (!ids.length) return;
     try {
-      await apiFetch("/continuity/apply", { method: "POST", body: JSON.stringify({ action_ids: ids }) });
+      await apiFetch("/continuity/apply", { method: "POST", body: { action_ids: ids } });
       setSelectedContinuity({});
       setToast({ type: "success", message: "Continuity actions applied to Linear backlog" });
       await load();
@@ -136,14 +137,14 @@ export default function SignalsFeaturePage() {
 
   async function setNbaStatus(id, status) {
     try {
-      await apiFetch(`/nba/${id}/status`, { method: "POST", body: JSON.stringify({ status }) });
+      await apiFetch(`/nba/${id}/status`, { method: "POST", body: { status } });
       await load();
     } catch (error) {
       setToast({ type: "error", message: error?.message || "Failed to update NBA status" });
     }
   }
 
-  if (loading || !session) {
+  if (loading || !session || loadingProjects) {
     return (
       <PageShell title="Signals + NBA" subtitle="Extraction, deduplication, identity graph and actionable next-best-actions">
         <PageLoadingSkeleton />
@@ -151,22 +152,13 @@ export default function SignalsFeaturePage() {
     );
   }
 
-  if (!session.active_project_id) {
+  if (!hasProject) {
     return (
       <PageShell title="Signals" subtitle="Signals, NBA and identity graph linking">
-        <Card data-motion-item>
-          <CardContent>
-            <EmptyState
-              title="Select active project first"
-              description="Signals stack is project-scoped and needs active project context."
-              actions={
-                <Link href="/projects">
-                  <Button>Go to Projects</Button>
-                </Link>
-              }
-            />
-          </CardContent>
-        </Card>
+        <ProjectScopeRequired
+          title="Сначала выберите активный проект"
+          description="Сигналы и NBA считаются в проектном контексте. Выберите проект и обновите страницу."
+        />
       </PageShell>
     );
   }

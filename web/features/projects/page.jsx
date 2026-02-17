@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useState } from "react";
 
 import { PageShell } from "@/components/page-shell";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -11,60 +11,41 @@ import { Input } from "@/components/ui/input";
 import { Toast } from "@/components/ui/toast";
 import { apiFetch } from "@/lib/api";
 import { useAuthGuard } from "@/hooks/use-auth-guard";
+import { useProjectPortfolio } from "@/hooks/use-project-portfolio";
 
 export default function ProjectsFeaturePage() {
   const { loading, session } = useAuthGuard();
-  const [projects, setProjects] = useState([]);
-  const [activeProjectId, setActiveProjectId] = useState(null);
+  const { projects, activeProjectId, loadingProjects, refreshProjects, activateProject, activatingProjectId } = useProjectPortfolio();
   const [name, setName] = useState("");
   const [toast, setToast] = useState({ type: "info", message: "" });
-  const [busy, setBusy] = useState(false);
-
-  const loadProjects = useCallback(async () => {
-    try {
-      const data = await apiFetch("/projects");
-      setProjects(Array.isArray(data?.projects) ? data.projects : []);
-      setActiveProjectId(data?.active_project_id || null);
-    } catch (error) {
-      setToast({ type: "error", message: error?.message || "Failed to load projects" });
-    }
-  }, []);
-
-  useEffect(() => {
-    if (!loading && session?.authenticated) {
-      loadProjects();
-    }
-  }, [loading, session, loadProjects]);
+  const [creating, setCreating] = useState(false);
+  const busy = creating || Boolean(activatingProjectId);
 
   async function onCreate(event) {
     event.preventDefault();
-    setBusy(true);
+    setCreating(true);
     try {
       await apiFetch("/projects", { method: "POST", body: { name } });
       setName("");
       setToast({ type: "success", message: "Project created" });
-      await loadProjects();
+      await refreshProjects();
     } catch (error) {
       setToast({ type: "error", message: error?.message || "Create failed" });
     } finally {
-      setBusy(false);
+      setCreating(false);
     }
   }
 
   async function onSelect(projectId) {
-    setBusy(true);
     try {
-      await apiFetch(`/projects/${projectId}/select`, { method: "POST" });
-      setActiveProjectId(projectId);
+      await activateProject(projectId);
       setToast({ type: "success", message: "Active project updated" });
     } catch (error) {
       setToast({ type: "error", message: error?.message || "Select failed" });
-    } finally {
-      setBusy(false);
     }
   }
 
-  if (loading || !session) {
+  if (loading || !session || loadingProjects) {
     return (
       <PageShell title="Projects" subtitle="Create and select active project for session">
         <PageLoadingSkeleton />
@@ -123,7 +104,11 @@ export default function ProjectsFeaturePage() {
                         disabled={busy}
                         onClick={() => onSelect(project.id)}
                       >
-                        {activeProjectId === project.id ? "Active" : "Select"}
+                        {activatingProjectId === String(project.id)
+                          ? "Switching..."
+                          : activeProjectId === project.id
+                            ? "Active"
+                            : "Select"}
                       </Button>
                     </TableCell>
                   </TableRow>

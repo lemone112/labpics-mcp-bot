@@ -130,6 +130,104 @@ function parseProjectIdsInput(value, max = 50) {
   return deduped;
 }
 
+function parseProjectIdsFromUrl(rawUrl) {
+  const queryString = String(rawUrl || "").split("?")[1] || "";
+  if (!queryString) return [];
+  const params = new URLSearchParams(queryString);
+  const candidates = [];
+  const directProjectId = String(params.get("project_id") || "").trim();
+  if (directProjectId) candidates.push(directProjectId);
+  for (const projectIdsValue of params.getAll("project_ids")) {
+    const chunkIds = parseProjectIdsInput(projectIdsValue, 100);
+    for (const id of chunkIds) candidates.push(id);
+  }
+  return parseProjectIdsInput(candidates, 100);
+}
+
+async function pickSessionFallbackProject(pool, preferredProjectIds = []) {
+  const preferredIds = parseProjectIdsInput(preferredProjectIds, 100);
+  if (preferredIds.length) {
+    const preferredMatch = await pool.query(
+      `
+        SELECT
+          id::text AS id,
+          account_scope_id::text AS account_scope_id
+        FROM projects
+        WHERE id::text = ANY($1::text[])
+        ORDER BY array_position($1::text[], id::text)
+        LIMIT 1
+      `,
+      [preferredIds]
+    );
+    if (preferredMatch.rows[0]) return preferredMatch.rows[0];
+  }
+
+  const fallback = await pool.query(
+    `
+      SELECT
+        id::text AS id,
+        account_scope_id::text AS account_scope_id
+      FROM projects
+      ORDER BY created_at DESC
+      LIMIT 1
+    `
+  );
+  return fallback.rows[0] || null;
+}
+
+async function hydrateSessionScope(pool, sid, sessionRow, preferredProjectIds = []) {
+  if (!sessionRow) return null;
+  const hasProjectScope = Boolean(sessionRow.active_project_id && sessionRow.account_scope_id);
+  if (hasProjectScope) return sessionRow;
+
+  let resolvedProject = null;
+  const activeProjectId = String(sessionRow.active_project_id || "").trim();
+  if (activeProjectId) {
+    const currentProject = await pool.query(
+      `
+        SELECT
+          id::text AS id,
+          account_scope_id::text AS account_scope_id
+        FROM projects
+        WHERE id::text = $1
+        LIMIT 1
+      `,
+      [activeProjectId]
+    );
+    if (currentProject.rows[0]) {
+      resolvedProject = currentProject.rows[0];
+    }
+  }
+
+  if (!resolvedProject) {
+    resolvedProject = await pickSessionFallbackProject(pool, preferredProjectIds);
+  }
+  if (!resolvedProject) {
+    return {
+      ...sessionRow,
+      active_project_id: null,
+      account_scope_id: null,
+    };
+  }
+
+  if (String(sessionRow.active_project_id || "") !== String(resolvedProject.id || "")) {
+    await pool.query(
+      `
+        UPDATE sessions
+        SET active_project_id = $2
+        WHERE session_id = $1
+      `,
+      [sid, resolvedProject.id]
+    );
+  }
+
+  return {
+    ...sessionRow,
+    active_project_id: resolvedProject.id,
+    account_scope_id: resolvedProject.account_scope_id,
+  };
+}
+
 async function resolvePortfolioAccountScopeId(pool, request, projectIds = []) {
   const fromSession = request.auth?.account_scope_id || null;
   if (fromSession) return fromSession;
@@ -331,7 +429,8 @@ async function main() {
       return sendError(reply, requestId, new ApiError(401, "unauthorized", "Unauthorized"));
     }
 
-    request.auth = rows[0];
+    const preferredProjectIds = parseProjectIdsFromUrl(request.url);
+    request.auth = await hydrateSessionScope(pool, sid, rows[0], preferredProjectIds);
     await pool.query("UPDATE sessions SET last_seen_at = now() WHERE session_id = $1", [sid]);
 
     const isMutating = !["GET", "HEAD", "OPTIONS"].includes(String(request.method || "GET").toUpperCase());
@@ -458,14 +557,17 @@ async function main() {
       return sendOk(reply, request.requestId, { authenticated: false });
     }
 
+    const preferredProjectIds = parseProjectIdsFromUrl(request.url);
+    const hydrated = await hydrateSessionScope(pool, sid, rows[0], preferredProjectIds);
+
     return sendOk(reply, request.requestId, {
       authenticated: true,
-      username: rows[0].username,
-      active_project_id: rows[0].active_project_id,
-      account_scope_id: rows[0].account_scope_id,
+      username: hydrated.username,
+      active_project_id: hydrated.active_project_id,
+      account_scope_id: hydrated.account_scope_id,
       csrf_cookie_name: csrfCookieName,
-      created_at: rows[0].created_at,
-      last_seen_at: rows[0].last_seen_at,
+      created_at: hydrated.created_at,
+      last_seen_at: hydrated.last_seen_at,
     });
   });
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { Layers, Loader2, LogOut } from "lucide-react";
 import { useTheme } from "next-themes";
@@ -12,9 +12,8 @@ import { projectDotClass } from "@/lib/project-colors";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
-export function ProjectSidebarPanel({ open = true, onRequestClose = null }) {
+export function ProjectSidebarPanel({ onRequestClose = null }) {
   const router = useRouter();
-  const [activatingId, setActivatingId] = useState("");
   const {
     projects,
     inPortfolio,
@@ -25,8 +24,11 @@ export function ProjectSidebarPanel({ open = true, onRequestClose = null }) {
     loadingProjects,
     error,
     projectIdSet,
+    activeProjectId,
+    activatingProjectId,
+    activationError,
     selectAllProjects,
-    selectProject,
+    activateProject,
     refreshProjects,
   } = useProjectPortfolio();
   const { theme, setTheme } = useTheme();
@@ -39,16 +41,13 @@ export function ProjectSidebarPanel({ open = true, onRequestClose = null }) {
   async function onSetActiveProject(projectId) {
     const normalized = String(projectId || "").trim();
     if (!normalized || !projectIdSet.has(normalized)) return;
-    setActivatingId(normalized);
     try {
-      await apiFetch(`/projects/${normalized}/select`, { method: "POST" });
-      selectProject(normalized);
-      await refreshProjects();
+      await activateProject(normalized);
       if (typeof onRequestClose === "function") {
         onRequestClose();
       }
-    } finally {
-      setActivatingId("");
+    } catch {
+      // Activation errors are exposed from project context.
     }
   }
 
@@ -69,7 +68,7 @@ export function ProjectSidebarPanel({ open = true, onRequestClose = null }) {
   }
 
   return (
-    <div className={cn("flex h-full flex-col p-3", !open && "pointer-events-none")}>
+    <div className={cn("flex h-full flex-col p-3")}>
         <div className="space-y-2 pb-3">
           <p className="text-sm font-semibold text-sidebar-foreground">Проекты</p>
           <p className="text-xs text-sidebar-foreground/70">Выбор: {isAllProjects ? "Все проекты" : selectedProject?.name || "-"}</p>
@@ -118,19 +117,24 @@ export function ProjectSidebarPanel({ open = true, onRequestClose = null }) {
           ) : null}
 
           {!loadingProjects && error ? <div className="rounded-md border px-3 py-2 text-xs text-destructive">{error}</div> : null}
+          {!loadingProjects && activationError ? (
+            <div className="rounded-md border px-3 py-2 text-xs text-destructive">{activationError}</div>
+          ) : null}
 
           {!loadingProjects &&
             projects.map((project) => {
               const projectId = String(project.id);
               const selected = selectedProjectId === projectId;
-              const activating = activatingId === projectId;
+              const activeInSession = String(activeProjectId || "") === projectId;
+              const activating = activatingProjectId === projectId;
               return (
                 <button
                   key={projectId}
                   type="button"
                   onClick={() => onSetActiveProject(projectId)}
+                  disabled={Boolean(activatingProjectId)}
                   className={cn(
-                    "w-full rounded-md border px-2 py-2 text-left transition-colors",
+                    "w-full rounded-md border px-2 py-2 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-70",
                     selected ? "border-sidebar-primary/60 bg-sidebar-accent/60" : "border-sidebar-border hover:bg-sidebar-accent/40"
                   )}
                 >
@@ -140,6 +144,7 @@ export function ProjectSidebarPanel({ open = true, onRequestClose = null }) {
                       <p className="truncate text-sm text-sidebar-foreground">{project.name}</p>
                       <div className="mt-1 flex items-center gap-2 text-xs text-sidebar-foreground/70">
                         {selected ? <span className="rounded border px-1.5 py-0.5">Выбран</span> : null}
+                        {activeInSession ? <span className="rounded border px-1.5 py-0.5">Активен</span> : null}
                         {activating ? (
                           <span className="inline-flex items-center gap-1">
                             <Loader2 className="size-3 animate-spin" />
@@ -191,7 +196,7 @@ export function ProjectSidebar({ open = true }) {
         open ? "w-[18.5rem] opacity-100" : "w-0 opacity-0"
       )}
     >
-      <ProjectSidebarPanel open={open} />
+      <ProjectSidebarPanel />
     </aside>
   );
 }
