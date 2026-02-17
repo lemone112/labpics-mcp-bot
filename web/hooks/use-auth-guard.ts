@@ -4,14 +4,21 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { getCurrentSession } from "@/lib/api";
+import type { SessionInfo } from "@/lib/types";
 
-export function useAuthGuard() {
+interface AuthGuardState {
+  loading: boolean;
+  session: SessionInfo | null;
+}
+
+export function useAuthGuard(): AuthGuardState {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
-  const [session, setSession] = useState(null);
+  const [session, setSession] = useState<SessionInfo | null>(null);
 
   useEffect(() => {
     let mounted = true;
+
     (async () => {
       try {
         const data = await getCurrentSession();
