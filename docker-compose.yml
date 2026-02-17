@@ -1,0 +1,57 @@
+services:
+  db:
+    image: pgvector/pgvector:pg16
+    container_name: labpics-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: labpics
+      POSTGRES_USER: app
+      POSTGRES_PASSWORD: app
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U app -d labpics"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  server:
+    build:
+      context: ./server
+    container_name: labpics-server
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql://app:app@db:5432/labpics
+      HOST: 0.0.0.0
+      PORT: 8080
+      AUTH_USERNAME: admin
+      AUTH_PASSWORD: admin
+      SESSION_COOKIE_NAME: sid
+      CORS_ORIGIN: http://localhost:3000
+      CHATWOOT_BASE_URL: ${CHATWOOT_BASE_URL:-https://app.chatwoot.com}
+      CHATWOOT_API_TOKEN: ${CHATWOOT_API_TOKEN:-replace-me}
+      CHATWOOT_ACCOUNT_ID: ${CHATWOOT_ACCOUNT_ID:-123}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-replace-me}
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-text-embedding-3-small}
+    ports:
+      - "8080:8080"
+    depends_on:
+      db:
+        condition: service_healthy
+
+  web:
+    build:
+      context: ./web
+    container_name: labpics-web
+    restart: unless-stopped
+    environment:
+      NEXT_PUBLIC_API_BASE_URL: http://localhost:8080
+    ports:
+      - "3000:3000"
+    depends_on:
+      - server
+
+volumes:
+  pgdata:

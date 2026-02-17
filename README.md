@@ -393,3 +393,63 @@ Telegram UI:
 - ✅ `GET /health`
 - ✅ `GET /sync` (Bearer `SYNC_TOKEN`)
 - ✅ `GET /embed` (Bearer `SYNC_TOKEN`)
+
+---
+
+## 15) MVP Web/Server stack (Fastify + Next.js + Postgres/pgvector)
+
+> Ниже — новый MVP-контур для локальной разработки через `docker compose` (без legacy workers).
+
+### 15.1 Что добавлено
+
+- `server/`:
+  - Fastify API c auth/session
+  - SQL migrations (`server/db/migrations/*.sql`)
+  - jobs: Chatwoot sync, embeddings run, status
+  - vector search endpoint `/search`
+- `web/`:
+  - Next.js UI с базовым shadcn-style набором компонентов
+  - страницы `/login`, `/projects`, `/jobs`, `/search`
+- `docker-compose.yml`:
+  - `db` (Postgres + pgvector)
+  - `server`
+  - `web`
+
+### 15.2 Быстрый запуск (локально)
+
+1. Заполните env (минимум):
+   - `OPENAI_API_KEY`
+   - `CHATWOOT_API_TOKEN`
+   - `CHATWOOT_ACCOUNT_ID`
+2. Запустите:
+
+```bash
+docker compose up --build
+```
+
+3. Откройте:
+   - UI: `http://localhost:3000`
+   - API health: `http://localhost:8080/health`
+
+### 15.3 API (MVP)
+
+- `POST /auth/login`
+- `POST /auth/logout`
+- `GET /auth/me`
+- `GET /projects`
+- `POST /projects`
+- `POST /projects/:id/select`
+- `POST /jobs/chatwoot/sync`
+- `POST /jobs/embeddings/run`
+- `GET /jobs/status`
+- `POST /search`
+
+### 15.4 Acceptance checks
+
+1. `POST /jobs/chatwoot/sync` → заполняет `cw_conversations` / `cw_messages`, создает `rag_chunks` со статусом `pending`.
+2. `POST /jobs/embeddings/run` → переводит `pending` в `ready`.
+3. `POST /search` → возвращает релевантные chunks (ORDER BY `embedding <-> query_embedding`).
+4. UI:
+   - логин
+   - запуск Sync / Embeddings
+   - поиск с показом источников (`conversation_global_id`, `message_global_id`).

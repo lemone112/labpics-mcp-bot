@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 
 import Fastify from "fastify";
 import cookie from "@fastify/cookie";
+import cors from "@fastify/cors";
 
 import { createDbPool } from "./lib/db.js";
 import { applyMigrations } from "../db/migrate-lib.js";
@@ -40,6 +41,7 @@ async function main() {
   const host = process.env.HOST || "0.0.0.0";
   const cookieName = process.env.SESSION_COOKIE_NAME || "sid";
   const isProd = (process.env.NODE_ENV || "").toLowerCase() === "production";
+  const corsOrigin = process.env.CORS_ORIGIN || "http://localhost:3000";
 
   const app = Fastify({
     logger: { level: process.env.LOG_LEVEL || "info" },
@@ -48,6 +50,10 @@ async function main() {
   });
 
   await app.register(cookie);
+  await app.register(cors, {
+    origin: corsOrigin,
+    credentials: true,
+  });
 
   const pool = createDbPool(databaseUrl);
   const currentFile = fileURLToPath(import.meta.url);
