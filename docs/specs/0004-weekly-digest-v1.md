@@ -1,33 +1,29 @@
-# Spec 0004 — Weekly digest v1 (DRAFT)
+# Спека 0004 — Weekly digest v1 (DRAFT)
 
-Status: **draft**
+Статус: **draft**
 
-## Goal
+## Цель
 
-Generate a weekly digest per project:
+Собирать еженедельную сводку по проекту, чтобы за 2–3 минуты понять:
 
-- commitments: new/overdue/done
-- risks: new/escalated
-- conversation activity summary
-- next-week suggested actions
+- что произошло
+- что обещано
+- где риски
+- что делать дальше
 
-## Data model
+## Поведение
 
-Table `digests`:
+- Digest строится по периоду (неделя) автоматически и/или по кнопке.
+- Digest сохраняется, чтобы можно было вернуться.
 
-- `id uuid pk default gen_random_uuid()`
-- `project_id uuid not null references projects(id) on delete cascade`
-- `period_start date not null`
-- `period_end date not null`
-- `sections jsonb not null`
-- `rendered_md text not null`
-- `created_at timestamptz not null default now()`
+## Структура (семантически)
 
-## API & UI
+- Commitments: новые / закрытые / просроченные
+- Risks: новые / усиленные
+- Активность переписки (объём, динамика)
+- Рекомендованные действия на следующую неделю
 
-- `POST /jobs/digest/generate` (for active project, for current week or given period)
-- Page `/digest` shows latest and history.
+## Acceptance criteria
 
-## Acceptance
-
-- Digest is reproducible and evidence-backed.
+- Digest относится к проекту и не смешивает контекст.
+- Digest воспроизводим и опирается на evidence.

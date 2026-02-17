@@ -1,47 +1,32 @@
-# Spec 0003 — Risks v1 (DRAFT)
+# Спека 0003 — Risks v1 (DRAFT)
 
-Status: **draft**
+Статус: **draft**
 
-## Goal
+## Цель
 
-Detect and track project risks from conversations and commitments.
+Автоматически выделять и вести **риски проекта**.
 
-## Requirements
+## Семантика
 
-- Evidence-first (must reference `rag_chunks` and/or messages).
-- Mixed model:
-  - flag-like risks from conversation
-  - blocking risks from commitments
-  - probabilistic risks (probability/impact)
+Risk — это прогноз/сигнал, что проект может отклониться (сроки/объём/бюджет/настроение/блокировка).
 
-## Data model
+Ключевое: риск должен быть **обоснован** (evidence-first), а не «галлюцинацией».
 
-Add table `risks`:
+## Поведение
 
-- `id uuid pk default gen_random_uuid()`
-- `project_id uuid not null references projects(id) on delete cascade`
-- `type text not null` (`scope|timeline|budget|sentiment|blocking|unknown`)
-- `severity int not null` (1..5)
-- `probability real not null` (0..1)
-- `impact int not null` (1..5)
-- `summary text not null`
-- `status text not null` (`open|mitigated|accepted`)
-- `related_commitment_id uuid null references commitments(id) on delete set null`
-- `evidence_chunk_id uuid null references rag_chunks(id) on delete set null`
-- `message_global_id text null`
-- `conversation_global_id text null`
-- `next_action text null`
-- `owner text null`
-- `meta jsonb not null default '{}'::jsonb`
-- `created_at timestamptz not null default now()`
-- `updated_at timestamptz not null default now()`
+- Система извлекает риски из переписки и связки с commitments.
+- Риски имеют приоритет/серьёзность и следующий шаг.
+- Риски живут внутри проекта.
 
-## API & UI
+## UX
 
-- `POST /jobs/risks/extract`
-- Page `/risks` with evidence drill-down.
+- В проекте есть вкладка Risks.
+- Риск можно:
+  - принять
+  - смягчить
+  - назначить следующий шаг
 
-## Acceptance
+## Acceptance criteria
 
-- Risks list shows only project-scoped risks.
-- Every risk has evidence.
+- Каждый риск содержит доказательство.
+- Риски строго изолированы по проектам.

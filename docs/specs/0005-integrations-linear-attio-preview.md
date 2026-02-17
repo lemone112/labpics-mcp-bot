@@ -1,40 +1,23 @@
-# Spec 0005 — Integrations: Linear & Attio preview/apply (DRAFT)
+# Спека 0005 — Интеграции Linear/Attio: preview/apply (DRAFT)
 
-Status: **draft**
+Статус: **draft**
 
-## Goal
+## Цель
 
-Provide safe integrations where the agent can propose changes, but a human approves them.
+Дать интеграции, которые помогают действовать, но не ломают данные.
 
-## Requirements
+## Принцип
 
-- **Attio**: preview/approve only.
-- **Linear**: allow limited auto-create only for high-confidence commitments, otherwise preview.
-- Idempotency keys for creating issues/patches.
-- Audit log of every proposal and applied action.
+- **Attio (CRM)**: только preview → approve → apply.
+- **Linear (PM)**: допускается авто-создание только в узком, безопасном случае; в остальном preview.
 
-## Data model
+## Поведение
 
-Table `integration_actions`:
+- Система формирует предложения действий (создать задачу, обновить поле, добавить комментарий).
+- Пользователь видит предложения и подтверждает.
+- Все действия логируются (аудит).
 
-- `id uuid pk`
-- `project_id uuid not null`
-- `tool text not null` (`linear|attio`)
-- `kind text not null` (`create_issue|update_company|...`)
-- `status text not null` (`proposed|approved|applied|failed|rejected`)
-- `proposal jsonb not null`
-- `result jsonb null`
-- `idempotency_key text not null unique`
-- `created_at`, `updated_at`
+## Acceptance criteria
 
-## UI
-
-- Page `/integrations` with:
-  - list of proposals
-  - approve/apply buttons
-  - error details
-
-## Acceptance
-
-- No automatic CRM patching.
-- Every applied action has an audit record.
+- CRM никогда не обновляется автоматически.
+- Любое применённое действие имеет журнал: что предлагали, кто подтвердил, что применили.

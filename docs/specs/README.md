@@ -1,40 +1,33 @@
-# Specs (Cursor-ready)
+# Спеки (ТЗ для Cursor)
 
-This folder contains **implementation-ready technical specifications**.
+Эта папка — **семантическое ТЗ**: мы описываем *что должно работать и как это ощущается/ведёт себя*, а не конкретные запросы/файлы/компоненты.
 
-## How Cursor should work with these specs
+## Как Cursor должен работать со спеками
 
-Rules:
+Правила:
 
-1. **One spec = one PR** (unless explicitly stated).
-2. Every spec must be implemented **end-to-end**: DB migration → server endpoints → web UI → docs updates.
-3. Follow **evidence-first**: any derived entity must reference raw/source rows.
-4. Prefer **idempotency** and safe retries.
-5. If a spec requires a schema change, add a migration file under `server/db/migrations/`.
-6. If the spec changes API behavior, update `docs/api.md`.
+1. **Одна спека = один PR** (если не оговорено иначе).
+2. Делать **end-to-end**: модель данных → серверная логика → UI → обновление документации.
+3. Следовать принципу **evidence-first**: любая «ценная сущность» должна ссылаться на первоисточник.
+4. Делать решения **безопасными по умолчанию** (если не уверены — не смешиваем/не публикуем/не применяем).
+5. Делать процессы **идемпотентными** и терпимыми к повторам.
 
-## Spec lifecycle
+## Жизненный цикл спеки
 
 - `draft` → `ready` → `done`
-- Cursor should only implement specs marked **ready**.
+- Cursor реализует только спеки со статусом **ready**.
 
-## Conventions
+## Термины (смысловые)
 
-- Migrations: `server/db/migrations/000X_<name>.sql`
-- IDs:
-  - Conversations: `cw:<account_id>:<conversation_id>`
-  - Messages: `cwmsg:<account_id>:<message_id>`
+- **Проект** — рабочая единица студии, внутри которой всё должно быть изолировано.
+- **Источник** — внешняя система (Chatwoot, Linear, Attio).
+- **Evidence / доказательство** — ссылка(и) на конкретный первоисточник (сообщение, фрагмент, id), позволяющая воспроизвести вывод.
+- **Preview/Approve** — режим, где система предлагает изменения, но человек подтверждает применение.
 
-## Current platform snapshot (Web-first MVP)
+## Индекс
 
-- DB tables exist: `projects`, `sessions`, `cw_conversations`, `cw_messages`, `rag_chunks`, `sync_watermarks`, `job_runs`.
-- API exists in `server/src/index.js`.
-- UI exists in `web/app/*`.
-
-## Specs index
-
-- [0001 — Multi-project RAG scoping](./0001-multiproject-rag-scope.md)
+- [0001 — Мультипроектная изоляция памяти (RAG)](./0001-multiproject-rag-scope.md)
 - [0002 — Commitments v1](./0002-commitments-v1.md)
 - [0003 — Risks v1](./0003-risks-v1.md)
 - [0004 — Weekly digest v1](./0004-weekly-digest-v1.md)
-- [0005 — Integrations (Linear/Attio) preview/apply](./0005-integrations-linear-attio-preview.md)
+- [0005 — Интеграции Linear/Attio: preview/apply](./0005-integrations-linear-attio-preview.md)
