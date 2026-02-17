@@ -1,13 +1,11 @@
 import { processDueOutbounds } from "./outbox.js";
-import { runChatwootSync } from "./chatwoot.js";
 import { runEmbeddings } from "./embeddings.js";
-import { runAttioSync } from "./attio.js";
-import { runLinearSync } from "./linear.js";
 import { extractSignalsAndNba } from "./signals.js";
 import { refreshUpsellRadar } from "./upsell.js";
 import { generateDailyDigest, generateWeeklyDigest, refreshAnalytics, refreshRiskAndHealth } from "./intelligence.js";
 import { syncLoopsContacts } from "./loops.js";
 import { runKagRecommendationRefresh } from "./kag.js";
+import { runConnectorSync } from "./connector-sync.js";
 
 function toPositiveInt(value, fallback, min = 1, max = 2_592_000) {
   const parsed = Number.parseInt(String(value ?? ""), 10);
@@ -21,9 +19,9 @@ function truncateError(error, max = 1000) {
 
 function createHandlers(customHandlers = {}) {
   return {
-    chatwoot_sync: async ({ pool, scope, logger }) => runChatwootSync(pool, scope, logger),
-    attio_sync: async ({ pool, scope, logger }) => runAttioSync(pool, scope, logger),
-    linear_sync: async ({ pool, scope, logger }) => runLinearSync(pool, scope, logger),
+    chatwoot_sync: async ({ pool, scope, logger }) => runConnectorSync(pool, scope, "chatwoot", logger),
+    attio_sync: async ({ pool, scope, logger }) => runConnectorSync(pool, scope, "attio", logger),
+    linear_sync: async ({ pool, scope, logger }) => runConnectorSync(pool, scope, "linear", logger),
     embeddings_run: async ({ pool, scope, logger }) => runEmbeddings(pool, scope, logger),
     signals_extraction: async ({ pool, scope }) => extractSignalsAndNba(pool, scope),
     health_scoring: async ({ pool, scope }) => refreshRiskAndHealth(pool, scope),

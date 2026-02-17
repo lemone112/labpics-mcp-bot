@@ -115,6 +115,46 @@ function normalizeOpportunity(row, workspaceId) {
   };
 }
 
+function normalizePerson(row, workspaceId) {
+  const record = row?.record || row?.data || row || {};
+  const externalId = asText(record?.id || record?.record_id || record?.person_id || row?.id, 200);
+  if (!externalId) return null;
+  const values = record?.values || record?.attributes || {};
+  return {
+    id: `attioperson:${workspaceId}:${externalId}`,
+    workspace_id: workspaceId,
+    external_id: externalId,
+    account_external_id: asText(values?.company_id || values?.account_id || record?.company_id || row?.company_id, 200),
+    full_name: asText(values?.name || record?.name || row?.name, 300),
+    email: asText(values?.email || record?.email || row?.email, 320),
+    role: asText(values?.role || record?.role || row?.role, 200),
+    data: record,
+    updated_at: toIsoTime(record?.updated_at || row?.updated_at || record?.created_at || row?.created_at),
+  };
+}
+
+function normalizeActivity(row, workspaceId) {
+  const record = row?.record || row?.data || row || {};
+  const externalId = asText(record?.id || record?.record_id || record?.activity_id || row?.id, 220);
+  if (!externalId) return null;
+  const values = record?.values || record?.attributes || {};
+  return {
+    id: `attioact:${workspaceId}:${externalId}`,
+    workspace_id: workspaceId,
+    external_id: externalId,
+    record_external_id: asText(
+      values?.record_id || values?.deal_id || values?.company_id || record?.record_id || row?.record_id,
+      220
+    ),
+    activity_type: asText(values?.type || record?.type || row?.type, 120),
+    note: asText(values?.note || record?.note || row?.note, 4000),
+    actor_name: asText(values?.actor_name || record?.actor_name || row?.actor_name, 250),
+    occurred_at: toIsoTime(values?.occurred_at || record?.occurred_at || row?.occurred_at || row?.created_at),
+    data: record,
+    updated_at: toIsoTime(record?.updated_at || row?.updated_at || record?.created_at || row?.created_at),
+  };
+}
+
 async function attioGet(baseUrl, token, endpoint, logger) {
   const response = await fetchWithRetry(`${baseUrl}${endpoint}`, {
     method: "GET",
@@ -177,7 +217,31 @@ async function loadMockSnapshot(pool, scope, workspaceId) {
     updated_at: new Date(Date.now() - idx * 3600000).toISOString(),
   }));
 
-  return { companies, opportunities, mode: "mock" };
+  const people = companies.slice(0, 12).map((company, idx) => ({
+    id: `attioperson:${workspaceId}:mock-${idx + 1}`,
+    workspace_id: workspaceId,
+    external_id: `mock-${idx + 1}`,
+    account_external_id: company.external_id,
+    full_name: `Contact ${idx + 1}`,
+    email: `contact${idx + 1}@${company.domain || "example.com"}`,
+    role: idx % 2 === 0 ? "buyer" : "influencer",
+    data: { source: "mock", company: company.external_id },
+    updated_at: new Date(Date.now() - idx * 1800000).toISOString(),
+  }));
+  const activities = opportunities.slice(0, 10).map((deal, idx) => ({
+    id: `attioact:${workspaceId}:mock-${idx + 1}`,
+    workspace_id: workspaceId,
+    external_id: `mock-${idx + 1}`,
+    record_external_id: deal.external_id,
+    activity_type: idx % 3 === 0 ? "note" : idx % 3 === 1 ? "invoice_sent" : "invoice_paid",
+    note: idx % 3 === 0 ? "Client asked for expanded scope details" : null,
+    actor_name: "Mock SDR",
+    occurred_at: new Date(Date.now() - idx * 7200000).toISOString(),
+    data: { source: "mock", deal: deal.external_id },
+    updated_at: new Date(Date.now() - idx * 7200000).toISOString(),
+  }));
+
+  return { companies, opportunities, people, activities, mode: "mock" };
 }
 
 async function loadAttioSnapshot(pool, scope, config, logger) {
@@ -198,6 +262,28 @@ async function loadAttioSnapshot(pool, scope, config, logger) {
     `/v2/objects/deals/records?limit=${config.limit}`,
     logger
   );
+  let peoplePayload = { data: [] };
+  let activitiesPayload = { data: [] };
+  try {
+    peoplePayload = await attioGet(
+      config.baseUrl,
+      config.apiToken,
+      `/v2/objects/people/records?limit=${config.limit}`,
+      logger
+    );
+  } catch (error) {
+    logger.warn({ err: String(error?.message || error) }, "attio people endpoint unavailable, continuing");
+  }
+  try {
+    activitiesPayload = await attioGet(
+      config.baseUrl,
+      config.apiToken,
+      `/v2/activities?limit=${config.limit}`,
+      logger
+    );
+  } catch (error) {
+    logger.warn({ err: String(error?.message || error) }, "attio activities endpoint unavailable, continuing");
+  }
 
   const companies = pickArray(companiesPayload)
     .map((row) => normalizeCompany(row, config.workspaceId))
@@ -205,10 +291,18 @@ async function loadAttioSnapshot(pool, scope, config, logger) {
   const opportunities = pickArray(opportunitiesPayload)
     .map((row) => normalizeOpportunity(row, config.workspaceId))
     .filter(Boolean);
+  const people = pickArray(peoplePayload)
+    .map((row) => normalizePerson(row, config.workspaceId))
+    .filter(Boolean);
+  const activities = pickArray(activitiesPayload)
+    .map((row) => normalizeActivity(row, config.workspaceId))
+    .filter(Boolean);
 
   return {
     companies,
     opportunities,
+    people,
+    activities,
     mode: "api",
   };
 }
@@ -370,6 +464,153 @@ async function upsertOpportunities(pool, scope, rows) {
   return result.rowCount || 0;
 }
 
+async function upsertPeople(pool, scope, rows) {
+  if (!rows.length) return 0;
+  const payload = rows.map((row) => ({
+    ...row,
+    project_id: scope.projectId,
+    account_scope_id: scope.accountScopeId,
+  }));
+  const result = await pool.query(
+    `
+      INSERT INTO attio_people_raw(
+        id,
+        project_id,
+        account_scope_id,
+        workspace_id,
+        external_id,
+        account_external_id,
+        full_name,
+        email,
+        role,
+        data,
+        updated_at
+      )
+      SELECT
+        x.id,
+        x.project_id,
+        x.account_scope_id,
+        x.workspace_id,
+        x.external_id,
+        x.account_external_id,
+        x.full_name,
+        x.email,
+        x.role,
+        x.data,
+        x.updated_at
+      FROM jsonb_to_recordset($1::jsonb) AS x(
+        id text,
+        project_id uuid,
+        account_scope_id uuid,
+        workspace_id text,
+        external_id text,
+        account_external_id text,
+        full_name text,
+        email text,
+        role text,
+        data jsonb,
+        updated_at timestamptz
+      )
+      ON CONFLICT (id)
+      DO UPDATE SET
+        project_id = EXCLUDED.project_id,
+        account_scope_id = EXCLUDED.account_scope_id,
+        workspace_id = EXCLUDED.workspace_id,
+        external_id = EXCLUDED.external_id,
+        account_external_id = EXCLUDED.account_external_id,
+        full_name = EXCLUDED.full_name,
+        email = EXCLUDED.email,
+        role = EXCLUDED.role,
+        data = EXCLUDED.data,
+        updated_at = EXCLUDED.updated_at
+      WHERE
+        attio_people_raw.data IS DISTINCT FROM EXCLUDED.data
+        OR attio_people_raw.updated_at IS DISTINCT FROM EXCLUDED.updated_at
+        OR attio_people_raw.full_name IS DISTINCT FROM EXCLUDED.full_name
+        OR attio_people_raw.email IS DISTINCT FROM EXCLUDED.email
+        OR attio_people_raw.role IS DISTINCT FROM EXCLUDED.role
+    `,
+    [JSON.stringify(payload)]
+  );
+  return result.rowCount || 0;
+}
+
+async function upsertActivities(pool, scope, rows) {
+  if (!rows.length) return 0;
+  const payload = rows.map((row) => ({
+    ...row,
+    project_id: scope.projectId,
+    account_scope_id: scope.accountScopeId,
+  }));
+  const result = await pool.query(
+    `
+      INSERT INTO attio_activities_raw(
+        id,
+        project_id,
+        account_scope_id,
+        workspace_id,
+        external_id,
+        record_external_id,
+        activity_type,
+        note,
+        actor_name,
+        occurred_at,
+        data,
+        updated_at
+      )
+      SELECT
+        x.id,
+        x.project_id,
+        x.account_scope_id,
+        x.workspace_id,
+        x.external_id,
+        x.record_external_id,
+        x.activity_type,
+        x.note,
+        x.actor_name,
+        x.occurred_at,
+        x.data,
+        x.updated_at
+      FROM jsonb_to_recordset($1::jsonb) AS x(
+        id text,
+        project_id uuid,
+        account_scope_id uuid,
+        workspace_id text,
+        external_id text,
+        record_external_id text,
+        activity_type text,
+        note text,
+        actor_name text,
+        occurred_at timestamptz,
+        data jsonb,
+        updated_at timestamptz
+      )
+      ON CONFLICT (id)
+      DO UPDATE SET
+        project_id = EXCLUDED.project_id,
+        account_scope_id = EXCLUDED.account_scope_id,
+        workspace_id = EXCLUDED.workspace_id,
+        external_id = EXCLUDED.external_id,
+        record_external_id = EXCLUDED.record_external_id,
+        activity_type = EXCLUDED.activity_type,
+        note = EXCLUDED.note,
+        actor_name = EXCLUDED.actor_name,
+        occurred_at = EXCLUDED.occurred_at,
+        data = EXCLUDED.data,
+        updated_at = EXCLUDED.updated_at
+      WHERE
+        attio_activities_raw.data IS DISTINCT FROM EXCLUDED.data
+        OR attio_activities_raw.updated_at IS DISTINCT FROM EXCLUDED.updated_at
+        OR attio_activities_raw.activity_type IS DISTINCT FROM EXCLUDED.activity_type
+        OR attio_activities_raw.note IS DISTINCT FROM EXCLUDED.note
+        OR attio_activities_raw.actor_name IS DISTINCT FROM EXCLUDED.actor_name
+        OR attio_activities_raw.occurred_at IS DISTINCT FROM EXCLUDED.occurred_at
+    `,
+    [JSON.stringify(payload)]
+  );
+  return result.rowCount || 0;
+}
+
 async function mirrorToCrmTables(pool, scope) {
   await pool.query(
     `
@@ -482,13 +723,22 @@ export async function runAttioSync(pool, scope, logger = console) {
 
   const touchedAccounts = await upsertCompanies(pool, scope, snapshot.companies);
   const touchedOpportunities = await upsertOpportunities(pool, scope, snapshot.opportunities);
+  const touchedPeople = await upsertPeople(pool, scope, snapshot.people || []);
+  const touchedActivities = await upsertActivities(pool, scope, snapshot.activities || []);
   await mirrorToCrmTables(pool, scope);
 
-  const cursor = computeCursor([...snapshot.companies, ...snapshot.opportunities]);
+  const cursor = computeCursor([
+    ...snapshot.companies,
+    ...snapshot.opportunities,
+    ...(snapshot.people || []),
+    ...(snapshot.activities || []),
+  ]);
   await upsertWatermark(pool, scope, source, cursor.cursorTs, cursor.cursorId, {
     mode: snapshot.mode,
     touched_accounts: touchedAccounts,
     touched_opportunities: touchedOpportunities,
+    touched_people: touchedPeople,
+    touched_activities: touchedActivities,
     previous_cursor_ts: previousWatermark?.cursor_ts || null,
     synced_at: new Date().toISOString(),
   });
@@ -500,6 +750,8 @@ export async function runAttioSync(pool, scope, logger = console) {
     project_id: scope.projectId,
     touched_accounts: touchedAccounts,
     touched_opportunities: touchedOpportunities,
+    touched_people: touchedPeople,
+    touched_activities: touchedActivities,
     cursor_ts: cursor.cursorTs,
     cursor_id: cursor.cursorId,
   };

@@ -11,14 +11,12 @@ import { createDbPool } from "./lib/db.js";
 import { ApiError, fail, parseLimit, sendError, sendOk, toApiError } from "./lib/api-contract.js";
 import { requireProjectScope } from "./lib/scope.js";
 import { applyMigrations } from "../db/migrate-lib.js";
-import { runChatwootSync } from "./services/chatwoot.js";
 import { runEmbeddings, searchChunks } from "./services/embeddings.js";
 import { finishJob, getJobsStatus, startJob } from "./services/jobs.js";
 import { listAuditEvents, normalizeEvidenceRefs, writeAuditEvent } from "./services/audit.js";
 import { approveOutbound, createOutboundDraft, listOutbound, processDueOutbounds, sendOutbound, setOptOut } from "./services/outbox.js";
 import { listScheduledJobs, runSchedulerTick } from "./services/scheduler.js";
-import { runAttioSync } from "./services/attio.js";
-import { runLinearSync } from "./services/linear.js";
+import { listConnectorErrors, listConnectorSyncState, runAllConnectorsSync, runConnectorSync } from "./services/connector-sync.js";
 import { applyIdentitySuggestions, listIdentityLinks, listIdentitySuggestions, previewIdentitySuggestions } from "./services/identity-graph.js";
 import { extractSignalsAndNba, getTopNba, listNba, listSignals, updateNbaStatus, updateSignalStatus } from "./services/signals.js";
 import { listUpsellRadar, refreshUpsellRadar, updateUpsellStatus } from "./services/upsell.js";
@@ -26,6 +24,7 @@ import { applyContinuityActions, buildContinuityPreview, listContinuityActions }
 import { getPortfolioMessages, getPortfolioOverview } from "./services/portfolio.js";
 import { syncLoopsContacts } from "./services/loops.js";
 import { listKagRecommendations, listKagScores, listKagSignals, runKagRecommendationRefresh } from "./services/kag.js";
+import { listProjectEvents } from "./services/event-log.js";
 import {
   generateDailyDigest,
   generateWeeklyDigest,
@@ -633,7 +632,8 @@ async function main() {
     const scope = requireProjectScope(request);
     const job = await startJob(pool, "chatwoot_sync", scope);
     try {
-      const result = await runChatwootSync(pool, scope, request.log);
+      const sync = await runConnectorSync(pool, scope, "chatwoot", request.log);
+      const result = sync.result;
       await finishJob(pool, job.id, {
         status: "ok",
         processedCount: result.processed_messages,
@@ -726,7 +726,8 @@ async function main() {
     const scope = requireProjectScope(request);
     const job = await startJob(pool, "attio_sync", scope);
     try {
-      const result = await runAttioSync(pool, scope, request.log);
+      const sync = await runConnectorSync(pool, scope, "attio", request.log);
+      const result = sync.result;
       await finishJob(pool, job.id, {
         status: "ok",
         processedCount: Number(result.touched_accounts || 0) + Number(result.touched_opportunities || 0),
@@ -775,7 +776,8 @@ async function main() {
     const scope = requireProjectScope(request);
     const job = await startJob(pool, "linear_sync", scope);
     try {
-      const result = await runLinearSync(pool, scope, request.log);
+      const sync = await runConnectorSync(pool, scope, "linear", request.log);
+      const result = sync.result;
       await finishJob(pool, job.id, {
         status: "ok",
         processedCount: Number(result.touched_projects || 0) + Number(result.touched_issues || 0),
@@ -824,6 +826,63 @@ async function main() {
     const scope = requireProjectScope(request);
     const status = await getJobsStatus(pool, scope);
     return sendOk(reply, request.requestId, status);
+  });
+
+  registerGet("/connectors/state", async (request, reply) => {
+    const scope = requireProjectScope(request);
+    const connectors = await listConnectorSyncState(pool, scope);
+    return sendOk(reply, request.requestId, { connectors });
+  });
+
+  registerGet("/connectors/errors", async (request, reply) => {
+    const scope = requireProjectScope(request);
+    const errors = await listConnectorErrors(pool, scope, {
+      status: request.query?.status,
+      limit: request.query?.limit,
+    });
+    return sendOk(reply, request.requestId, { errors });
+  });
+
+  registerPost("/connectors/sync", async (request, reply) => {
+    const scope = requireProjectScope(request);
+    const result = await runAllConnectorsSync(pool, scope, request.log);
+    await writeAuditEvent(pool, {
+      projectId: scope.projectId,
+      accountScopeId: scope.accountScopeId,
+      actorUsername: request.auth?.username || null,
+      action: "connectors.sync_all",
+      entityType: "connector",
+      entityId: scope.projectId,
+      status: result.failed > 0 ? "partial" : "ok",
+      requestId: request.requestId,
+      payload: result,
+      evidenceRefs: [],
+    });
+    return sendOk(reply, request.requestId, { result });
+  });
+
+  registerPost("/connectors/:name/sync", async (request, reply) => {
+    const scope = requireProjectScope(request);
+    const connectorName = String(request.params?.name || "").trim().toLowerCase();
+    try {
+      const result = await runConnectorSync(pool, scope, connectorName, request.log);
+      await writeAuditEvent(pool, {
+        projectId: scope.projectId,
+        accountScopeId: scope.accountScopeId,
+        actorUsername: request.auth?.username || null,
+        action: "connectors.sync_one",
+        entityType: "connector",
+        entityId: connectorName,
+        status: "ok",
+        requestId: request.requestId,
+        payload: result,
+        evidenceRefs: [],
+      });
+      return sendOk(reply, request.requestId, { result });
+    } catch (error) {
+      const message = String(error?.message || error || "connector_sync_failed");
+      return sendError(reply, request.requestId, new ApiError(500, "connector_sync_failed", message));
+    }
   });
 
   registerGet("/jobs/scheduler", async (request, reply) => {
@@ -1083,6 +1142,16 @@ async function main() {
       limit: request.query?.limit,
     });
     return sendOk(reply, request.requestId, { recommendations: rows });
+  });
+
+  registerGet("/kag/events", async (request, reply) => {
+    const scope = requireProjectScope(request);
+    const rows = await listProjectEvents(pool, scope, {
+      type: request.query?.type,
+      source: request.query?.source,
+      limit: request.query?.limit,
+    });
+    return sendOk(reply, request.requestId, { events: rows });
   });
 
   registerPost("/upsell/radar/refresh", async (request, reply) => {

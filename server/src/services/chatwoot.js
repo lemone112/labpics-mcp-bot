@@ -58,6 +58,13 @@ function readMessages(payload) {
   return [];
 }
 
+function readInboxes(payload) {
+  if (Array.isArray(payload?.payload)) return payload.payload;
+  if (Array.isArray(payload?.data?.payload)) return payload.data.payload;
+  if (Array.isArray(payload?.data)) return payload.data;
+  return [];
+}
+
 function getCursorMessageNumericId(cursorId) {
   const parts = String(cursorId || "").split(":");
   const tail = Number(parts[parts.length - 1]);
@@ -187,6 +194,11 @@ async function listConversations(baseUrl, token, accountId, maxConversations, lo
   }
 
   return out.slice(0, maxConversations);
+}
+
+async function listInboxes(baseUrl, token, accountId, logger) {
+  const payload = await chatwootGet(baseUrl, token, `/api/v1/accounts/${accountId}/inboxes`, logger);
+  return readInboxes(payload);
 }
 
 async function getWatermark(pool, scope, source) {
@@ -471,6 +483,163 @@ async function upsertContactsBatch(pool, scope, contacts) {
   return rowCount || 0;
 }
 
+async function upsertInboxesBatch(pool, scope, rows) {
+  if (!rows.length) return 0;
+  const payload = rows.map((row) => ({
+    id: row.id,
+    project_id: scope.projectId,
+    account_scope_id: scope.accountScopeId,
+    account_id: row.account_id,
+    inbox_id: row.inbox_id,
+    name: row.name,
+    channel_type: row.channel_type,
+    data: row.data || {},
+    updated_at: row.updated_at || null,
+  }));
+
+  const { rowCount } = await pool.query(
+    `
+      INSERT INTO cw_inboxes_raw(
+        id,
+        project_id,
+        account_scope_id,
+        account_id,
+        inbox_id,
+        name,
+        channel_type,
+        data,
+        updated_at
+      )
+      SELECT
+        x.id,
+        x.project_id,
+        x.account_scope_id,
+        x.account_id,
+        x.inbox_id,
+        x.name,
+        x.channel_type,
+        x.data,
+        x.updated_at
+      FROM jsonb_to_recordset($1::jsonb) AS x(
+        id text,
+        project_id uuid,
+        account_scope_id uuid,
+        account_id bigint,
+        inbox_id bigint,
+        name text,
+        channel_type text,
+        data jsonb,
+        updated_at timestamptz
+      )
+      ON CONFLICT (id)
+      DO UPDATE SET
+        project_id = EXCLUDED.project_id,
+        account_scope_id = EXCLUDED.account_scope_id,
+        account_id = EXCLUDED.account_id,
+        inbox_id = EXCLUDED.inbox_id,
+        name = EXCLUDED.name,
+        channel_type = EXCLUDED.channel_type,
+        data = EXCLUDED.data,
+        updated_at = EXCLUDED.updated_at
+      WHERE
+        cw_inboxes_raw.data IS DISTINCT FROM EXCLUDED.data
+        OR cw_inboxes_raw.updated_at IS DISTINCT FROM EXCLUDED.updated_at
+        OR cw_inboxes_raw.name IS DISTINCT FROM EXCLUDED.name
+        OR cw_inboxes_raw.channel_type IS DISTINCT FROM EXCLUDED.channel_type
+    `,
+    [JSON.stringify(payload)]
+  );
+
+  return rowCount || 0;
+}
+
+async function upsertAttachmentsBatch(pool, scope, rows) {
+  if (!rows.length) return 0;
+  const payload = rows.map((row) => ({
+    id: row.id,
+    project_id: scope.projectId,
+    account_scope_id: scope.accountScopeId,
+    account_id: row.account_id,
+    message_global_id: row.message_global_id,
+    conversation_global_id: row.conversation_global_id,
+    content_type: row.content_type,
+    file_size: row.file_size,
+    file_url: row.file_url,
+    thumb_url: row.thumb_url,
+    payload: row.payload || {},
+    updated_at: row.updated_at || null,
+  }));
+
+  const { rowCount } = await pool.query(
+    `
+      INSERT INTO cw_attachments_raw(
+        id,
+        project_id,
+        account_scope_id,
+        account_id,
+        message_global_id,
+        conversation_global_id,
+        content_type,
+        file_size,
+        file_url,
+        thumb_url,
+        payload,
+        updated_at
+      )
+      SELECT
+        x.id,
+        x.project_id,
+        x.account_scope_id,
+        x.account_id,
+        x.message_global_id,
+        x.conversation_global_id,
+        x.content_type,
+        x.file_size,
+        x.file_url,
+        x.thumb_url,
+        x.payload,
+        x.updated_at
+      FROM jsonb_to_recordset($1::jsonb) AS x(
+        id text,
+        project_id uuid,
+        account_scope_id uuid,
+        account_id bigint,
+        message_global_id text,
+        conversation_global_id text,
+        content_type text,
+        file_size bigint,
+        file_url text,
+        thumb_url text,
+        payload jsonb,
+        updated_at timestamptz
+      )
+      ON CONFLICT (id)
+      DO UPDATE SET
+        project_id = EXCLUDED.project_id,
+        account_scope_id = EXCLUDED.account_scope_id,
+        account_id = EXCLUDED.account_id,
+        message_global_id = EXCLUDED.message_global_id,
+        conversation_global_id = EXCLUDED.conversation_global_id,
+        content_type = EXCLUDED.content_type,
+        file_size = EXCLUDED.file_size,
+        file_url = EXCLUDED.file_url,
+        thumb_url = EXCLUDED.thumb_url,
+        payload = EXCLUDED.payload,
+        updated_at = EXCLUDED.updated_at
+      WHERE
+        cw_attachments_raw.payload IS DISTINCT FROM EXCLUDED.payload
+        OR cw_attachments_raw.updated_at IS DISTINCT FROM EXCLUDED.updated_at
+        OR cw_attachments_raw.content_type IS DISTINCT FROM EXCLUDED.content_type
+        OR cw_attachments_raw.file_size IS DISTINCT FROM EXCLUDED.file_size
+        OR cw_attachments_raw.file_url IS DISTINCT FROM EXCLUDED.file_url
+        OR cw_attachments_raw.thumb_url IS DISTINCT FROM EXCLUDED.thumb_url
+    `,
+    [JSON.stringify(payload)]
+  );
+
+  return rowCount || 0;
+}
+
 async function insertChunkRows(pool, scope, chunkRows) {
   if (!chunkRows.length) return { inserted: 0, reset_pending: 0 };
 
@@ -675,8 +844,29 @@ export async function runChatwootSync(pool, scope, logger = console) {
   let processedMessages = 0;
   let insertedChunks = 0;
   let reembeddedChunks = 0;
+  let touchedInboxes = 0;
+  let touchedAttachments = 0;
   let newestTs = toIsoTime(previousWatermark?.cursor_ts) || since;
   let newestMsgId = previousWatermark?.cursor_id || null;
+
+  const inboxRows = [];
+  const inboxes = await listInboxes(baseUrl, apiToken, accountId, logger);
+  for (const inbox of inboxes) {
+    const inboxId = toBigIntOrNull(inbox?.id);
+    if (!Number.isFinite(inboxId)) continue;
+    inboxRows.push({
+      id: `cwinbox:${scope.projectId}:${accountId}:${inboxId}`,
+      account_id: Number(accountId),
+      inbox_id: inboxId,
+      name: asTextOrNull(inbox?.name, 300),
+      channel_type: asTextOrNull(inbox?.channel_type || inbox?.channel, 100),
+      data: inbox,
+      updated_at: toIsoTime(inbox?.updated_at || inbox?.created_at),
+    });
+  }
+  if (inboxRows.length) {
+    touchedInboxes = await upsertInboxesBatch(pool, scope, inboxRows);
+  }
 
   const contactsById = new Map();
 
@@ -711,6 +901,7 @@ export async function runChatwootSync(pool, scope, logger = console) {
     const messages = readMessages(msgPayload).slice(-maxMessagesPerConversation);
     const messageRows = [];
     const pendingChunkRows = [];
+    const attachmentRows = [];
 
     for (const message of messages) {
       const messageId = toBigIntOrNull(message?.id);
@@ -758,6 +949,28 @@ export async function runChatwootSync(pool, scope, logger = console) {
         );
       }
 
+      const attachments = Array.isArray(message?.attachments) ? message.attachments : [];
+      for (let idx = 0; idx < attachments.length; idx++) {
+        const attachment = attachments[idx];
+        const attachmentId = asTextOrNull(attachment?.id || attachment?.file_id || `${messageId}:${idx}`, 200);
+        if (!attachmentId) continue;
+        attachmentRows.push({
+          id: `cwa:${scope.projectId}:${accountId}:${attachmentId}`,
+          account_id: Number(accountId),
+          message_global_id: msgGlobalId,
+          conversation_global_id: convoGlobalId,
+          content_type: asTextOrNull(attachment?.file_type || attachment?.content_type || attachment?.type, 120),
+          file_size: toBigIntOrNull(attachment?.file_size || attachment?.size),
+          file_url: asTextOrNull(
+            attachment?.data_url || attachment?.file_url || attachment?.url || attachment?.download_url,
+            2000
+          ),
+          thumb_url: asTextOrNull(attachment?.thumb_url || attachment?.thumbnail || attachment?.thumb, 2000),
+          payload: attachment,
+          updated_at: toIsoTime(attachment?.updated_at || attachment?.created_at || updatedAt),
+        });
+      }
+
       if (!newestTs || (createdAt && createdAt > newestTs)) {
         newestTs = createdAt;
         newestMsgId = msgGlobalId;
@@ -766,6 +979,10 @@ export async function runChatwootSync(pool, scope, logger = console) {
 
     if (messageRows.length) {
       await upsertMessagesBatch(pool, scope, messageRows);
+    }
+
+    if (attachmentRows.length) {
+      touchedAttachments += await upsertAttachmentsBatch(pool, scope, attachmentRows);
     }
 
     if (pendingChunkRows.length) {
@@ -805,6 +1022,8 @@ export async function runChatwootSync(pool, scope, logger = console) {
     inserted_chunks: insertedChunks,
     reembedded_chunks: reembeddedChunks,
     touched_contacts: touchedContacts,
+    touched_inboxes: touchedInboxes,
+    touched_attachments: touchedAttachments,
     since,
     synced_at: new Date().toISOString(),
     storage,
@@ -820,6 +1039,8 @@ export async function runChatwootSync(pool, scope, logger = console) {
     inserted_chunks: insertedChunks,
     reembedded_chunks: reembeddedChunks,
     touched_contacts: touchedContacts,
+    touched_inboxes: touchedInboxes,
+    touched_attachments: touchedAttachments,
     cursor_ts: newestTs,
     cursor_id: newestMsgId,
     storage,
