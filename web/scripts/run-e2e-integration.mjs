@@ -49,6 +49,15 @@ function runCommand(command, args, { cwd, env = {}, allowFailure = false } = {})
   });
 }
 
+async function commandAvailable(command, args = ["--version"]) {
+  const code = await runCommand(command, args, {
+    cwd: webDir,
+    env: { ...process.env },
+    allowFailure: true,
+  });
+  return code === 0;
+}
+
 function delay(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -75,6 +84,21 @@ async function cleanupDbStack() {
 }
 
 async function main() {
+  const strictDocker = String(process.env.E2E_REQUIRE_DOCKER || "").trim() === "1";
+  const hasDocker = await commandAvailable("docker");
+  if (!hasDocker) {
+    const message =
+      "Docker is not available in current environment. " +
+      "Set E2E_REQUIRE_DOCKER=1 to fail hard, or install Docker for live integration mode.";
+    if (strictDocker) {
+      throw new Error(message);
+    }
+    console.warn(`[e2e:integration] ${message}`);
+    console.warn("[e2e:integration] Falling back to mocked Playwright suite (npm run test:e2e).");
+    await runCommand("npx", ["playwright", "test"], { cwd: webDir, env: { ...process.env } });
+    return;
+  }
+
   await cleanupDbStack();
   await runCommand("docker", ["compose", "up", "-d", "db"], { cwd: repoRoot, env: composeEnv });
   await waitForDbReady();
