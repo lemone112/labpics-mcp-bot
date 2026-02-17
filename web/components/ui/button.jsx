@@ -8,8 +8,7 @@ const variantConfig = {
   default: {
     variant: "solid",
     color: "primary",
-    className:
-      "bg-[linear-gradient(135deg,var(--brand-500),var(--brand-400))] text-white shadow-[var(--shadow-glow)] hover:brightness-[1.03]",
+    className: "border border-[#255fd9] bg-[var(--brand-500)] text-white hover:bg-[var(--brand-600)]",
   },
   secondary: {
     variant: "flat",
@@ -19,9 +18,9 @@ const variantConfig = {
   },
   outline: {
     variant: "bordered",
-    color: "primary",
+    color: "default",
     className:
-      "border-[var(--border-accent)] bg-transparent text-[var(--brand-500)] hover:bg-[rgba(99,91,255,0.08)]",
+      "border-[var(--border-subtle)] bg-transparent text-[var(--text-primary)] hover:bg-[var(--surface-soft)]",
   },
   danger: {
     variant: "solid",
@@ -34,6 +33,12 @@ const sizeMap = {
   default: "md",
   sm: "sm",
   lg: "lg",
+};
+
+const sizeClassMap = {
+  default: "h-9 text-[13px]",
+  sm: "h-8 text-[12px]",
+  lg: "h-10 text-[14px]",
 };
 
 export function Button({
@@ -54,6 +59,7 @@ export function Button({
       radius="md"
       className={cn(
         "font-medium tracking-[-0.01em] transition-transform active:scale-[0.99] disabled:border-[var(--border-subtle)] disabled:bg-[var(--surface-soft)] disabled:text-[var(--text-subtle)]",
+        sizeClassMap[size] || sizeClassMap.default,
         config.className,
         className
       )}

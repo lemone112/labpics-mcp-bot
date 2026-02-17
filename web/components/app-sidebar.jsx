@@ -30,9 +30,9 @@ export function AppSidebar() {
 
     const animation = animate(links, {
       opacity: [0, 1],
-      translateX: [-10, 0],
-      delay: stagger(55),
-      duration: 540,
+      translateX: [-6, 0],
+      delay: stagger(45),
+      duration: 360,
       ease: "outQuad",
     });
 
@@ -51,19 +51,13 @@ export function AppSidebar() {
   }
 
   return (
-    <aside className="app-surface-elevated sticky top-4 flex h-[calc(100vh-2rem)] w-full max-w-64 flex-col rounded-[var(--radius-lg)] p-4">
-      <div className="mb-6 border-b border-[var(--border-subtle)] pb-4">
-        <div className="inline-flex items-center gap-2 rounded-full border border-[var(--border-accent)] bg-[rgba(99,91,255,0.08)] px-2 py-1">
-          <span className="h-2 w-2 rounded-full bg-[var(--brand-400)]" />
-          <span className="text-[11px] font-medium uppercase tracking-[0.08em] text-[var(--brand-500)]">Workspace</span>
-        </div>
-        <h1 className="mt-3 text-sm font-semibold tracking-[0.08em] text-[var(--text-strong)]">
-          LABPICS CONSOLE
-        </h1>
-        <p className="mt-1 text-xs text-[var(--text-muted)]">Fastify + pgvector + Hero UI</p>
+    <aside className="flex w-full max-w-56 shrink-0 flex-col border-r border-[var(--border-subtle)] bg-[var(--surface-2)] p-3">
+      <div className="mb-4 border-b border-[var(--border-subtle)] px-2 pb-3">
+        <h1 className="text-[13px] font-semibold tracking-[-0.01em] text-[var(--text-strong)]">Labpics</h1>
+        <p className="mt-0.5 text-[11px] text-[var(--text-muted)]">Operations workspace</p>
       </div>
 
-      <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.09em] text-[var(--text-subtle)]">
+      <p className="mb-2 px-2 text-[10px] font-semibold uppercase tracking-[0.09em] text-[var(--text-subtle)]">
         Navigation
       </p>
       <nav ref={navRef} className="space-y-1.5">
@@ -75,10 +69,10 @@ export function AppSidebar() {
               href={item.href}
               data-nav-item
               className={cn(
-                "block rounded-[var(--radius-sm)] border px-3 py-2 text-sm font-medium transition-all",
+                "block rounded-[var(--radius-sm)] border px-2.5 py-1.5 text-[13px] font-medium transition-colors",
                 active
-                  ? "border-[var(--border-accent)] bg-[rgba(99,91,255,0.08)] text-[var(--brand-500)] shadow-[var(--shadow-glow)]"
-                  : "border-transparent text-[var(--text-primary)] hover:border-[var(--border-subtle)] hover:bg-[rgba(99,91,255,0.04)]"
+                  ? "border-[var(--border-subtle)] bg-[var(--surface-1)] text-[var(--text-strong)]"
+                  : "border-transparent text-[var(--text-primary)] hover:border-[var(--border-subtle)] hover:bg-[var(--surface-1)]"
               )}
             >
               {item.label}
@@ -87,8 +81,8 @@ export function AppSidebar() {
         })}
       </nav>
 
-      <div className="mt-auto border-t border-[var(--border-subtle)] pt-4">
-        <Button variant="outline" className="w-full" onClick={onLogout}>
+      <div className="mt-auto border-t border-[var(--border-subtle)] px-2 pt-3">
+        <Button variant="secondary" className="w-full justify-start" onClick={onLogout}>
           Logout
         </Button>
       </div>

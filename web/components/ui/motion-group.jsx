@@ -26,11 +26,11 @@ export function MotionGroup({
 
     const reveal = animate(targets, {
       opacity: [0, 1],
-      translateY: [14, 0],
-      scale: [0.99, 1],
+      translateY: [8, 0],
+      scale: [0.995, 1],
       delay: stagger(delay, { start: 40 }),
-      duration: 720,
-      ease: "outExpo",
+      duration: 420,
+      ease: "outQuad",
     });
 
     return () => {
