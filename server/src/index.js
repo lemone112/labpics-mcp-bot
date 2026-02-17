@@ -8,6 +8,7 @@ import cookie from "@fastify/cookie";
 import cors from "@fastify/cors";
 
 import { createDbPool } from "./lib/db.js";
+import { fetchWithRetry } from "./lib/http.js";
 import { applyMigrations } from "../db/migrate-lib.js";
 import { runChatwootSync } from "./services/chatwoot.js";
 import { runEmbeddings, searchChunks } from "./services/embeddings.js";
@@ -19,13 +20,145 @@ function requiredEnv(name) {
   return value;
 }
 
-function getAuthConfig() {
+function getLocalAuthConfig() {
   const username = process.env.AUTH_USERNAME || process.env.ADMIN_USERNAME;
   const password = process.env.AUTH_PASSWORD || process.env.ADMIN_PASSWORD;
-  if (!username || !password) {
-    throw new Error("Missing auth credentials. Set AUTH_USERNAME and AUTH_PASSWORD.");
+
+  if (!username && !password) {
+    return null;
   }
+  if (!username || !password) {
+    throw new Error("Incomplete local auth config. Set both AUTH_USERNAME and AUTH_PASSWORD.");
+  }
+
   return { username, password };
+}
+
+function parseList(value) {
+  return String(value || "")
+    .split(",")
+    .map((item) => item.trim().toLowerCase())
+    .filter(Boolean);
+}
+
+function getGoogleAuthConfig() {
+  const clientId = (process.env.GOOGLE_OAUTH_CLIENT_ID || "").trim();
+  const clientSecret = (process.env.GOOGLE_OAUTH_CLIENT_SECRET || "").trim();
+  const redirectUrl = (process.env.GOOGLE_OAUTH_REDIRECT_URL || "").trim();
+
+  const providedCount = [clientId, clientSecret, redirectUrl].filter(Boolean).length;
+  if (providedCount === 0) return null;
+  if (providedCount < 3) {
+    throw new Error(
+      "Incomplete Google OAuth config. Set GOOGLE_OAUTH_CLIENT_ID, GOOGLE_OAUTH_CLIENT_SECRET, GOOGLE_OAUTH_REDIRECT_URL."
+    );
+  }
+
+  return {
+    clientId,
+    clientSecret,
+    redirectUrl,
+    allowedDomains: new Set(parseList(process.env.GOOGLE_OAUTH_ALLOWED_DOMAINS)),
+    allowedEmails: new Set(parseList(process.env.GOOGLE_OAUTH_ALLOWED_EMAILS)),
+  };
+}
+
+function timingSafeStringEqual(a, b) {
+  const left = Buffer.from(String(a || ""));
+  const right = Buffer.from(String(b || ""));
+  if (left.length !== right.length) {
+    return false;
+  }
+  return crypto.timingSafeEqual(left, right);
+}
+
+function sanitizeNextPath(value) {
+  const raw = String(value || "").trim();
+  if (!raw || !raw.startsWith("/") || raw.startsWith("//")) {
+    return "/projects";
+  }
+  return raw;
+}
+
+function readResponseJsonSafe(response, fallback = {}) {
+  return response
+    .json()
+    .catch(() => fallback);
+}
+
+async function exchangeGoogleCodeForProfile(code, googleAuth, logger) {
+  const tokenBody = new URLSearchParams({
+    code,
+    client_id: googleAuth.clientId,
+    client_secret: googleAuth.clientSecret,
+    redirect_uri: googleAuth.redirectUrl,
+    grant_type: "authorization_code",
+  });
+
+  const tokenResponse = await fetchWithRetry("https://oauth2.googleapis.com/token", {
+    method: "POST",
+    headers: { "content-type": "application/x-www-form-urlencoded" },
+    body: tokenBody,
+    timeoutMs: 15_000,
+    retries: 1,
+    logger,
+  });
+  if (!tokenResponse.ok) {
+    const payload = await readResponseJsonSafe(tokenResponse);
+    throw new Error(`google_token_exchange_failed:${tokenResponse.status}:${String(payload?.error || "unknown")}`);
+  }
+
+  const tokenData = await readResponseJsonSafe(tokenResponse);
+  const idToken = String(tokenData?.id_token || "");
+  if (!idToken) {
+    throw new Error("google_id_token_missing");
+  }
+
+  const tokenInfoResponse = await fetchWithRetry(
+    `https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(idToken)}`,
+    {
+      method: "GET",
+      timeoutMs: 15_000,
+      retries: 1,
+      logger,
+    }
+  );
+  if (!tokenInfoResponse.ok) {
+    const payload = await readResponseJsonSafe(tokenInfoResponse);
+    throw new Error(`google_token_info_failed:${tokenInfoResponse.status}:${String(payload?.error || "unknown")}`);
+  }
+
+  const tokenInfo = await readResponseJsonSafe(tokenInfoResponse);
+  const aud = String(tokenInfo?.aud || "");
+  if (aud !== googleAuth.clientId) {
+    throw new Error("google_invalid_audience");
+  }
+
+  const exp = Number.parseInt(String(tokenInfo?.exp || "0"), 10);
+  if (!Number.isFinite(exp) || exp * 1000 < Date.now() - 30_000) {
+    throw new Error("google_token_expired");
+  }
+
+  const email = String(tokenInfo?.email || "").trim().toLowerCase();
+  const sub = String(tokenInfo?.sub || "").trim();
+  const emailVerified = String(tokenInfo?.email_verified || "") === "true";
+  if (!sub || !email || !emailVerified) {
+    throw new Error("google_profile_invalid");
+  }
+
+  const domain = email.split("@")[1] || "";
+  if (googleAuth.allowedDomains.size > 0 && !googleAuth.allowedDomains.has(domain)) {
+    throw new Error("google_domain_not_allowed");
+  }
+  if (googleAuth.allowedEmails.size > 0 && !googleAuth.allowedEmails.has(email)) {
+    throw new Error("google_email_not_allowed");
+  }
+
+  return {
+    sub,
+    email,
+    username: email,
+  };
 }
 
 function toTopK(value, fallback = 10) {
@@ -42,7 +175,11 @@ function toLimit(value, fallback = 100, max = 500) {
 
 async function main() {
   const databaseUrl = requiredEnv("DATABASE_URL");
-  const auth = getAuthConfig();
+  const localAuth = getLocalAuthConfig();
+  const googleAuth = getGoogleAuthConfig();
+  if (!localAuth && !googleAuth) {
+    throw new Error("No auth providers configured. Set local auth or Google OAuth env vars.");
+  }
   const port = Number.parseInt(process.env.PORT || "8080", 10);
   const host = process.env.HOST || "0.0.0.0";
   const cookieName = process.env.SESSION_COOKIE_NAME || "sid";
@@ -74,6 +211,20 @@ async function main() {
     secure: isProd,
     maxAge: 60 * 60 * 24 * 14,
   };
+  const oauthCookieOptions = {
+    ...cookieOptions,
+    maxAge: 60 * 10,
+  };
+  const oauthStateCookieName = `${cookieName}_oauth_state`;
+  const oauthNextCookieName = `${cookieName}_oauth_next`;
+
+  app.log.info(
+    {
+      local_auth_enabled: Boolean(localAuth),
+      google_auth_enabled: Boolean(googleAuth),
+    },
+    "auth providers configured"
+  );
 
   app.addHook("onRequest", async (request, reply) => {
     const requestId = String(request.headers["x-request-id"] || request.id);
@@ -111,12 +262,27 @@ async function main() {
     return { ok: true, service: "server", request_id: request.requestId };
   });
 
+  app.get("/auth/providers", async (request) => {
+    return {
+      ok: true,
+      providers: {
+        password: Boolean(localAuth),
+        google: Boolean(googleAuth),
+      },
+      request_id: request.requestId,
+    };
+  });
+
   app.post("/auth/login", async (request, reply) => {
+    if (!localAuth) {
+      return reply.code(400).send({ ok: false, error: "local_auth_disabled", request_id: request.requestId });
+    }
+
     const body = request.body && typeof request.body === "object" ? request.body : {};
     const username = String(body?.username || "");
     const password = String(body?.password || "");
 
-    if (username !== auth.username || password !== auth.password) {
+    if (!timingSafeStringEqual(username, localAuth.username) || !timingSafeStringEqual(password, localAuth.password)) {
       return reply.code(401).send({ ok: false, error: "invalid_credentials", request_id: request.requestId });
     }
 
@@ -131,6 +297,74 @@ async function main() {
 
     reply.setCookie(cookieName, sid, cookieOptions);
     return { ok: true, username, active_project_id: null, request_id: request.requestId };
+  });
+
+  app.get("/auth/google/start", async (request, reply) => {
+    if (!googleAuth) {
+      return reply.code(404).send({ ok: false, error: "google_auth_disabled", request_id: request.requestId });
+    }
+
+    const nextPath = sanitizeNextPath(request.query?.next || "/projects");
+    const state = crypto.randomBytes(24).toString("hex");
+    const params = new URLSearchParams({
+      client_id: googleAuth.clientId,
+      redirect_uri: googleAuth.redirectUrl,
+      response_type: "code",
+      scope: "openid email profile",
+      state,
+      prompt: "select_account",
+      access_type: "online",
+      include_granted_scopes: "true",
+    });
+
+    reply.setCookie(oauthStateCookieName, state, oauthCookieOptions);
+    reply.setCookie(oauthNextCookieName, nextPath, oauthCookieOptions);
+    return reply.redirect(`https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`);
+  });
+
+  app.get("/auth/google/callback", async (request, reply) => {
+    const failure = (code) => reply.redirect(`/login?error=${encodeURIComponent(code)}`);
+
+    if (!googleAuth) {
+      return failure("google_auth_disabled");
+    }
+
+    const code = String(request.query?.code || "").trim();
+    const state = String(request.query?.state || "").trim();
+    const expectedState = String(request.cookies?.[oauthStateCookieName] || "");
+    const nextPath = sanitizeNextPath(request.cookies?.[oauthNextCookieName] || "/projects");
+
+    reply.clearCookie(oauthStateCookieName, oauthCookieOptions);
+    reply.clearCookie(oauthNextCookieName, oauthCookieOptions);
+
+    if (!code || !state || !expectedState || !timingSafeStringEqual(state, expectedState)) {
+      request.log.warn({ request_id: request.requestId }, "invalid google oauth state");
+      return failure("google_state_invalid");
+    }
+
+    try {
+      const profile = await exchangeGoogleCodeForProfile(code, googleAuth, request.log);
+      const sid = crypto.randomBytes(32).toString("hex");
+      await pool.query(
+        `
+          INSERT INTO sessions(session_id, username, active_project_id, created_at, last_seen_at)
+          VALUES($1, $2, NULL, now(), now())
+        `,
+        [sid, profile.username]
+      );
+
+      reply.setCookie(cookieName, sid, cookieOptions);
+      return reply.redirect(nextPath);
+    } catch (error) {
+      request.log.warn(
+        {
+          err: String(error?.message || error),
+          request_id: request.requestId,
+        },
+        "google auth callback failed"
+      );
+      return failure("google_auth_failed");
+    }
   });
 
   app.post("/auth/logout", async (request, reply) => {
