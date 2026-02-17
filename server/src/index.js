@@ -130,6 +130,49 @@ function parseProjectIdsInput(value, max = 50) {
   return deduped;
 }
 
+async function resolvePortfolioAccountScopeId(pool, request, projectIds = []) {
+  const fromSession = request.auth?.account_scope_id || null;
+  if (fromSession) return fromSession;
+
+  const candidates = Array.from(
+    new Set(
+      [
+        ...(Array.isArray(projectIds) ? projectIds : []),
+        String(request.query?.project_id || "").trim(),
+        String(request.auth?.active_project_id || "").trim(),
+      ]
+        .map((value) => String(value || "").trim())
+        .filter(Boolean)
+    )
+  ).slice(0, 100);
+
+  if (!candidates.length) {
+    fail(409, "account_scope_required", "Account scope is required");
+  }
+
+  const { rows } = await pool.query(
+    `
+      SELECT
+        account_scope_id::text AS account_scope_id,
+        count(*)::int AS projects_count
+      FROM projects
+      WHERE id::text = ANY($1::text[])
+      GROUP BY account_scope_id
+      ORDER BY projects_count DESC
+      LIMIT 2
+    `,
+    [candidates]
+  );
+
+  if (!rows.length) {
+    fail(404, "projects_not_found", "Projects for scope resolution were not found");
+  }
+  if (rows.length > 1) {
+    fail(409, "account_scope_mismatch", "Selected projects belong to different account scopes");
+  }
+  return rows[0].account_scope_id;
+}
+
 async function main() {
   const databaseUrl = requiredEnv("DATABASE_URL");
   const auth = getAuthConfig();
@@ -974,15 +1017,13 @@ async function main() {
   });
 
   registerGet("/portfolio/overview", async (request, reply) => {
-    const accountScopeId = request.auth?.account_scope_id || null;
-    if (!accountScopeId) {
-      fail(409, "account_scope_required", "Account scope is required");
-    }
+    const projectIds = parseProjectIdsInput(request.query?.project_ids, 100);
+    const accountScopeId = await resolvePortfolioAccountScopeId(pool, request, projectIds);
 
     const payload = await getPortfolioOverview(pool, {
       accountScopeId,
       activeProjectId: request.auth?.active_project_id || null,
-      projectIds: parseProjectIdsInput(request.query?.project_ids, 100),
+      projectIds,
       messageLimit: request.query?.message_limit,
       cardLimit: request.query?.card_limit,
     });
@@ -990,10 +1031,12 @@ async function main() {
   });
 
   registerGet("/portfolio/messages", async (request, reply) => {
-    const accountScopeId = request.auth?.account_scope_id || null;
-    if (!accountScopeId) {
-      fail(409, "account_scope_required", "Account scope is required");
-    }
+    const projectIdCandidate = String(request.query?.project_id || "").trim();
+    const accountScopeId = await resolvePortfolioAccountScopeId(
+      pool,
+      request,
+      projectIdCandidate ? [projectIdCandidate] : []
+    );
 
     const payload = await getPortfolioMessages(pool, {
       accountScopeId,

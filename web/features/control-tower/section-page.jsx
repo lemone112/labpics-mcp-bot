@@ -1011,18 +1011,17 @@ function MessagesSection({ messagesPayload, selectedPersonId, setSelectedPersonI
 export default function ControlTowerSectionPage({ section }) {
   const normalizedSection = normalizePortfolioSection(section);
   const { loading, session } = useAuthGuard();
-  const { selectedProjectIds, selectedProject, isAllProjects, loadingProjects, activeProjectId } = useProjectPortfolio();
+  const { selectedProjectIds, selectedProject, isAllProjects, loadingProjects } = useProjectPortfolio();
   const { moneyFormatter, numberFormatter } = useFormatters();
   const [selectedPersonId, setSelectedPersonId] = useState("");
   const [selectedRecommendationId, setSelectedRecommendationId] = useState("");
   const [actionsByRecommendation, setActionsByRecommendation] = useState({});
   const [recommendationActionPending, setRecommendationActionPending] = useState(false);
   const [recommendationActionError, setRecommendationActionError] = useState("");
-  const scopeReady = Boolean(activeProjectId);
 
   const overview = usePortfolioOverview({
     projectIds: selectedProjectIds,
-    enabled: scopeReady && !["messages", "recommendations"].includes(normalizedSection) && selectedProjectIds.length > 0,
+    enabled: !["messages", "recommendations"].includes(normalizedSection) && selectedProjectIds.length > 0,
     messageLimit: 80,
     cardLimit: 30,
   });
@@ -1030,13 +1029,13 @@ export default function ControlTowerSectionPage({ section }) {
   const messages = usePortfolioMessages({
     projectId: selectedProject?.id,
     contactGlobalId: selectedPersonId,
-    enabled: scopeReady && normalizedSection === "messages" && Boolean(selectedProject?.id),
+    enabled: normalizedSection === "messages" && Boolean(selectedProject?.id),
     limit: 300,
   });
 
   const recommendations = useRecommendationsV2({
     projectIds: selectedProjectIds,
-    enabled: scopeReady && normalizedSection === "recommendations" && selectedProjectIds.length > 0,
+    enabled: normalizedSection === "recommendations" && selectedProjectIds.length > 0,
     allProjects: isAllProjects,
     limit: 120,
   });
@@ -1153,21 +1152,6 @@ export default function ControlTowerSectionPage({ section }) {
         <Card data-motion-item>
           <CardContent>
             <EmptyState title="Нет доступных проектов" description="Создайте проект и выберите его в правом сайдбаре." />
-          </CardContent>
-        </Card>
-      </PageShell>
-    );
-  }
-
-  if (!scopeReady) {
-    return (
-      <PageShell title={TITLES[normalizedSection]} subtitle={SUBTITLES[normalizedSection]}>
-        <Card data-motion-item>
-          <CardContent>
-            <EmptyState
-              title="Подготавливаем рабочий контекст"
-              description="Назначаем активный проект для account scope. Если статус не обновился, выберите проект вручную в сайдбаре."
-            />
           </CardContent>
         </Card>
       </PageShell>
