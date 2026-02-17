@@ -7,6 +7,7 @@ import { apiFetch } from "@/lib/api";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { MotionGroup } from "@/components/ui/motion-group";
 import { Toast } from "@/components/ui/toast";
 
 export default function LoginPage() {
@@ -36,32 +37,43 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-slate-950 p-4">
-      <Card className="w-full max-w-md">
-        <CardHeader>
-          <CardTitle>Login</CardTitle>
-          <CardDescription>Use API credentials from server env.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form className="space-y-4" onSubmit={onSubmit}>
-            <div className="space-y-1">
-              <label className="text-xs uppercase tracking-wide text-slate-400">Username</label>
-              <Input value={username} onChange={(e) => setUsername(e.target.value)} required />
-            </div>
+    <div className="flex min-h-screen items-center justify-center bg-[var(--app-bg)] p-4">
+      <MotionGroup className="w-full max-w-md">
+        <Card data-motion-item className="w-full">
+          <CardHeader>
+            <CardTitle className="text-[20px]">Sign in</CardTitle>
+            <CardDescription>Use API credentials from server environment.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <form className="space-y-4" onSubmit={onSubmit}>
+              <div className="space-y-1">
+                <label className="text-xs uppercase tracking-[0.09em] text-[var(--text-muted)]">
+                  Username
+                </label>
+                <Input value={username} onChange={(e) => setUsername(e.target.value)} required />
+              </div>
 
-            <div className="space-y-1">
-              <label className="text-xs uppercase tracking-wide text-slate-400">Password</label>
-              <Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required />
-            </div>
+              <div className="space-y-1">
+                <label className="text-xs uppercase tracking-[0.09em] text-[var(--text-muted)]">
+                  Password
+                </label>
+                <Input
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                />
+              </div>
 
-            <Button type="submit" className="w-full" disabled={loading}>
-              {loading ? "Signing in..." : "Sign in"}
-            </Button>
-          </form>
+              <Button type="submit" className="w-full" disabled={loading}>
+                {loading ? "Signing in..." : "Sign in"}
+              </Button>
+            </form>
 
-          <Toast className="mt-4" type={toast.type} message={toast.message} />
-        </CardContent>
-      </Card>
+            <Toast className="mt-4" type={toast.type} message={toast.message} />
+          </CardContent>
+        </Card>
+      </MotionGroup>
     </div>
   );
 }

@@ -44,13 +44,13 @@ export default function SearchPage() {
   }
 
   if (loading || !session) {
-    return <div className="p-8 text-slate-300">Loading...</div>;
+    return <div className="p-8 text-[var(--text-primary)]">Loading...</div>;
   }
 
   return (
     <PageShell title="Search" subtitle="Vector similarity search over ready embeddings">
       <div className="space-y-6">
-        <Card>
+        <Card data-motion-item>
           <CardHeader>
             <CardTitle>Search form</CardTitle>
           </CardHeader>
@@ -75,14 +75,14 @@ export default function SearchPage() {
             </form>
 
             {meta ? (
-              <div className="mt-3 text-xs text-slate-400">
+              <div className="mt-3 text-xs text-[var(--text-muted)]">
                 model: {meta.embedding_model || "-"} • topK: {meta.topK || "-"}
               </div>
             ) : null}
           </CardContent>
         </Card>
 
-        <Card>
+        <Card data-motion-item>
           <CardHeader>
             <CardTitle>Results</CardTitle>
           </CardHeader>
@@ -100,14 +100,14 @@ export default function SearchPage() {
                 {results.map((row) => (
                   <TableRow key={row.id}>
                     <TableCell>{row.distance != null ? Number(row.distance).toFixed(4) : "-"}</TableCell>
-                    <TableCell className="font-mono text-xs text-slate-300">{row.conversation_global_id || "-"}</TableCell>
-                    <TableCell className="font-mono text-xs text-slate-300">{row.message_global_id || "-"}</TableCell>
+                    <TableCell className="font-mono text-xs text-[var(--text-primary)]">{row.conversation_global_id || "-"}</TableCell>
+                    <TableCell className="font-mono text-xs text-[var(--text-primary)]">{row.message_global_id || "-"}</TableCell>
                     <TableCell className="max-w-[460px] whitespace-pre-wrap">{row.text}</TableCell>
                   </TableRow>
                 ))}
                 {!results.length ? (
                   <TableRow>
-                    <TableCell colSpan={4} className="text-slate-400">
+                    <TableCell colSpan={4} className="text-[var(--text-muted)]">
                       No results yet.
                     </TableCell>
                   </TableRow>

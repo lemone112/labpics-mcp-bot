@@ -1,12 +1,75 @@
+@config "../tailwind.config.js";
 @import "tailwindcss";
+@source "../node_modules/@heroui/theme/dist/**/*.{js,ts,jsx,tsx}";
+@source "../node_modules/@heroui/react/dist/**/*.{js,ts,jsx,tsx}";
+
+:root {
+  --app-bg: #f4f5f7;
+  --surface-1: #ffffff;
+  --surface-2: #f9fafb;
+  --surface-3: #f3f5f8;
+  --surface-glass: color-mix(in oklab, var(--surface-1) 84%, transparent);
+  --surface-soft: #f5f6fa;
+
+  --text-strong: #111827;
+  --text-primary: #2f3542;
+  --text-muted: #6b7280;
+  --text-subtle: #98a2b3;
+
+  --border-subtle: rgba(15, 23, 42, 0.08);
+  --border-strong: rgba(15, 23, 42, 0.14);
+  --border-accent: rgba(47, 109, 246, 0.34);
+
+  --brand-300: #93bfff;
+  --brand-400: #669fff;
+  --brand-500: #2f6df6;
+  --brand-600: #245fd7;
+
+  --success-500: #22c55e;
+  --danger-500: #f43f5e;
+
+  --radius-sm: 8px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+
+  --shadow-soft: 0 1px 2px rgba(16, 24, 40, 0.06), 0 8px 24px rgba(16, 24, 40, 0.04);
+  --shadow-float: 0 14px 34px rgba(16, 24, 40, 0.08);
+  --shadow-glow: 0 0 0 1px rgba(47, 109, 246, 0.2);
+}
 
 html,
 body {
   min-height: 100%;
 }
 
+html {
+  color-scheme: light;
+}
+
 body {
-  background: #020617;
-  color: #e2e8f0;
+  margin: 0;
+  color: var(--text-primary);
   font-family: Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+  background: linear-gradient(180deg, #f7f8fa 0%, #f4f5f7 65%, #f3f4f6 100%);
+}
+
+* {
+  border-color: var(--border-subtle);
+}
+
+::selection {
+  background: rgba(47, 109, 246, 0.18);
+  color: #0f172a;
+}
+
+.app-surface {
+  border: 1px solid var(--border-subtle);
+  background: var(--surface-1);
+  box-shadow: var(--shadow-soft);
+}
+
+.app-surface-elevated {
+  border: 1px solid var(--border-strong);
+  background: var(--surface-2);
+  box-shadow: var(--shadow-soft);
 }

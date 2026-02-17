@@ -1,7 +1,9 @@
 "use client";
 
+import { useEffect, useRef } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
+import { animate, stagger } from "animejs";
 
 import { cn } from "@/lib/utils";
 import { apiFetch } from "@/lib/api";
@@ -16,6 +18,28 @@ const items = [
 export function AppSidebar() {
   const pathname = usePathname();
   const router = useRouter();
+  const navRef = useRef(null);
+
+  useEffect(() => {
+    const nav = navRef.current;
+    if (!nav || typeof window === "undefined") return undefined;
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return undefined;
+
+    const links = nav.querySelectorAll("[data-nav-item]");
+    if (!links.length) return undefined;
+
+    const animation = animate(links, {
+      opacity: [0, 1],
+      translateX: [-6, 0],
+      delay: stagger(45),
+      duration: 360,
+      ease: "outQuad",
+    });
+
+    return () => {
+      animation.cancel();
+    };
+  }, []);
 
   async function onLogout() {
     try {
@@ -27,24 +51,28 @@ export function AppSidebar() {
   }
 
   return (
-    <aside className="w-full max-w-56 border-r border-slate-800 bg-slate-950/95 p-4">
-      <div className="mb-6">
-        <h1 className="text-base font-semibold text-slate-100">LABPICS MVP</h1>
-        <p className="mt-1 text-xs text-slate-500">Fastify + pgvector</p>
+    <aside className="flex w-full max-w-56 shrink-0 flex-col border-r border-[var(--border-subtle)] bg-[var(--surface-2)] p-3">
+      <div className="mb-4 border-b border-[var(--border-subtle)] px-2 pb-3">
+        <h1 className="text-[13px] font-semibold tracking-[-0.01em] text-[var(--text-strong)]">Labpics</h1>
+        <p className="mt-0.5 text-[11px] text-[var(--text-muted)]">Operations workspace</p>
       </div>
 
-      <nav className="space-y-1">
+      <p className="mb-2 px-2 text-[10px] font-semibold uppercase tracking-[0.09em] text-[var(--text-subtle)]">
+        Navigation
+      </p>
+      <nav ref={navRef} className="space-y-1.5">
         {items.map((item) => {
           const active = pathname === item.href;
           return (
             <Link
               key={item.href}
               href={item.href}
+              data-nav-item
               className={cn(
-                "block rounded-md px-3 py-2 text-sm transition-colors",
+                "block rounded-[var(--radius-sm)] border px-2.5 py-1.5 text-[13px] font-medium transition-colors",
                 active
-                  ? "bg-cyan-500/20 text-cyan-200"
-                  : "text-slate-300 hover:bg-slate-800 hover:text-slate-100"
+                  ? "border-[var(--border-subtle)] bg-[var(--surface-1)] text-[var(--text-strong)]"
+                  : "border-transparent text-[var(--text-primary)] hover:border-[var(--border-subtle)] hover:bg-[var(--surface-1)]"
               )}
             >
               {item.label}
@@ -53,8 +81,8 @@ export function AppSidebar() {
         })}
       </nav>
 
-      <div className="mt-8">
-        <Button variant="outline" className="w-full" onClick={onLogout}>
+      <div className="mt-auto border-t border-[var(--border-subtle)] px-2 pt-3">
+        <Button variant="secondary" className="w-full justify-start" onClick={onLogout}>
           Logout
         </Button>
       </div>
