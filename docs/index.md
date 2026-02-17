@@ -12,6 +12,7 @@ This folder is the canonical documentation for **Labpics Dashboard**.
 6. API contract: [`docs/api.md`](./api.md)
 7. Deploy & operations: [`docs/deployment.md`](./deployment.md) → [`docs/runbooks.md`](./runbooks.md)
 8. Specs (behavioral requirements): [`docs/specs/README.md`](./specs/README.md)
+9. Portfolio cockpit (dual-sidebar + multi-project + Loops): [`docs/portfolio-cockpit.md`](./portfolio-cockpit.md)
 
 ## Conventions
 
