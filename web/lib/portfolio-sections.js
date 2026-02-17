@@ -4,7 +4,7 @@ export const PORTFOLIO_SECTIONS = [
   { key: "agreements", label: "Договоренности", href: "/control-tower/agreements" },
   { key: "risks", label: "Риски", href: "/control-tower/risks" },
   { key: "finance", label: "Финансы и экономика", href: "/control-tower/finance" },
-  { key: "offers", label: "Офферы", href: "/control-tower/offers" },
+  { key: "offers", label: "Офферы и допродажи", href: "/control-tower/offers" },
 ];
 
 const SECTIONS_WITH_ALL_PROJECTS = new Set(["dashboard", "agreements", "risks", "finance", "offers"]);

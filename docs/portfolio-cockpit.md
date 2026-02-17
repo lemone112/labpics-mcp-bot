@@ -18,7 +18,7 @@ The product is project-oriented, but operators often need a **portfolio view** (
 This mode adds:
 
 1. A minimal global navigation rail (icons + tooltip labels),
-2. A second sidebar with project list and multi-select,
+2. A second sidebar with project list and strict single-select behavior,
 3. A body that aggregates data across selected projects.
 
 ---
@@ -41,6 +41,15 @@ Required item set (mapped to `#` sections on `/control-tower`):
 5. `finance` — **Финансы и юнит-экономика**
 6. `offers` — **Офферы и допродажи**
 
+Route mapping (no anchor scrolling):
+
+- `/control-tower/dashboard`
+- `/control-tower/messages`
+- `/control-tower/agreements`
+- `/control-tower/risks`
+- `/control-tower/finance`
+- `/control-tower/offers`
+
 Notes:
 
 - Logout is not a business nav item and is placed in the second (text) sidebar.
@@ -53,9 +62,18 @@ Implemented in:
 ## 2.2 Second-level sidebar: project selection
 
 - Text list of projects,
-- Supports single and multi-select,
-- Supports "select all" / "clear selection",
-- Supports "set active project" for existing single-project scoped pages,
+- Supports **single-select only** for concrete projects (never "no selection"),
+- Supports `Все проекты` pseudo-item only for:
+  - dashboard,
+  - agreements,
+  - risks,
+  - finance,
+  - offers,
+- `Все проекты` is unavailable on `messages`,
+- If current selection is `Все проекты` and user opens `messages`, selection is auto-fallback to a concrete project,
+- Row click selects project (checkbox UI is not used),
+- Project rows include stable color dot tokens,
+- Supports "set active project" for existing scoped APIs,
 - Includes theme selector (light/dark/system).
 
 Implemented in:
@@ -69,7 +87,9 @@ Implemented in:
   - `NavRail` (left),
   - `ProjectSidebar` (middle),
   - content body (right).
-- Project sidebar can be collapsed/expanded.
+- Project sidebar can be collapsed/expanded,
+- Both sidebars are fixed/sticky against viewport (`h-svh`),
+- Global page scroll is disabled and content scroll happens only in body column.
 
 Implemented in:
 
@@ -80,27 +100,24 @@ Implemented in:
 
 ## 3) Control Tower portfolio sections (body)
 
-`/control-tower` now renders six business blocks for selected projects:
+`/control-tower` is now a routed workspace with six pages:
 
-1. **Dashboard + charts** (Linear/Attio/RAG-derived signals),
-2. **Messages feed**,
-3. **Agreements cards** (RAG/evidence-derived),
-4. **Risk cards** (risk radar + high severity signals),
-5. **Finance + unit economics**,
-6. **Offers + upsell + Loops status**.
+1. **Dashboard** — charts-only canvas (5-8+ charts),
+2. **Messages** — chat-bubble message feed with person selector,
+3. **Agreements** — agreement cards,
+4. **Risks** — risk cards,
+5. **Finance** — analytics charts (5-8+ charts),
+6. **Offers** — offer/upsell cards.
 
-Each block has a stable anchor id for left-rail navigation:
+Routing:
 
-- `#dashboard`
-- `#messages`
-- `#agreements`
-- `#risks`
-- `#finance`
-- `#offers`
+- `/control-tower/[section]`
+- `/control-tower` redirects to `/control-tower/dashboard`
 
 Implemented in:
 
-- `web/features/control-tower/page.jsx`
+- `web/features/control-tower/section-page.jsx`
+- `web/features/control-tower/page.jsx` (compat wrapper)
 - chart primitives in `web/components/ui/chart.jsx`
 
 Dependency:
@@ -140,7 +157,33 @@ Implementation:
 - `server/src/services/portfolio.js`
 - route in `server/src/index.js`
 
-## 4.2 `POST /loops/sync`
+## 4.2 `GET /portfolio/messages`
+
+Purpose: provide message feed for a single concrete project (+ person filter).
+
+Query:
+
+- `project_id` (required),
+- `contact_global_id` (optional),
+- `limit` (optional).
+
+Response:
+
+- `project`,
+- `persons`,
+- `selected_contact_global_id`,
+- `messages` with:
+  - sender side metadata,
+  - channel,
+  - timestamp,
+  - attachment chips payload (if present).
+
+Implementation:
+
+- `server/src/services/portfolio.js`
+- route in `server/src/index.js`
+
+## 4.3 `POST /loops/sync`
 
 Purpose: push contacts with email from Postgres to Loops.
 
@@ -200,7 +243,9 @@ Reads and combines:
 
 ## 6.2 Messages feed
 
-- `cw_messages` joined with `projects`.
+- `cw_messages` scoped by concrete project,
+- `cw_contacts` for person selector,
+- attachment metadata parsed from `cw_messages.data`.
 
 ## 6.3 Agreements cards
 
@@ -212,6 +257,7 @@ Union:
 
 - `risk_radar_items`,
 - high-severity (`>=4`) active `signals`.
+- `risk_pattern_events` (historical/cluster patterns).
 
 ## 6.5 Finance + unit economics
 
@@ -271,9 +317,16 @@ Frontend:
 - `web/components/page-shell.jsx`
 - `web/components/nav-rail.jsx`
 - `web/components/project-sidebar.jsx`
+- `web/components/project-badge.jsx`
 - `web/components/ui/chart.jsx`
 - `web/hooks/use-project-portfolio.js`
+- `web/hooks/use-portfolio-overview.js`
+- `web/hooks/use-portfolio-messages.js`
+- `web/lib/portfolio-sections.js`
+- `web/lib/project-colors.js`
 - `web/features/control-tower/page.jsx`
+- `web/features/control-tower/section-page.jsx`
+- `web/app/control-tower/[section]/page.jsx`
 - `web/package.json`
 
 ---
@@ -303,7 +356,9 @@ If there is any risk the next implementation pass becomes superficial, **return 
 4. Verify idempotency/safe retries on outbound integrations,
 5. Verify UX consistency with shadcn conventions (no ad-hoc overlays, no visual drift),
    - left rail has exactly 6 business items,
-   - each rail item maps to a corresponding section anchor on `/control-tower`,
+   - each rail item maps to `/control-tower/[section]` route (no anchors),
+   - sidebars are fixed/sticky and only body content scrolls,
+   - project sidebar enforces single-select and `Все проекты` rules by section,
 6. Run validation:
    - `web`: `npm run lint` and `npm run build`,
    - `server`: syntax check for touched files,
