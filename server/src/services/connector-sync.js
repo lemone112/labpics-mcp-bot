@@ -11,8 +11,31 @@ import {
   resolveConnectorErrors,
 } from "./connector-state.js";
 import { syncConnectorEventLog } from "./event-log.js";
+import { writeAuditEvent } from "./audit.js";
 
 const CONNECTORS = ["chatwoot", "linear", "attio"];
+
+async function warnProcess(pool, scope, action, message, extra = {}) {
+  try {
+    await writeAuditEvent(pool, {
+      projectId: scope.projectId,
+      accountScopeId: scope.accountScopeId,
+      actorUsername: null,
+      action,
+      entityType: "connector",
+      entityId: scope.projectId,
+      status: "warning",
+      requestId: null,
+      payload: {
+        message,
+        ...(extra.payload && typeof extra.payload === "object" ? extra.payload : {}),
+      },
+      evidenceRefs: [],
+    });
+  } catch {
+    // keep connector sync resilient even when warning audit fails
+  }
+}
 
 function connectorMode(connector) {
   const specific = String(process.env[`CONNECTOR_${connector.toUpperCase()}_MODE`] || "").trim().toLowerCase();

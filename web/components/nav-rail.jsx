@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   LayoutDashboard,
+  Lightbulb,
   MessageSquareText,
   Handshake,
   ShieldAlert,
@@ -17,6 +18,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 
 const SECTION_ICONS = {
   dashboard: LayoutDashboard,
+  recommendations: Lightbulb,
   messages: MessageSquareText,
   agreements: Handshake,
   risks: ShieldAlert,

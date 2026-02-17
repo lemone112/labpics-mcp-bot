@@ -31,10 +31,17 @@
 ## 1.4 Frontend и дизайн
 
 - Next.js App Router + dual-sidebar shell;
-- control tower на 6 секций;
+- control tower на 7 секций (включая отдельную секцию рекомендаций);
 - дизайн-система на shadcn/ui + Radix + Tailwind tokens;
 - motion-слой на anime.js с tokenized durations/easing;
 - страницы Jobs/Search/Signals/CRM/Offers/Digests/Analytics.
+
+## 1.5 Вертикаль Iteration 1 (Recommendation -> Evidence -> Action)
+
+- evidence gating для recommendations v2 (count + quality + причина скрытия);
+- серверные логи `recommendation_shown` и `recommendation_action_taken`;
+- action-layer по рекомендациям (`create_or_update_task`, `send_message`, `set_reminder`);
+- UI-блок "Почему я это вижу" + доказательства + кнопки действий + лог исполнения.
 
 ---
 
@@ -66,6 +73,13 @@
 2. Similar cases UX: top-3 похожих кейса + outcomes + эффективные интервенции.
 3. Единый экран evidence trace (message/issue/deal/chunk linkage).
 4. Сравнение рекомендаций в all-projects режиме по общей шкале приоритета.
+
+Release-gate (без бесконечной оптимизации):
+
+- минимум 3 ручных сценария из `docs/scenarios.md` проходят end-to-end;
+- не менее 95% рекомендаций в primary выдаче имеют `evidence_gate_status = visible`;
+- action success-rate >= 90% на тестовом окне 24ч;
+- нет blocking-ошибок в sync и KAG refresh по runbook-чеклисту.
 
 Критерий готовности:
 

@@ -30,10 +30,16 @@ import { findSimilarCases, rebuildCaseSignatures } from "./services/similarity.j
 import { listRiskForecasts, refreshRiskForecasts } from "./services/forecasting.js";
 import {
   listRecommendationsV2,
+  markRecommendationsV2Shown,
   refreshRecommendationsV2,
   updateRecommendationV2Feedback,
   updateRecommendationV2Status,
 } from "./services/recommendations-v2.js";
+import {
+  listRecommendationActionRuns,
+  retryRecommendationActionRun,
+  runRecommendationAction,
+} from "./services/recommendation-actions.js";
 import {
   generateDailyDigest,
   generateWeeklyDigest,
@@ -1293,23 +1299,69 @@ async function main() {
       status: request.query?.status,
       limit: request.query?.limit,
       all_projects: request.query?.all_projects,
+      include_hidden: request.query?.include_hidden,
     });
     return sendOk(reply, request.requestId, { recommendations });
+  });
+
+  registerPost("/kag/v2/recommendations/shown", async (request, reply) => {
+    const scope = requireProjectScope(request);
+    const body = request.body && typeof request.body === "object" ? request.body : {};
+    const recommendationIds = Array.isArray(body?.recommendation_ids) ? body.recommendation_ids : [];
+    const allProjects = String(body?.all_projects || request.query?.all_projects || "").trim().toLowerCase() === "true";
+    const shown = await markRecommendationsV2Shown(pool, scope, recommendationIds, {
+      all_projects: allProjects ? "true" : "false",
+    });
+    if (shown.length) {
+      await writeAuditEvent(pool, {
+        projectId: allProjects ? shown[0].project_id : scope.projectId,
+        accountScopeId: scope.accountScopeId,
+        actorUsername: request.auth?.username || null,
+        action: "recommendation_shown",
+        entityType: "recommendations_v2",
+        entityId: allProjects ? scope.accountScopeId : scope.projectId,
+        status: "ok",
+        requestId: request.requestId,
+        payload: {
+          total: shown.length,
+          recommendation_ids: shown.map((item) => item.id),
+          all_projects: allProjects,
+        },
+        evidenceRefs: shown.flatMap((item) => item.evidence_refs || []),
+      });
+    }
+    return sendOk(reply, request.requestId, { shown });
   });
 
   registerPost("/kag/v2/recommendations/:id/status", async (request, reply) => {
     const scope = requireProjectScope(request);
     const body = request.body && typeof request.body === "object" ? request.body : {};
+    const allProjects = String(body?.all_projects || request.query?.all_projects || "").trim().toLowerCase() === "true";
     try {
       const recommendation = await updateRecommendationV2Status(
         pool,
         scope,
         String(request.params?.id || ""),
-        String(body?.status || "")
+        String(body?.status || ""),
+        { all_projects: allProjects ? "true" : "false" }
       );
       if (!recommendation) {
         return sendError(reply, request.requestId, new ApiError(404, "recommendation_not_found", "Recommendation not found"));
       }
+      await writeAuditEvent(pool, {
+        projectId: scope.projectId,
+        accountScopeId: scope.accountScopeId,
+        actorUsername: request.auth?.username || null,
+        action: "recommendation_status_updated",
+        entityType: "recommendations_v2",
+        entityId: recommendation.id,
+        status: "ok",
+        requestId: request.requestId,
+        payload: {
+          status: recommendation.status,
+        },
+        evidenceRefs: recommendation.evidence_refs || [],
+      });
       return sendOk(reply, request.requestId, { recommendation });
     } catch (error) {
       return sendError(reply, request.requestId, new ApiError(400, "invalid_status", String(error?.message || error)));
@@ -1319,20 +1371,136 @@ async function main() {
   registerPost("/kag/v2/recommendations/:id/feedback", async (request, reply) => {
     const scope = requireProjectScope(request);
     const body = request.body && typeof request.body === "object" ? request.body : {};
+    const allProjects = String(body?.all_projects || request.query?.all_projects || "").trim().toLowerCase() === "true";
     try {
       const recommendation = await updateRecommendationV2Feedback(
         pool,
         scope,
         String(request.params?.id || ""),
         String(body?.helpful || "unknown"),
-        String(body?.note || "")
+        String(body?.note || ""),
+        { all_projects: allProjects ? "true" : "false" }
       );
       if (!recommendation) {
         return sendError(reply, request.requestId, new ApiError(404, "recommendation_not_found", "Recommendation not found"));
       }
+      await writeAuditEvent(pool, {
+        projectId: scope.projectId,
+        accountScopeId: scope.accountScopeId,
+        actorUsername: request.auth?.username || null,
+        action: "recommendation_feedback_updated",
+        entityType: "recommendations_v2",
+        entityId: recommendation.id,
+        status: "ok",
+        requestId: request.requestId,
+        payload: {
+          helpful_feedback: recommendation.helpful_feedback,
+        },
+        evidenceRefs: recommendation.evidence_refs || [],
+      });
       return sendOk(reply, request.requestId, { recommendation });
     } catch (error) {
       return sendError(reply, request.requestId, new ApiError(400, "invalid_feedback", String(error?.message || error)));
+    }
+  });
+
+  registerGet("/kag/v2/recommendations/:id/actions", async (request, reply) => {
+    const scope = requireProjectScope(request);
+    const allProjects = String(request.query?.all_projects || "").trim().toLowerCase() === "true";
+    const runs = await listRecommendationActionRuns(pool, scope, String(request.params?.id || ""), {
+      all_projects: allProjects ? "true" : "false",
+      limit: request.query?.limit,
+    });
+    return sendOk(reply, request.requestId, { actions: runs });
+  });
+
+  registerPost("/kag/v2/recommendations/:id/actions", async (request, reply) => {
+    const scope = requireProjectScope(request);
+    const body = request.body && typeof request.body === "object" ? request.body : {};
+    const allProjects = String(body?.all_projects || request.query?.all_projects || "").trim().toLowerCase() === "true";
+    try {
+      const result = await runRecommendationAction(
+        pool,
+        scope,
+        String(request.params?.id || ""),
+        String(body?.action_type || ""),
+        body?.action_payload || {},
+        {
+          all_projects: allProjects ? "true" : "false",
+          actorUsername: request.auth?.username || null,
+          requestId: request.requestId,
+        }
+      );
+      await writeAuditEvent(pool, {
+        projectId: result.recommendation.project_id,
+        accountScopeId: scope.accountScopeId,
+        actorUsername: request.auth?.username || null,
+        action: "recommendation_action_taken",
+        entityType: "recommendation_action_run",
+        entityId: result.run?.id || null,
+        status: result.run?.status || "failed",
+        requestId: request.requestId,
+        payload: {
+          recommendation_id: result.recommendation.id,
+          action_type: result.run?.action_type,
+          action_status: result.run?.status,
+          attempts: result.run?.attempts,
+          error_message: result.run?.error_message || null,
+          idempotent: Boolean(result.idempotent),
+        },
+        evidenceRefs: result.recommendation.evidence_refs || [],
+      });
+      if (result.error) {
+        return sendError(reply, request.requestId, new ApiError(409, "recommendation_action_failed", String(result.error?.message || result.error)));
+      }
+      return sendOk(reply, request.requestId, result);
+    } catch (error) {
+      return sendError(
+        reply,
+        request.requestId,
+        new ApiError(400, "recommendation_action_invalid", String(error?.message || error))
+      );
+    }
+  });
+
+  registerPost("/kag/v2/recommendations/actions/:actionId/retry", async (request, reply) => {
+    const scope = requireProjectScope(request);
+    const body = request.body && typeof request.body === "object" ? request.body : {};
+    const allProjects = String(body?.all_projects || request.query?.all_projects || "").trim().toLowerCase() === "true";
+    try {
+      const result = await retryRecommendationActionRun(pool, scope, String(request.params?.actionId || ""), {
+        all_projects: allProjects ? "true" : "false",
+        actorUsername: request.auth?.username || null,
+        requestId: request.requestId,
+      });
+      await writeAuditEvent(pool, {
+        projectId: result.recommendation.project_id,
+        accountScopeId: scope.accountScopeId,
+        actorUsername: request.auth?.username || null,
+        action: "recommendation_action_taken",
+        entityType: "recommendation_action_run",
+        entityId: result.run?.id || null,
+        status: result.run?.status || "failed",
+        requestId: request.requestId,
+        payload: {
+          recommendation_id: result.recommendation.id,
+          action_type: result.run?.action_type,
+          action_status: result.run?.status,
+          attempts: result.run?.attempts,
+          retry: true,
+        },
+        evidenceRefs: result.recommendation.evidence_refs || [],
+      });
+      if (result.error) {
+        return sendError(reply, request.requestId, new ApiError(409, "recommendation_action_failed", String(result.error?.message || result.error)));
+      }
+      return sendOk(reply, request.requestId, result);
+    } catch (error) {
+      return sendError(
+        reply,
+        request.requestId,
+        new ApiError(400, "recommendation_action_retry_invalid", String(error?.message || error))
+      );
     }
   });
 

@@ -19,8 +19,10 @@ import { useAuthGuard } from "@/hooks/use-auth-guard";
 import { usePortfolioMessages } from "@/hooks/use-portfolio-messages";
 import { usePortfolioOverview } from "@/hooks/use-portfolio-overview";
 import { useProjectPortfolio } from "@/hooks/use-project-portfolio";
+import { useRecommendationsV2 } from "@/hooks/use-recommendations-v2";
 import { PageShell } from "@/components/page-shell";
 import { ProjectBadge } from "@/components/project-badge";
+import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ChartContainer, ChartLegend, ChartLegendContent, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
@@ -34,6 +36,7 @@ import { cn } from "@/lib/utils";
 
 const TITLES = {
   dashboard: "Дашборд",
+  recommendations: "Рекомендации",
   messages: "Переписки",
   agreements: "Договоренности",
   risks: "Риски",
@@ -43,6 +46,7 @@ const TITLES = {
 
 const SUBTITLES = {
   dashboard: "Ключевые графики состояния проектов",
+  recommendations: "Next-best-actions с объяснимыми evidence и действиями",
   messages: "Лента сообщений по выбранному проекту и персоне",
   agreements: "Договоренности, извлеченные из RAG/Evidence",
   risks: "Карточки рисков и паттернов",
@@ -555,6 +559,258 @@ function renderOffers(payload, isAllProjects, moneyFormatter) {
   );
 }
 
+function formatRecommendationCategoryRu(category) {
+  const key = String(category || "").trim().toLowerCase();
+  const map = {
+    waiting_on_client: "Ожидание клиента",
+    scope_creep_change_request: "Scope creep / CR",
+    delivery_risk: "Delivery risk",
+    finance_risk: "Finance risk",
+    upsell_opportunity: "Upsell opportunity",
+    winback: "Winback",
+  };
+  return map[key] || key || "Рекомендация";
+}
+
+function formatRecommendationStatusRu(status) {
+  const key = String(status || "").trim().toLowerCase();
+  const map = {
+    new: "Новая",
+    acknowledged: "В работе",
+    done: "Выполнено",
+    dismissed: "Отклонено",
+  };
+  return map[key] || key || "Неизвестно";
+}
+
+function formatActionTypeRu(actionType) {
+  const key = String(actionType || "").trim().toLowerCase();
+  const map = {
+    create_or_update_task: "Создать / обновить задачу",
+    send_message: "Отправить сообщение",
+    set_reminder: "Поставить напоминание",
+  };
+  return map[key] || key || "Действие";
+}
+
+function renderEvidenceRefLabel(ref) {
+  if (!ref || typeof ref !== "object") return "evidence";
+  if (ref.message_id) return `Сообщение: ${ref.message_id}`;
+  if (ref.linear_issue_id) return `Linear: ${ref.linear_issue_id}`;
+  if (ref.attio_record_id) return `Attio: ${ref.attio_record_id}`;
+  if (ref.doc_url) return "Документ";
+  if (ref.rag_chunk_id) return `RAG chunk: ${ref.rag_chunk_id}`;
+  return "Источник";
+}
+
+function renderRecommendations({
+  recommendations,
+  loading,
+  isAllProjects,
+  selectedRecommendationId,
+  onSelectRecommendation,
+  onRunAction,
+  onUpdateStatus,
+  actionRunsByRecommendation,
+  actionLoading,
+  onRetryAction,
+}) {
+  if (loading) {
+    return (
+      <Card data-motion-item>
+        <CardContent className="pt-4 text-sm text-muted-foreground">Загрузка рекомендаций...</CardContent>
+      </Card>
+    );
+  }
+  if (!recommendations.length) {
+    return (
+      <Card data-motion-item>
+        <CardContent className="pt-4 text-sm text-muted-foreground">
+          Рекомендации пока не сгенерированы или скрыты evidence gating.
+        </CardContent>
+      </Card>
+    );
+  }
+
+  const selected =
+    recommendations.find((item) => item.id === selectedRecommendationId) ||
+    recommendations[0] ||
+    null;
+  const selectedEvidence = Array.isArray(selected?.evidence_refs) ? selected.evidence_refs : [];
+  const selectedActions = actionRunsByRecommendation[selected?.id] || [];
+  const selectedSignals = selected?.signal_snapshot && typeof selected.signal_snapshot === "object"
+    ? Object.keys(selected.signal_snapshot)
+    : [];
+
+  return (
+    <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(340px,420px)_1fr]">
+      <Card data-motion-item>
+        <CardHeader>
+          <CardTitle>Список рекомендаций</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-2">
+          {recommendations.map((item) => {
+            const active = item.id === selected?.id;
+            return (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => onSelectRecommendation(item.id)}
+                className={cn(
+                  "w-full rounded-md border p-3 text-left transition-colors",
+                  active ? "border-primary/50 bg-primary/5" : "hover:bg-muted/40"
+                )}
+              >
+                <div className="mb-1 flex flex-wrap items-center gap-2">
+                  {isAllProjects ? (
+                    <ProjectBadge projectId={item.project_id} projectName={item.project_name} />
+                  ) : null}
+                  <Badge variant="outline">{formatRecommendationCategoryRu(item.category)}</Badge>
+                  <Badge variant={Number(item.priority) >= 5 ? "destructive" : "secondary"}>
+                    P{Number(item.priority) || 0}
+                  </Badge>
+                  <Badge variant="outline">{formatRecommendationStatusRu(item.status)}</Badge>
+                </div>
+                <p className="text-sm font-medium">{item.title}</p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Evidence: {Number(item.evidence_count || 0)} • quality {Math.round(Number(item.evidence_quality_score || 0) * 100)}%
+                </p>
+              </button>
+            );
+          })}
+        </CardContent>
+      </Card>
+
+      <Card data-motion-item>
+        <CardHeader>
+          <CardTitle>{selected?.title || "Детали рекомендации"}</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {selected ? (
+            <>
+              <div className="flex flex-wrap gap-2">
+                <Badge variant="outline">{formatRecommendationCategoryRu(selected.category)}</Badge>
+                <Badge variant={Number(selected.priority) >= 5 ? "destructive" : "secondary"}>Приоритет {selected.priority}</Badge>
+                <Badge variant="outline">{formatRecommendationStatusRu(selected.status)}</Badge>
+                {selected.due_date ? <Badge variant="outline">Срок: {selected.due_date}</Badge> : null}
+                {selected.owner_role ? <Badge variant="outline">Роль: {selected.owner_role}</Badge> : null}
+              </div>
+
+              <div className="space-y-2 rounded-md border p-3">
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Почему я это вижу</p>
+                <p className="text-sm">{selected.rationale || "Без rationale"}</p>
+                {selected.why_now ? <p className="text-sm text-muted-foreground">{selected.why_now}</p> : null}
+                {selected.expected_impact ? <p className="text-sm">Ожидаемый эффект: {selected.expected_impact}</p> : null}
+                <p className="text-xs text-muted-foreground">
+                  Gate: {selected.evidence_gate_status || "-"} • Evidence {Number(selected.evidence_count || 0)} • Quality{" "}
+                  {Math.round(Number(selected.evidence_quality_score || 0) * 100)}%
+                </p>
+                {selected.evidence_gate_reason ? (
+                  <p className="text-xs text-muted-foreground">Причина gate: {selected.evidence_gate_reason}</p>
+                ) : null}
+                {selectedSignals.length ? (
+                  <p className="text-xs text-muted-foreground">Ключевые сигналы: {selectedSignals.join(", ")}</p>
+                ) : null}
+              </div>
+
+              <div className="space-y-2 rounded-md border p-3">
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Доказательства</p>
+                {selectedEvidence.length ? (
+                  <div className="space-y-2">
+                    {selectedEvidence.map((ref, idx) => (
+                      <div key={`${selected.id}-evidence-${idx}`} className="rounded border p-2 text-xs">
+                        <p className="font-medium">{renderEvidenceRefLabel(ref)}</p>
+                        {ref?.doc_url ? (
+                          <a href={ref.doc_url} target="_blank" rel="noreferrer" className="text-primary underline">
+                            {ref.doc_url}
+                          </a>
+                        ) : null}
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground">Evidence не найден.</p>
+                )}
+              </div>
+
+              <div className="space-y-2">
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Действия</p>
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    size="sm"
+                    disabled={actionLoading}
+                    onClick={() => onRunAction(selected.id, "create_or_update_task", { due_date: selected.due_date })}
+                  >
+                    Создать / обновить задачу
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={actionLoading}
+                    onClick={() => onRunAction(selected.id, "send_message", { message: selected.suggested_template || selected.title })}
+                  >
+                    Отправить сообщение
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={actionLoading}
+                    onClick={() => onRunAction(selected.id, "set_reminder", { remind_at: selected.due_date })}
+                  >
+                    Поставить напоминание
+                  </Button>
+                </div>
+
+                <div className="flex flex-wrap gap-2">
+                  <Button size="sm" variant="ghost" onClick={() => onUpdateStatus(selected.id, "acknowledged")}>
+                    В работу
+                  </Button>
+                  <Button size="sm" variant="ghost" onClick={() => onUpdateStatus(selected.id, "done")}>
+                    Выполнено
+                  </Button>
+                  <Button size="sm" variant="ghost" onClick={() => onUpdateStatus(selected.id, "dismissed")}>
+                    Отклонить
+                  </Button>
+                </div>
+              </div>
+
+              <div className="space-y-2 rounded-md border p-3">
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Лог действий</p>
+                {selectedActions.length ? (
+                  selectedActions.map((run) => {
+                    const canRetry = run.status === "failed" && Number(run.attempts || 0) < Number(run.max_retries || 0);
+                    return (
+                      <div key={run.id} className="rounded border p-2 text-xs">
+                        <div className="mb-1 flex flex-wrap items-center gap-2">
+                          <Badge variant="outline">{formatActionTypeRu(run.action_type)}</Badge>
+                          <Badge variant={run.status === "succeeded" ? "secondary" : run.status === "failed" ? "destructive" : "outline"}>
+                            {run.status}
+                          </Badge>
+                          <span className="text-muted-foreground">attempts: {run.attempts}/{run.max_retries}</span>
+                        </div>
+                        {run.error_message ? <p className="text-destructive">{run.error_message}</p> : null}
+                        {canRetry ? (
+                          <Button size="sm" variant="ghost" onClick={() => onRetryAction(run.id)}>
+                            Повторить
+                          </Button>
+                        ) : null}
+                      </div>
+                    );
+                  })
+                ) : (
+                  <p className="text-sm text-muted-foreground">Действия по этой рекомендации ещё не выполнялись.</p>
+                )}
+              </div>
+            </>
+          ) : (
+            <p className="text-sm text-muted-foreground">Выберите рекомендацию из списка слева.</p>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
 function MessagesSection({ messagesPayload, selectedPersonId, setSelectedPersonId, loadingMessages }) {
   const project = messagesPayload?.project || null;
   const persons = Array.isArray(messagesPayload?.persons) ? messagesPayload.persons : [];
@@ -654,10 +910,14 @@ export default function ControlTowerSectionPage({ section }) {
   const { selectedProjectIds, selectedProject, isAllProjects, loadingProjects } = useProjectPortfolio();
   const { moneyFormatter, numberFormatter } = useFormatters();
   const [selectedPersonId, setSelectedPersonId] = useState("");
+  const [selectedRecommendationId, setSelectedRecommendationId] = useState("");
+  const [actionsByRecommendation, setActionsByRecommendation] = useState({});
+  const [recommendationActionPending, setRecommendationActionPending] = useState(false);
+  const [recommendationActionError, setRecommendationActionError] = useState("");
 
   const overview = usePortfolioOverview({
     projectIds: selectedProjectIds,
-    enabled: normalizedSection !== "messages" && selectedProjectIds.length > 0,
+    enabled: !["messages", "recommendations"].includes(normalizedSection) && selectedProjectIds.length > 0,
     messageLimit: 80,
     cardLimit: 30,
   });
@@ -667,6 +927,13 @@ export default function ControlTowerSectionPage({ section }) {
     contactGlobalId: selectedPersonId,
     enabled: normalizedSection === "messages" && Boolean(selectedProject?.id),
     limit: 300,
+  });
+
+  const recommendations = useRecommendationsV2({
+    projectIds: selectedProjectIds,
+    enabled: normalizedSection === "recommendations" && selectedProjectIds.length > 0,
+    allProjects: isAllProjects,
+    limit: 120,
   });
 
   useEffect(() => {
@@ -681,6 +948,91 @@ export default function ControlTowerSectionPage({ section }) {
       setSelectedPersonId(messages.payload?.selected_contact_global_id || persons[0]?.contact_global_id || "");
     }
   }, [normalizedSection, messages.payload, selectedPersonId]);
+
+  useEffect(() => {
+    if (normalizedSection !== "recommendations") return;
+    const list = Array.isArray(recommendations.items) ? recommendations.items : [];
+    if (!list.length) {
+      if (selectedRecommendationId) setSelectedRecommendationId("");
+      return;
+    }
+    const valid = list.some((item) => item.id === selectedRecommendationId);
+    if (!valid) {
+      setSelectedRecommendationId(list[0].id);
+    }
+  }, [normalizedSection, recommendations.items, selectedRecommendationId]);
+
+  useEffect(() => {
+    if (normalizedSection !== "recommendations") return;
+    if (!selectedRecommendationId) return;
+    let cancelled = false;
+    recommendations
+      .listActions(selectedRecommendationId, 30)
+      .then((rows) => {
+        if (cancelled) return;
+        setActionsByRecommendation((prev) => ({
+          ...prev,
+          [selectedRecommendationId]: rows,
+        }));
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setActionsByRecommendation((prev) => ({
+          ...prev,
+          [selectedRecommendationId]: [],
+        }));
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [normalizedSection, selectedRecommendationId, recommendations.listActions]);
+
+  async function handleRecommendationStatusUpdate(recommendationId, nextStatus) {
+    try {
+      setRecommendationActionError("");
+      await recommendations.updateStatus(recommendationId, nextStatus);
+    } catch (error) {
+      setRecommendationActionError(error?.message || "Не удалось обновить статус рекомендации");
+    }
+  }
+
+  async function handleRecommendationAction(recommendationId, actionType, actionPayload = {}) {
+    try {
+      setRecommendationActionPending(true);
+      setRecommendationActionError("");
+      await recommendations.runAction(recommendationId, actionType, actionPayload);
+      const runs = await recommendations.listActions(recommendationId, 30);
+      setActionsByRecommendation((prev) => ({
+        ...prev,
+        [recommendationId]: runs,
+      }));
+      await recommendations.reload();
+    } catch (error) {
+      setRecommendationActionError(error?.message || "Не удалось выполнить действие по рекомендации");
+    } finally {
+      setRecommendationActionPending(false);
+    }
+  }
+
+  async function handleRecommendationActionRetry(actionRunId) {
+    try {
+      setRecommendationActionPending(true);
+      setRecommendationActionError("");
+      await recommendations.retryAction(actionRunId);
+      if (selectedRecommendationId) {
+        const runs = await recommendations.listActions(selectedRecommendationId, 30);
+        setActionsByRecommendation((prev) => ({
+          ...prev,
+          [selectedRecommendationId]: runs,
+        }));
+      }
+      await recommendations.reload();
+    } catch (error) {
+      setRecommendationActionError(error?.message || "Не удалось повторить действие");
+    } finally {
+      setRecommendationActionPending(false);
+    }
+  }
 
   if (loading || !session || loadingProjects) {
     return (
@@ -710,6 +1062,20 @@ export default function ControlTowerSectionPage({ section }) {
     <PageShell title={TITLES[normalizedSection]} subtitle={SUBTITLES[normalizedSection]}>
       <div className="space-y-4">
         {normalizedSection === "dashboard" ? renderDashboardCharts(overviewPayload, moneyFormatter, numberFormatter) : null}
+        {normalizedSection === "recommendations"
+          ? renderRecommendations({
+            recommendations: recommendations.items,
+            loading: recommendations.loading,
+            isAllProjects,
+            selectedRecommendationId,
+            onSelectRecommendation: setSelectedRecommendationId,
+            onRunAction: handleRecommendationAction,
+            onUpdateStatus: handleRecommendationStatusUpdate,
+            actionRunsByRecommendation: actionsByRecommendation,
+            actionLoading: recommendationActionPending,
+            onRetryAction: handleRecommendationActionRetry,
+          })
+          : null}
         {normalizedSection === "messages"
           ? (
             <MessagesSection
@@ -725,7 +1091,9 @@ export default function ControlTowerSectionPage({ section }) {
         {normalizedSection === "finance" ? renderFinance(overviewPayload?.finances, moneyFormatter, numberFormatter) : null}
         {normalizedSection === "offers" ? renderOffers(overviewPayload, isAllProjects, moneyFormatter) : null}
 
-        {(overview.error || messages.error) ? <Toast type="error" message={overview.error || messages.error} /> : null}
+        {(overview.error || messages.error || recommendations.error || recommendationActionError)
+          ? <Toast type="error" message={overview.error || messages.error || recommendations.error || recommendationActionError} />
+          : null}
       </div>
     </PageShell>
   );
