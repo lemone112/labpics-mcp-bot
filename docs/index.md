@@ -1,27 +1,20 @@
-# Labpics Web Platform — docs index (MVP)
+# Labpics Web Platform — документация (MVP)
 
-This directory is the canonical documentation for **Labpics Web Platform (MVP)**.
+Этот каталог — **каноническая документация** для web‑first MVP.
 
-## Quick links
+## Быстрые ссылки
 
-- Product
-  - [Product overview](./product/overview.md)
-  - [Architecture decisions (MVP)](./product/decisions.md)
-- Architecture
-  - [System architecture (Web-first)](./architecture.md)
-  - [API reference (MVP)](./api.md)
-- Data
-  - [Data model & tables](./data-model.md)
-  - [RAG & embeddings](./rag.md)
-- Operations
-  - [Pipelines & jobs](./pipelines.md)
-  - [Deployment](./deployment.md)
-  - [Runbooks](./runbooks.md)
+- [Product overview](product/overview.md)
+- [Architecture](architecture.md)
+- [Deployment](deployment.md)
+- [API reference](api.md)
+- [Pipelines & jobs](pipelines.md)
+- [RAG & embeddings](rag.md)
+- [Runbooks](runbooks.md)
+- [Specs](specs/README.md)
 
-## Repo structure (high level)
+## Как читать
 
-- `server/` — Fastify API + jobs + DB migrations
-- `web/` — Next.js UI
-- `docker-compose.yml` — local/prod composition (db + server + web)
-
-> Legacy Cloudflare Workers are referenced in older history, but **this branch is Web-first**.
+1. Начни с `product/overview.md` и `architecture.md`.
+2. Для запуска/обслуживания см. `deployment.md` и `runbooks.md`.
+3. Для разработки и интеграций см. `api.md` и `pipelines.md`.

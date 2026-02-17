@@ -1,88 +1,42 @@
 # API reference (MVP)
 
-Base URL: `NEXT_PUBLIC_API_BASE_URL` (default `http://localhost:8080`).
+Base URL: `NEXT_PUBLIC_API_BASE_URL` (по умолчанию `http://localhost:8080`).
 
-All responses include `request_id` (and `x-request-id` header).
-
-## Health
-
-### `GET /health`
-Public.
+Все ответы включают `request_id` (а также заголовок `x-request-id`) — используйте его для корреляции логов.
 
 ## Auth
 
-### `POST /auth/login`
-Public.
+- `POST /auth/login`
+- `POST /auth/logout`
+- `GET /auth/me`
 
-Body:
-- `username` (string)
-- `password` (string)
+### Notes
 
-Sets cookie `SESSION_COOKIE_NAME` (default `sid`).
-
-### `POST /auth/logout`
-Auth required.
-
-Clears cookie and deletes session.
-
-### `GET /auth/me`
-Public.
-
-Returns either `{ authenticated: false }` or session info.
+- Механизм сессии/куки и CORS зависят от переменных окружения (см. `.env.example`).
 
 ## Projects
 
-### `GET /projects`
-Auth required.
-
-Returns:
-- `projects[]`
-- `active_project_id`
-
-### `POST /projects`
-Auth required.
-
-Body:
-- `name` (2..160 chars)
-
-### `POST /projects/:id/select`
-Auth required.
-
-Sets `sessions.active_project_id`.
+- `GET /projects`
+- `POST /projects`
+- `POST /projects/:id/select`
 
 ## Jobs
 
-### `POST /jobs/chatwoot/sync`
-Auth required.
-
-Runs Chatwoot poll sync. Writes:
-- `cw_conversations`
-- `cw_messages`
-- creates `rag_chunks` (status `pending`)
-- updates `sync_watermarks`
-
-### `POST /jobs/embeddings/run`
-Auth required.
-
-Embeds `rag_chunks` with `embedding_status='pending'` → `ready|failed`.
-
-### `GET /jobs/status`
-Auth required.
-
-Returns:
-- latest `job_runs` per job
-- `rag_counts` by `embedding_status`
-- latest `sync_watermarks`
+- `POST /jobs/chatwoot/sync`
+- `POST /jobs/embeddings/run`
+- `GET /jobs/status`
 
 ## Search
 
-### `POST /search`
-Auth required.
+- `POST /search`
 
-Body:
-- `query` (string, required)
-- `topK` (int, 1..50, default 10)
+## Data review
 
-Performs cosine-distance vector search over `rag_chunks` where `embedding_status='ready'`.
+- `GET /contacts`
+- `GET /conversations`
+- `GET /messages`
 
-> Note: current MVP search is not project-scoped in SQL. If you need strict per-project isolation, add `project_id` to `rag_chunks` and filter by `sessions.active_project_id`.
+## Ошибки и диагностика
+
+- Если клиент получает 401/403: проверьте `AUTH_*` переменные и домен/куки настройки.
+- Если UI не видит API: проверьте `NEXT_PUBLIC_API_BASE_URL` и CORS (`CORS_ORIGIN`).
