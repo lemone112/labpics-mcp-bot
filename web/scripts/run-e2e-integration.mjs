@@ -38,7 +38,13 @@ function runCommand(command, args, { cwd, env = {}, allowFailure = false } = {})
       stdio: "inherit",
     });
 
-    child.on("error", (error) => reject(error));
+    child.on("error", (error) => {
+      if (allowFailure) {
+        resolve(127);
+        return;
+      }
+      reject(error);
+    });
     child.on("close", (code) => {
       if (code === 0 || allowFailure) {
         resolve(code || 0);
@@ -84,6 +90,7 @@ async function cleanupDbStack() {
 }
 
 async function main() {
+  let dockerUsed = false;
   const strictDocker = String(process.env.E2E_REQUIRE_DOCKER || "").trim() === "1";
   const hasDocker = await commandAvailable("docker");
   if (!hasDocker) {
@@ -99,6 +106,7 @@ async function main() {
     return;
   }
 
+  dockerUsed = true;
   await cleanupDbStack();
   await runCommand("docker", ["compose", "up", "-d", "db"], { cwd: repoRoot, env: composeEnv });
   await waitForDbReady();
@@ -130,15 +138,15 @@ async function main() {
       PLAYWRIGHT_AUTH_CREDENTIALS: authCredentials,
     },
   });
+  if (!keepDb && dockerUsed) {
+    await cleanupDbStack();
+  }
 }
 
-main()
-  .catch((error) => {
-    console.error(error);
-    process.exitCode = 1;
-  })
-  .finally(async () => {
-    if (!keepDb) {
-      await cleanupDbStack();
-    }
-  });
+main().catch(async (error) => {
+  console.error(error);
+  process.exitCode = 1;
+  if (!keepDb) {
+    await cleanupDbStack();
+  }
+});
