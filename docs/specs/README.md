@@ -32,6 +32,18 @@
 - Операционные заметки
 - Критерии приёмки
 
+## Индекс
+
+- [0001 — Мультипроектная изоляция памяти (RAG)](./0001-multiproject-rag-scope.md)
+- [0002 — Commitments v1](./0002-commitments-v1.md)
+- [0003 — Risks v1](./0003-risks-v1.md)
+- [0004 — Weekly digest v1](./0004-weekly-digest-v1.md)
+- [0005 — Интеграции Linear/Attio: preview/apply](./0005-integrations-linear-attio-preview.md)
+- [0006 — Проекты, клиенты и связывание идентичностей](./0006-projects-clients-and-links.md)
+- [0007 — Jobs cadence и контроль стоимости](./0007-jobs-cadence-and-cost-control.md)
+- [0008 — Аудит, приватность и retention](./0008-audit-privacy-retention.md)
+- [0009 — Web IA: страницы и навигация](./0009-web-ia-pages-navigation.md)
+
 ## Индекс (Roadmap CRM/PM/Sales)
 
 - [0010 — Accounts & Opportunities (CRM ядро) v1](./0010-accounts-and-opportunities-v1.md)

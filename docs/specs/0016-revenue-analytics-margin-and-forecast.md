@@ -1,31 +1,59 @@
-# Спека 0016 — Revenue Analytics / Margin / Forecast (DRAFT)
+# Спека 0016 — Revenue Analytics / Margin / Forecast
 
 Статус: **draft**
 
+Дата: 2026-02-17
+
+> Roadmap: CRM/PM/Sales
+
+
 ## Цель
 
-Дать руководителю студии финансовую управляемость:
+Дать финансовую управляемость:
 
-- прогноз выручки по воронке
+- прогноз выручки (pipeline)
 - план/факт по проектам
 - маржинальность
-- вклад допродаж
+- вклад допродаж/кампаний
 
-## Метрики
+## Сущности
 
-- win rate
-- cycle time
-- ARPA/средний чек
-- expansion revenue
-- gross margin (план/факт)
+### revenue_snapshot
+- `scope` (studio/account/project)
+- `period` (month)
+- `pipeline_amount`
+- `commit_amount`
+- `won_amount`
+- `created_at`
+
+### cost_model (v1 простой)
+- hours_logged * rate
+- tool_costs (фикс)
+
+## Forecast
+
+- `expected_revenue = sum(amount_estimate * probability)` по open opportunities в горизонте.
+- категории:
+  - pipeline (0.1–0.49)
+  - best_case (0.5–0.79)
+  - commit (0.8–1)
+
+## Маржа
+
+- `gross_margin = revenue - costs`
+
+## Атрибуция допродаж
+
+- opportunity.offer может ссылаться на signal_id и campaign_id.
+- считаем expansion revenue.
 
 ## UX
 
-- dashboard: pipeline + forecast categories
-- разрезы: по аккаунту, индустрии, владельцу
+- Dashboard 30/60/90
+- Drill-down до аккаунтов и сделок
 
 ## Критерии приёмки
 
-- Есть агрегаты pipeline по стадиям.
-- Есть прогноз на 30/60/90.
-- Есть простая маржа по проектам.
+- Есть pipeline агрегаты.
+- Есть forecast 30/60/90.
+- Есть маржа по проектам (простая).
