@@ -45,35 +45,14 @@ Body:
 On success sets session cookie.
 Also sets CSRF cookie.
 
-### `GET /auth/signup/status`
+### Signup endpoints
 
-Returns signup availability:
+Signup and Telegram confirmation flow are currently disabled by product decision.
 
-- `enabled`
-- `has_telegram_token`
-- `owner_bound`
-
-### `POST /auth/signup/start`
-
-Body:
-
-- `username` (`[a-z0-9._-]{3,32}`)
-- `password` (8..128 chars)
-
-Creates a pending signup request and sends a 6-digit PIN to bound Telegram owner.
-
-### `POST /auth/signup/confirm`
-
-Body:
-
-- `signup_request_id` (UUID)
-- `pin` (6 digits)
-
-On success creates user, starts session, sets cookie.
-
-### `POST /auth/telegram/webhook`
-
-Telegram bot webhook endpoint used for owner binding (`/bind`) and status (`/whoami`).
+- `GET /auth/signup/status` returns `enabled: false`
+- `POST /auth/signup/start` returns `410 signup_disabled`
+- `POST /auth/signup/confirm` returns `410 signup_disabled`
+- `POST /auth/telegram/webhook` returns `410 telegram_disabled`
 
 ### `POST /auth/logout`
 

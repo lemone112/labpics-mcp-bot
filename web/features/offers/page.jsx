@@ -28,7 +28,7 @@ export default function OffersFeaturePage() {
     try {
       const [offersResp, outboundResp] = await Promise.all([apiFetch("/offers"), apiFetch("/outbound")]);
       setOffers(Array.isArray(offersResp?.offers) ? offersResp.offers : []);
-      setOutbound(Array.isArray(outboundResp?.messages) ? outboundResp.messages : []);
+      setOutbound(Array.isArray(outboundResp?.outbound) ? outboundResp.outbound : []);
     } catch (error) {
       setToast({ type: "error", message: error?.message || "Failed to load offers/outbox" });
     } finally {

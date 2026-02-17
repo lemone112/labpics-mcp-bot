@@ -175,31 +175,24 @@ Each runbook uses the same structure:
 
 ---
 
-## Runbook: Signup disabled / PIN flow unavailable
+## Runbook: Login credentials invalid / secret format
 
 **Symptom**
-- On `/login`, account creation flow is disabled or cannot send PIN.
+- On `/login`, valid credentials are rejected.
 
 **Checks**
-- `GET /auth/signup/status` response:
-  - `has_telegram_token`
-  - `owner_bound`
-- Server env:
-  - `TELEGRAM_BOT_TOKEN`
-  - `TELEGRAM_WEBHOOK_SECRET` (if used)
-  - `SIGNUP_PIN_SECRET` (optional)
-- Telegram owner binding:
-  - send `/bind` to bot and verify owner is stored.
+- Verify `AUTH_CREDENTIALS` is configured in format `login:password`.
+- Ensure no accidental leading/trailing spaces in secret value.
+- Confirm deploy workflow rendered `.env` with `AUTH_CREDENTIALS`.
 
 **Fix**
-- Configure Telegram bot token.
-- Bind owner via webhook flow (`/bind` from target owner account).
-- Retry `POST /auth/signup/start`.
+- Update secret value and redeploy.
+- Keep `AUTH_USERNAME`/`AUTH_PASSWORD` only as optional fallback.
 
 **Evidence to capture**
-- `/auth/signup/status` payload
-- Telegram webhook delivery status
-- Backend logs around `/auth/telegram/webhook` and `/auth/signup/start`
+- `/auth/login` response payload
+- Effective auth env values (masked)
+- Backend logs around login validation
 
 ---
 

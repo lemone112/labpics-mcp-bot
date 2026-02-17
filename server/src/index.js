@@ -1,7 +1,6 @@
 import "dotenv/config";
 import crypto from "node:crypto";
 import path from "node:path";
-import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
 
 import Fastify from "fastify";
@@ -9,7 +8,6 @@ import cookie from "@fastify/cookie";
 import cors from "@fastify/cors";
 
 import { createDbPool } from "./lib/db.js";
-import { fetchWithRetry } from "./lib/http.js";
 import { ApiError, fail, parseLimit, sendError, sendOk, toApiError } from "./lib/api-contract.js";
 import { requireProjectScope } from "./lib/scope.js";
 import { applyMigrations } from "../db/migrate-lib.js";
@@ -43,10 +41,21 @@ function requiredEnv(name) {
 }
 
 function getAuthConfig() {
-  const username = process.env.AUTH_USERNAME || process.env.ADMIN_USERNAME;
-  const password = process.env.AUTH_PASSWORD || process.env.ADMIN_PASSWORD;
+  const packed = String(process.env.AUTH_CREDENTIALS || "").trim();
+  if (packed) {
+    const idx = packed.indexOf(":");
+    const username = idx >= 0 ? packed.slice(0, idx).trim() : "";
+    const password = idx >= 0 ? packed.slice(idx + 1) : "";
+    if (!username || !password) {
+      throw new Error("Invalid AUTH_CREDENTIALS format. Expected \"login:password\".");
+    }
+    return { username, password };
+  }
+
+  const username = String(process.env.AUTH_USERNAME || process.env.ADMIN_USERNAME || "").trim();
+  const password = String(process.env.AUTH_PASSWORD || process.env.ADMIN_PASSWORD || "");
   if (!username || !password) {
-    throw new Error("Missing auth credentials. Set AUTH_USERNAME and AUTH_PASSWORD.");
+    throw new Error("Missing auth credentials. Set AUTH_CREDENTIALS in format \"login:password\".");
   }
   return { username, password };
 }
@@ -74,70 +83,21 @@ function normalizeAccountUsername(value) {
   return String(value || "").trim().toLowerCase();
 }
 
-function getTelegramConfig() {
-  const botToken = String(process.env.TELEGRAM_BOT_TOKEN || process.env.TELEGRAM_API_TOKEN || "").trim();
-  const webhookSecret = String(process.env.TELEGRAM_WEBHOOK_SECRET || "").trim();
-  const pinSecret = String(process.env.SIGNUP_PIN_SECRET || "").trim();
-  return {
-    botToken,
-    webhookSecret,
-    pinSecret,
-  };
-}
-
-function parseUserId(value) {
-  const parsed = Number.parseInt(String(value || ""), 10);
-  return Number.isFinite(parsed) ? parsed : null;
-}
-
-function parsePin(value) {
-  const pin = String(value || "").trim();
-  return /^\d{6}$/.test(pin) ? pin : null;
-}
-
 function toBoundedInt(value, fallback, min, max) {
   const parsed = Number.parseInt(String(value || ""), 10);
   if (!Number.isFinite(parsed)) return fallback;
   return Math.max(min, Math.min(parsed, max));
 }
 
-const scryptAsync = promisify(crypto.scrypt);
-
-async function hashPassword(password) {
-  const salt = crypto.randomBytes(16).toString("hex");
-  const derived = await scryptAsync(String(password || ""), salt, 64);
-  return `scrypt$${salt}$${Buffer.from(derived).toString("hex")}`;
-}
-
-async function verifyPassword(password, encodedHash) {
-  const parts = String(encodedHash || "").split("$");
-  if (parts.length !== 3 || parts[0] !== "scrypt") return false;
-  const [, salt, expectedHex] = parts;
-  if (!salt || !expectedHex) return false;
-  const derived = await scryptAsync(String(password || ""), salt, 64);
-  const actual = Buffer.from(derived).toString("hex");
-  return timingSafeStringEqual(actual, expectedHex);
-}
-
-function hashPin(pin, salt, secret = "") {
-  return crypto
-    .createHash("sha256")
-    .update(`${salt}:${pin}:${secret}`)
-    .digest("hex");
-}
-
 async function main() {
   const databaseUrl = requiredEnv("DATABASE_URL");
   const auth = getAuthConfig();
-  const telegram = getTelegramConfig();
   const port = Number.parseInt(process.env.PORT || "8080", 10);
   const host = process.env.HOST || "0.0.0.0";
   const cookieName = process.env.SESSION_COOKIE_NAME || "sid";
   const csrfCookieName = process.env.CSRF_COOKIE_NAME || "csrf_token";
   const isProd = (process.env.NODE_ENV || "").toLowerCase() === "production";
   const corsOrigin = process.env.CORS_ORIGIN || "http://localhost:3000";
-  const signupPinTtlMinutes = toBoundedInt(process.env.SIGNUP_PIN_TTL_MINUTES, 10, 1, 30);
-  const signupPinMaxAttempts = toBoundedInt(process.env.SIGNUP_PIN_MAX_ATTEMPTS, 8, 1, 20);
   const loginRateLimitMaxAttempts = toBoundedInt(process.env.LOGIN_RATE_LIMIT_MAX_ATTEMPTS, 10, 3, 100);
   const loginRateLimitWindowMinutes = toBoundedInt(process.env.LOGIN_RATE_LIMIT_WINDOW_MINUTES, 15, 1, 1440);
 
@@ -234,47 +194,6 @@ async function main() {
     return { sid, csrfToken };
   }
 
-  async function getAppSetting(key) {
-    const { rows } = await pool.query("SELECT value FROM app_settings WHERE key = $1 LIMIT 1", [key]);
-    return rows[0]?.value || null;
-  }
-
-  async function setAppSetting(key, value) {
-    await pool.query(
-      `
-        INSERT INTO app_settings(key, value, updated_at)
-        VALUES($1, $2, now())
-        ON CONFLICT (key)
-        DO UPDATE SET value = EXCLUDED.value, updated_at = now()
-      `,
-      [key, String(value)]
-    );
-  }
-
-  async function sendTelegramMessage(chatId, text, logger) {
-    if (!telegram.botToken) {
-      throw new Error("telegram_bot_token_missing");
-    }
-
-    const response = await fetchWithRetry(`https://api.telegram.org/bot${telegram.botToken}/sendMessage`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        chat_id: chatId,
-        text,
-        disable_web_page_preview: true,
-      }),
-      timeoutMs: 15_000,
-      retries: 2,
-      logger,
-    });
-
-    if (!response.ok) {
-      const payload = await response.text();
-      throw new Error(`telegram_send_failed:${response.status}:${payload.slice(0, 200)}`);
-    }
-  }
-
   function routePathForAuthCheck(pathName) {
     if (pathName === "/v1") return "/";
     if (pathName.startsWith("/v1/")) return pathName.slice(3);
@@ -369,7 +288,7 @@ async function main() {
 
   registerPost("/auth/login", async (request, reply) => {
     const body = request.body && typeof request.body === "object" ? request.body : {};
-    const username = String(body?.username || "").trim();
+    const username = normalizeAccountUsername(body?.username);
     const password = String(body?.password || "");
     if (!username || !password) {
       return sendError(reply, request.requestId, new ApiError(400, "missing_credentials", "Missing credentials"));
@@ -377,29 +296,11 @@ async function main() {
 
     assertLoginRateLimit(request.ip, username);
 
-    let sessionUsername = null;
-    if (timingSafeStringEqual(username, auth.username) && timingSafeStringEqual(password, auth.password)) {
-      sessionUsername = auth.username;
-    } else {
-      const normalizedUsername = normalizeAccountUsername(username);
-      if (normalizedUsername) {
-        const { rows } = await pool.query(
-          `
-            SELECT username, password_hash
-            FROM app_users
-            WHERE username = $1
-            LIMIT 1
-          `,
-          [normalizedUsername]
-        );
-        if (rows[0]) {
-          const validPassword = await verifyPassword(password, rows[0].password_hash);
-          if (validPassword) {
-            sessionUsername = rows[0].username;
-          }
-        }
-      }
-    }
+    const authUsername = normalizeAccountUsername(auth.username);
+    const sessionUsername =
+      timingSafeStringEqual(username, authUsername) && timingSafeStringEqual(password, auth.password)
+        ? auth.username
+        : null;
 
     if (!sessionUsername) {
       recordLoginFailure(request.ip, username);
@@ -419,216 +320,24 @@ async function main() {
   });
 
   registerGet("/auth/signup/status", async (request, reply) => {
-    const ownerUserId = await getAppSetting("telegram_owner_user_id");
-    const ownerChatId = await getAppSetting("telegram_owner_chat_id");
-    const hasTelegramToken = Boolean(telegram.botToken);
-    const ownerBound = Boolean(ownerUserId && ownerChatId);
     return sendOk(reply, request.requestId, {
-      enabled: hasTelegramToken && ownerBound,
-      has_telegram_token: hasTelegramToken,
-      owner_bound: ownerBound,
+      enabled: false,
+      has_telegram_token: false,
+      owner_bound: false,
+      reason: "signup_disabled",
     });
   });
 
   registerPost("/auth/signup/start", async (request, reply) => {
-    if (!telegram.botToken) {
-      return sendError(reply, request.requestId, new ApiError(503, "telegram_not_configured", "Telegram not configured"));
-    }
-
-    const ownerUserId = await getAppSetting("telegram_owner_user_id");
-    const ownerChatId = await getAppSetting("telegram_owner_chat_id");
-    if (!ownerUserId || !ownerChatId) {
-      return sendError(reply, request.requestId, new ApiError(409, "telegram_owner_not_bound", "Telegram owner not bound"));
-    }
-
-    const body = request.body && typeof request.body === "object" ? request.body : {};
-    const username = normalizeAccountUsername(body?.username);
-    const password = String(body?.password || "");
-
-    if (!/^[a-z0-9._-]{3,32}$/.test(username)) {
-      return sendError(reply, request.requestId, new ApiError(400, "invalid_username", "Invalid username"));
-    }
-    if (password.length < 8 || password.length > 128) {
-      return sendError(reply, request.requestId, new ApiError(400, "invalid_password", "Invalid password"));
-    }
-
-    const existingUser = await pool.query("SELECT id FROM app_users WHERE username = $1 LIMIT 1", [username]);
-    if (existingUser.rows[0]) {
-      return sendError(reply, request.requestId, new ApiError(409, "username_taken", "Username already taken"));
-    }
-
-    await pool.query("DELETE FROM signup_requests WHERE used_at IS NOT NULL OR expires_at < now()");
-    await pool.query("DELETE FROM signup_requests WHERE username = $1 AND used_at IS NULL", [username]);
-
-    const passwordHash = await hashPassword(password);
-    const pin = String(crypto.randomInt(0, 1_000_000)).padStart(6, "0");
-    const pinSalt = crypto.randomBytes(16).toString("hex");
-    const pinHash = hashPin(pin, pinSalt, telegram.pinSecret);
-
-    const { rows } = await pool.query(
-      `
-        INSERT INTO signup_requests(username, password_hash, pin_hash, pin_salt, expires_at)
-        VALUES($1, $2, $3, $4, now() + ($5::text || ' minutes')::interval)
-        RETURNING id, expires_at
-      `,
-      [username, passwordHash, pinHash, pinSalt, signupPinTtlMinutes]
-    );
-    const signupRequest = rows[0];
-
-    try {
-      const message = [
-        "New account signup request",
-        `Username: ${username}`,
-        `PIN: ${pin}`,
-        `Expires in: ${signupPinTtlMinutes} min`,
-        "",
-        "If this is not expected, ignore this message.",
-      ].join("\n");
-      await sendTelegramMessage(ownerChatId, message, request.log);
-    } catch (error) {
-      await pool.query("DELETE FROM signup_requests WHERE id = $1", [signupRequest.id]);
-      request.log.error({ err: String(error?.message || error), request_id: request.requestId }, "failed to send signup pin");
-      return sendError(reply, request.requestId, new ApiError(502, "telegram_send_failed", "Failed to send Telegram PIN"));
-    }
-
-    return sendOk(reply, request.requestId, {
-      signup_request_id: signupRequest.id,
-      expires_at: signupRequest.expires_at,
-      message: "pin_sent",
-    });
+    return sendError(reply, request.requestId, new ApiError(410, "signup_disabled", "Signup is disabled"));
   });
 
   registerPost("/auth/signup/confirm", async (request, reply) => {
-    const body = request.body && typeof request.body === "object" ? request.body : {};
-    const signupRequestId = String(body?.signup_request_id || body?.request_id || "").trim();
-    const pin = parsePin(body?.pin);
-    if (!/^[0-9a-f-]{36}$/i.test(signupRequestId) || !pin) {
-      return sendError(reply, request.requestId, new ApiError(400, "invalid_payload", "Invalid payload"));
-    }
-
-    const { rows } = await pool.query(
-      `
-        SELECT id, username, password_hash, pin_hash, pin_salt, attempt_count, expires_at, used_at
-        FROM signup_requests
-        WHERE id = $1
-        LIMIT 1
-      `,
-      [signupRequestId]
-    );
-    const signupRequest = rows[0];
-    if (!signupRequest || signupRequest.used_at) {
-      return sendError(reply, request.requestId, new ApiError(400, "signup_request_invalid", "Signup request invalid"));
-    }
-    if (new Date(signupRequest.expires_at).getTime() < Date.now()) {
-      await pool.query("UPDATE signup_requests SET used_at = now() WHERE id = $1", [signupRequest.id]);
-      return sendError(reply, request.requestId, new ApiError(400, "pin_expired", "PIN expired"));
-    }
-    if (signupRequest.attempt_count >= signupPinMaxAttempts) {
-      return sendError(reply, request.requestId, new ApiError(429, "pin_attempts_exceeded", "PIN attempts exceeded"));
-    }
-
-    const expectedPinHash = hashPin(pin, signupRequest.pin_salt, telegram.pinSecret);
-    if (!timingSafeStringEqual(expectedPinHash, signupRequest.pin_hash)) {
-      const nextAttempts = signupRequest.attempt_count + 1;
-      await pool.query(
-        `
-          UPDATE signup_requests
-          SET attempt_count = $2,
-              used_at = CASE WHEN $2 >= $3 THEN now() ELSE used_at END
-          WHERE id = $1
-        `,
-        [signupRequest.id, nextAttempts, signupPinMaxAttempts]
-      );
-      return sendError(reply, request.requestId, new ApiError(401, "invalid_pin", "Invalid PIN"));
-    }
-
-    const insertResult = await pool.query(
-      `
-        INSERT INTO app_users(username, password_hash)
-        VALUES($1, $2)
-        ON CONFLICT (username) DO NOTHING
-        RETURNING id, username
-      `,
-      [signupRequest.username, signupRequest.password_hash]
-    );
-    if (!insertResult.rows[0]) {
-      await pool.query("UPDATE signup_requests SET used_at = now() WHERE id = $1", [signupRequest.id]);
-      return sendError(reply, request.requestId, new ApiError(409, "username_taken", "Username already taken"));
-    }
-
-    await pool.query("UPDATE signup_requests SET used_at = now() WHERE id = $1", [signupRequest.id]);
-    const { sid, csrfToken } = await createSession(insertResult.rows[0].username);
-    reply.setCookie(cookieName, sid, cookieOptions);
-    reply.setCookie(csrfCookieName, csrfToken, csrfCookieOptions);
-    return sendOk(reply, request.requestId, {
-      username: insertResult.rows[0].username,
-      active_project_id: null,
-      csrf_cookie_name: csrfCookieName,
-    });
+    return sendError(reply, request.requestId, new ApiError(410, "signup_disabled", "Signup is disabled"));
   });
 
   registerPost("/auth/telegram/webhook", async (request, reply) => {
-    if (!telegram.botToken) {
-      return sendError(reply, request.requestId, new ApiError(503, "telegram_not_configured", "Telegram not configured"));
-    }
-
-    const headerSecret = String(request.headers["x-telegram-bot-api-secret-token"] || "");
-    const querySecret = String(request.query?.secret || "");
-    if (telegram.webhookSecret && headerSecret !== telegram.webhookSecret && querySecret !== telegram.webhookSecret) {
-      return sendError(reply, request.requestId, new ApiError(401, "invalid_webhook_secret", "Invalid webhook secret"));
-    }
-
-    const update = request.body && typeof request.body === "object" ? request.body : {};
-    const message = update?.message || update?.edited_message || null;
-    if (!message) {
-      return sendOk(reply, request.requestId);
-    }
-
-    const userId = parseUserId(message?.from?.id);
-    const chatId = parseUserId(message?.chat?.id);
-    const text = String(message?.text || "").trim();
-    if (!userId || !chatId) {
-      return sendOk(reply, request.requestId);
-    }
-
-    const normalizedText = text.toLowerCase();
-    const wantsBind = normalizedText.startsWith("/bind");
-    const ownerUserId = await getAppSetting("telegram_owner_user_id");
-    if (!ownerUserId || wantsBind) {
-      await setAppSetting("telegram_owner_user_id", String(userId));
-      await setAppSetting("telegram_owner_chat_id", String(chatId));
-      try {
-        await sendTelegramMessage(
-          chatId,
-          `Owner bound successfully.\nuser_id: ${userId}\nchat_id: ${chatId}\n\nUse /whoami to see this again.`,
-          request.log
-        );
-      } catch (error) {
-        request.log.warn(
-          { err: String(error?.message || error), request_id: request.requestId },
-          "telegram bind confirmation send failed"
-        );
-      }
-      return sendOk(reply, request.requestId, { owner_bound: true });
-    }
-
-    if (String(userId) !== String(ownerUserId)) {
-      return sendOk(reply, request.requestId);
-    }
-
-    await setAppSetting("telegram_owner_chat_id", String(chatId));
-    if (normalizedText.startsWith("/whoami")) {
-      try {
-        await sendTelegramMessage(chatId, `user_id: ${userId}\nchat_id: ${chatId}`, request.log);
-      } catch (error) {
-        request.log.warn(
-          { err: String(error?.message || error), request_id: request.requestId },
-          "telegram whoami response failed"
-        );
-      }
-    }
-
-    return sendOk(reply, request.requestId);
+    return sendError(reply, request.requestId, new ApiError(410, "telegram_disabled", "Telegram flow is disabled"));
   });
 
   registerPost("/auth/logout", async (request, reply) => {

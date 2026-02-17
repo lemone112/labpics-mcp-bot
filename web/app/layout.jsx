@@ -4,6 +4,10 @@ import { Providers } from "@/app/providers";
 export const metadata = {
   title: "Labpics MVP",
   description: "Operations console for Chatwoot ingestion and vector search",
+  icons: {
+    icon: "/favicon.svg",
+    shortcut: "/favicon.svg",
+  },
 };
 
 export default function RootLayout({ children }) {
