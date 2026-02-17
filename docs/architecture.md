@@ -10,10 +10,10 @@
 
 | # | Принцип | Обоснование |
 |---|---------|-------------|
-| 1 | **Project-scope first** | Все данные привязаны к `project_id` + `account_scope_id`. Trigger `enforce_project_scope_match` на 40+ таблицах. |
+| 1 | **Project-scope first** | Все данные привязаны к `project_id` + `account_scope_id`. Trigger `enforce_project_scope_match` на 79 таблицах. |
 | 2 | **Evidence-first** | Ни одна производная сущность не публикуется без `evidence_refs`. Без доказательств = `publishable: false`. |
 | 3 | **Deterministic intelligence** | Signals/scores/forecasts/recommendations вычисляются rules + stats. LLM только для extraction и templates. |
-| 4 | **Event-sourced processing** | Интеллектуальный pipeline работает через поток событий (`kag_events`), а не через обход графа. |
+| 4 | **Event-sourced processing** | Intelligence pipeline работает через поток событий (`kag_events`), а не через обход графа. |
 | 5 | **Idempotent everything** | Все операции — `ON CONFLICT ... DO UPDATE`, `dedupe_key`, bounded windows. |
 | 6 | **PostgreSQL-native** | Вся система в одном PostgreSQL (+ pgvector). Никаких внешних графовых БД. |
 
@@ -23,7 +23,7 @@
 
 | Слой | Технология | Версия / Детали |
 |------|-----------|-----------------|
-| **Backend** | Node.js + Express | `server/src/` — REST API, workers, services |
+| **Backend** | Node.js + Fastify v5 | `server/src/` — REST API, workers, services |
 | **Frontend** | Next.js + React | `web/` — dashboard, portfolio, рекомендации |
 | **База данных** | PostgreSQL 16 | pgvector, pgcrypto |
 | **Миграции** | SQL migrations | `server/db/migrations/0001..0017` (17 миграций) |
@@ -53,11 +53,11 @@ application_name: labpics-dashboard (конфигурируется через P
                     └────────────────┬────────────────────────┘
                                      │ REST API
                     ┌────────────────▼────────────────────────┐
-                    │              BACKEND (Express)            │
+                    │              BACKEND (Fastify v5)           │
                     │                                          │
                     │  ┌─── Routes ──┐  ┌── Middleware ─────┐  │
                     │  │ /api/*      │  │ auth · csrf · req │  │
-                    │  │ /kag/*      │  │ scope · error     │  │
+                    │  │ /kag/*      │  │ scope · error     │  │  ← legacy prefix
                     │  │ /connectors │  └───────────────────┘  │
                     │  └─────────────┘                         │
                     │                                          │
@@ -67,10 +67,10 @@ application_name: labpics-dashboard (конфигурируется через P
                     │  │ connectors · rag · offers · crm    │   │
                     │  └───────────────────────────────────┘   │
                     │                                          │
-                    │  ┌─── KAG Engine ────────────────────┐   │
-                    │  │ ingest · graph · signals · scoring │   │
-                    │  │ recommendations · templates        │   │
-                    │  └───────────────────────────────────┘   │
+                    │  ┌─── Intelligence Engine ────────────┐   │
+                    │  │ ingest · graph · signals · scoring  │   │
+                    │  │ recommendations · templates         │   │
+                    │  └────────────────────────────────────┘   │
                     │                                          │
                     │  ┌─── Scheduler ─────────────────────┐   │
                     │  │ 15min sync · 5min retry · daily    │   │
@@ -80,7 +80,7 @@ application_name: labpics-dashboard (конфигурируется через P
                                      │
                     ┌────────────────▼────────────────────────┐
                     │         PostgreSQL 16 + pgvector          │
-                    │  40+ tables · 17 migrations · triggers   │
+                    │  79 tables · 17 migrations · triggers    │
                     │  IVFFlat/HNSW · GIN · scope guards       │
                     └──────────┬──────────┬──────────┬────────┘
                                │          │          │
@@ -93,7 +93,7 @@ application_name: labpics-dashboard (конфигурируется через P
 
 ---
 
-## 4) Группы таблиц (24 группы, 40+ таблиц)
+## 4) Группы таблиц (24 группы, 79 таблиц)
 
 ### 4.1 Core Platform (7 таблиц)
 
@@ -131,12 +131,15 @@ application_name: labpics-dashboard (конфигурируется через P
 | `rag_chunks` | Текстовые чанки + embeddings | vector(1536), IVFFlat + HNSW, autovacuum tuned |
 | `sync_watermarks` | Legacy source cursors | Composite PK (project_id, source) |
 
-### 4.5 KAG v1 — Graph + Intelligence (11 таблиц)
+### 4.5 Intelligence v1 — Graph + Signals (11 таблиц)
+
+> **Naming note:** Таблицы и код используют prefix `kag_` (legacy, от "Knowledge-Augmented Graph").
+> Концептуально система называется **Project Intelligence Pipeline** — правила + статистика, без graph traversal.
 
 | Таблица | Назначение | Объём |
 |---------|-----------|-------|
 | `kag_nodes` | Узлы графа (15 типов) | 1K–10K per project |
-| `kag_edges` | Рёбра графа (20 типов связей) | 10K–100K per project |
+| `kag_edges` | Рёбра графа (21 тип связей) | 10K–100K per project |
 | `kag_events` | Поток событий (15 типов) | 10K–100K per project |
 | `kag_provenance_refs` | Провенанс: объект → источник | Пропорционально nodes+edges |
 | `kag_signal_state` | Состояние сигнального автомата | 1 per project |
@@ -147,7 +150,7 @@ application_name: labpics-dashboard (конфигурируется через P
 | `kag_recommendations` | Рекомендации v1 (5 категорий) | 0–50 per project |
 | `kag_templates` | Шаблоны коммуникаций | Десятки per project |
 
-### 4.6 KAG v2 — Forecasting + Recommendations Lifecycle (8 таблиц)
+### 4.6 Intelligence v2 — Forecasting + Recommendations Lifecycle (8 таблиц)
 
 | Таблица | Назначение |
 |---------|-----------|
@@ -198,7 +201,10 @@ application_name: labpics-dashboard (конфигурируется через P
 
 ---
 
-## 5) KAG Intelligence Pipeline — полный data flow
+## 5) Project Intelligence Pipeline — полный data flow
+
+> **Ранее в коде называлось "KAG" (Knowledge-Augmented Graph).** Prefix `kag_` сохраняется в таблицах и коде
+> как legacy. Концептуально это **Project Intelligence Pipeline** — rules-based аналитика + forecasting.
 
 Это **ядро продукта**. Pipeline работает event-sourced: данные проходят через
 чётко определённые стадии, каждая из которых детерминирована и трассируема.
@@ -317,12 +323,14 @@ application_name: labpics-dashboard (конфигурируется через P
 
 Cadence: каждые **15 минут** (scheduler job `kag_recommendations_refresh`).
 
-Feature flags:
-- `KAG_ENABLED` — весь pipeline
+Feature flags (env vars, default `false`):
+- `KAG_ENABLED` — весь intelligence pipeline
 - `RECOMMENDATIONS_ENABLED` — рекомендации v1
 - `KAG_SNAPSHOTS_ENABLED` — daily snapshots
 - `KAG_FORECASTING_ENABLED` — risk forecasts
 - `KAG_RECOMMENDATIONS_V2_ENABLED` — рекомендации v2
+
+> Имена feature flags начинаются с `KAG_` по историческим причинам (legacy prefix).
 
 ---
 
@@ -390,7 +398,7 @@ account_scopes (root)
 ```
 
 **Enforcement:**
-- Trigger `enforce_project_scope_match` на **каждой** доменной таблице (40+)
+- Trigger `enforce_project_scope_match` на **каждой** доменной таблице (79)
 - BEFORE INSERT OR UPDATE: проверяет что `account_scope_id` записи совпадает с `account_scope_id` проекта
 - Cross-scope write физически невозможен на уровне БД
 
@@ -406,7 +414,7 @@ account_scopes (root)
 
 ### Критические индексы (production audit)
 
-**KAG Graph:**
+**Intelligence Graph (tables: `kag_nodes`, `kag_edges`):**
 ```sql
 -- Forward: UNIQUE (project_id, node_type, node_key)              -- implicit
 -- Forward: (project_id, node_type, status, updated_at DESC)      -- 0008
@@ -415,7 +423,7 @@ account_scopes (root)
 -- Edge relation: (project_id, relation_type, status, updated_at) -- 0008
 ```
 
-**KAG Events:**
+**Intelligence Events (table: `kag_events`):**
 ```sql
 -- Queue: (project_id, id ASC) WHERE status = 'open'              -- 0017 NEW (partial)
 -- Timeline: (project_id, event_type, event_ts DESC)              -- 0008
@@ -471,7 +479,7 @@ account_scopes (root)
 |-----|---------|-----------|---------|
 | `connectors_sync_cycle` | ~15 min | Инкрементальный sync Chatwoot/Linear/Attio | `cw_*`, `linear_*`, `attio_*`, `connector_sync_state` |
 | `connector_errors_retry` | ~5 min | Retry due errors | `connector_errors` |
-| `kag_recommendations_refresh` | ~15 min | Full KAG pipeline (signals→scores→recs) | `kag_*`, `recommendations_v2` |
+| `kag_recommendations_refresh` | ~15 min | Full intelligence pipeline (signals→scores→recs) | `kag_*`, `recommendations_v2` |
 | `embeddings_run` | ~20 min | Генерация embeddings | `rag_chunks` |
 | `kag_daily_pipeline` | 1/day | Snapshot + forecast + recs v2 | `project_snapshots`, `kag_risk_forecasts` |
 | `case_signatures_refresh` | 1/week | Пересборка similarity signatures | `case_signatures` |
@@ -479,6 +487,8 @@ account_scopes (root)
 | `weekly_digest` | 1/week | Недельный дайджест | `weekly_digests` |
 
 Logging: все процессы пишут в `kag_event_log` (`process_started/finished/failed/warning`).
+
+> Job names сохраняют prefix `kag_` для backward compatibility с существующими `scheduled_jobs` записями.
 
 ---
 
@@ -532,6 +542,7 @@ Env vars: `RECOMMENDATIONS_EVIDENCE_MIN_COUNT`, `RECOMMENDATIONS_EVIDENCE_MIN_QU
 - **PostgreSQL + plain SQL** — правильная архитектура для текущих паттернов
 - **Recursive CTEs** — доступны бесплатно когда/если понадобится multi-hop traversal
 - **Граф (kag_nodes/edges)** — остаётся как data model и provenance, не как traversal engine
+- **Naming:** Prefix `kag_` в коде — legacy от "Knowledge-Augmented Graph". Концептуально система называется **Project Intelligence Pipeline**. Имена будут нормализованы при рефакторинге.
 
 ### Пороги для пересмотра:
 | Сценарий | Порог | Действие |
@@ -572,10 +583,10 @@ kag_provenance_refs (reverse index):
 | `PG_STATEMENT_TIMEOUT_MS` | 30000 | Query timeout (ms) |
 | `PG_APP_NAME` | labpics-dashboard | Application name for pg_stat |
 
-### Feature Flags
+### Feature Flags (prefix `KAG_` — legacy)
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `KAG_ENABLED` | false | Enable entire KAG pipeline |
+| `KAG_ENABLED` | false | Enable entire intelligence pipeline |
 | `RECOMMENDATIONS_ENABLED` | false | Enable recommendations v1 |
 | `KAG_SNAPSHOTS_ENABLED` | false | Enable daily project snapshots |
 | `KAG_FORECASTING_ENABLED` | false | Enable risk forecasting |
@@ -617,8 +628,8 @@ kag_provenance_refs (reverse index):
 | [`docs/data-model.md`](./data-model.md) | Подробная модель данных (все таблицы) |
 | [`docs/platform-architecture.md`](./platform-architecture.md) | Платформенные инварианты |
 | [`docs/pipelines.md`](./pipelines.md) | Расписание и автоматизации |
-| [`docs/kag_recommendations.md`](./kag_recommendations.md) | KAG v1 спецификация |
-| [`docs/kag_forecasting_recommendations.md`](./kag_forecasting_recommendations.md) | KAG v2 + forecasting |
+| [`docs/kag_recommendations.md`](./kag_recommendations.md) | Intelligence v1 (recommendations) |
+| [`docs/kag_forecasting_recommendations.md`](./kag_forecasting_recommendations.md) | Intelligence v2 (forecasting + recommendations) |
 | [`docs/api.md`](./api.md) | API endpoints |
 | [`docs/frontend-design.md`](./frontend-design.md) | Frontend дизайн |
 | [`docs/product/overview.md`](./product/overview.md) | Продуктовый обзор |
@@ -638,7 +649,7 @@ kag_provenance_refs (reverse index):
 | 0005 | `0005_platform_scope_audit_outbox_worker.sql` | Multi-tenant scoping, audit, outbox |
 | 0006 | `0006_roadmap_crm_signals_offers_campaigns_health_cases_analytics.sql` | Full CRM + analytics |
 | 0007 | `0007_control_tower_sync_linking_and_digests.sql` | Connectors, identity, digests |
-| 0008 | `0008_kag_recommendations_mvp.sql` | KAG graph, signals, scores, recommendations v1 |
+| 0008 | `0008_kag_recommendations_mvp.sql` | Intelligence graph, signals, scores, recommendations v1 |
 | 0009 | `0009_connectors_event_log_and_raw_extensions.sql` | Event log, raw table extensions |
 | 0010 | `0010_project_snapshots_and_outcomes.sql` | Snapshots, outcomes |
 | 0011 | `0011_case_signatures.sql` | Similarity signatures |

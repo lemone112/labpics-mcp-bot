@@ -10,7 +10,7 @@
 | # | Принцип | Реализация |
 |---|---------|-----------|
 | 1 | **Project scope first** | Все бизнес-таблицы содержат `project_id` + `account_scope_id` |
-| 2 | **Scope consistency** | Trigger `enforce_project_scope_match` на 40+ таблицах (BEFORE INSERT OR UPDATE) |
+| 2 | **Scope consistency** | Trigger `enforce_project_scope_match` на 79 таблицах (BEFORE INSERT OR UPDATE) |
 | 3 | **Idempotent ingest** | `ON CONFLICT ... DO UPDATE`, `dedupe_key` на событиях/рекомендациях/исходах |
 | 4 | **Evidence-first** | Производные сущности хранят `evidence_refs`; без evidence = `publishable: false` |
 | 5 | **Retention-friendly** | History таблицы индексированы по `computed_at ASC` для эффективной очистки |
@@ -90,7 +90,9 @@
 
 Autovacuum: `vacuum_scale_factor=0.02, analyze_scale_factor=0.01`.
 
-### 3.7 KAG Graph (граф знаний)
+### 3.7 Intelligence Graph (tables: `kag_*`)
+
+> Prefix `kag_` в таблицах — legacy от "Knowledge-Augmented Graph". Фактически это **Project Intelligence** data model.
 
 #### kag_nodes (узлы)
 
@@ -111,7 +113,7 @@ Autovacuum: `vacuum_scale_factor=0.02, analyze_scale_factor=0.01`.
 
 #### kag_edges (рёбра)
 
-20 типов связей: `project_has_*` (12), `conversation_has_message`, `message_authored_by_person`, `task_blocked_by_blocker`, `deliverable_depends_on_task`, `deal_for_client`, `agreement_for_deal`, `decision_about_stage`, `risk_impacts_deliverable`, `offer_targets_client`
+21 тип связей: `project_has_*` (11), `conversation_has_message`, `message_authored_by_person`, `task_blocked_by_blocker`, `deliverable_depends_on_task`, `deal_for_client`, `agreement_for_deal`, `decision_about_stage`, `risk_impacts_deliverable`, `offer_targets_client`
 
 | Колонка | Тип | Описание |
 |---------|-----|---------|
@@ -146,7 +148,7 @@ Autovacuum: `vacuum_scale_factor=0.02, analyze_scale_factor=0.01`.
 - `(project_id, status, id ASC)` — для инкрементальной обработки
 - `(project_id, id ASC) WHERE status = 'open'` — **partial queue index** (migration 0017)
 
-### 3.8 KAG Provenance
+### 3.8 Intelligence Provenance
 
 | Таблица | Назначение | Ключевые поля |
 |---------|-----------|---------------|
@@ -154,7 +156,7 @@ Autovacuum: `vacuum_scale_factor=0.02, analyze_scale_factor=0.01`.
 
 CHECK constraint: хотя бы один source field должен быть NOT NULL.
 
-### 3.9 KAG Signals & Scores
+### 3.9 Intelligence Signals & Scores
 
 | Таблица | Назначение | Кардинальность |
 |---------|-----------|---------------|
@@ -168,14 +170,14 @@ CHECK constraint: хотя бы один source field должен быть NOT 
 
 4 скора: `project_health`, `risk`, `client_value`, `upsell_likelihood`
 
-### 3.10 KAG Recommendations v1
+### 3.10 Recommendations v1
 
 | Таблица | Назначение | Статусы |
 |---------|-----------|---------|
 | `kag_recommendations` | 5 категорий рекомендаций | proposed, accepted, dismissed, done |
 | `kag_templates` | Шаблоны коммуникаций | UNIQUE (project_id, template_key, language, channel, version) |
 
-### 3.11 KAG v2 — Forecasts & Enhanced Recommendations
+### 3.11 Intelligence v2 — Forecasts & Enhanced Recommendations
 
 | Таблица | Назначение | Ключевые поля |
 |---------|-----------|---------------|
@@ -265,8 +267,8 @@ CHECK constraint: хотя бы один source field должен быть NOT 
 | `health_scores` | Скоры здоровья аккаунтов |
 | `risk_radar_items` | Элементы risk radar (severity, probability, mitigation) |
 | `risk_pattern_events` | Паттерны рисков |
-| `signals` (legacy) | Устаревшие сигналы (до KAG) |
-| `next_best_actions` (legacy) | Устаревшие NBA (до KAG) |
+| `signals` (legacy) | Устаревшие сигналы (до Intelligence Pipeline) |
+| `next_best_actions` (legacy) | Устаревшие NBA (до Intelligence Pipeline) |
 
 ### 3.19 Scheduling
 
@@ -297,7 +299,7 @@ account_scopes ──── projects ──── sessions
                        │
        ┌───────────────┼───────────────────────────────────┐
        │               │                                   │
-   RAW LAYER      KAG GRAPH           CRM LAYER
+   RAW LAYER      INTELLIGENCE        CRM LAYER
    cw_messages    kag_nodes            crm_accounts
    cw_contacts    kag_edges            crm_opportunities
    linear_issues  kag_events           offers
@@ -368,8 +370,8 @@ Trigger `enforce_project_scope_match` установлен на **каждую**
 - Core: projects, sessions
 - Raw: cw_*, linear_*, attio_*
 - RAG: rag_chunks
-- KAG: kag_nodes, kag_edges, kag_events, kag_provenance_refs, kag_signal_state, kag_signals, kag_signal_history, kag_scores, kag_score_history, kag_recommendations, kag_templates
-- KAG v2: kag_risk_forecasts, recommendations_v2, recommendation_action_runs
+- Intelligence v1: kag_nodes, kag_edges, kag_events, kag_provenance_refs, kag_signal_state, kag_signals, kag_signal_history, kag_scores, kag_score_history, kag_recommendations, kag_templates
+- Intelligence v2: kag_risk_forecasts, recommendations_v2, recommendation_action_runs
 - CRM: crm_accounts, crm_account_contacts, crm_opportunities, ...
 - Audit: audit_events, evidence_items
 - Outbound: outbound_messages, outbound_attempts
@@ -383,7 +385,7 @@ Trigger `enforce_project_scope_match` установлен на **каждую**
 
 - **Фактическая схема (source of truth):** `server/db/migrations/*.sql`
 - **Архитектура:** [`docs/architecture.md`](./architecture.md)
-- **KAG v1:** [`docs/kag_recommendations.md`](./kag_recommendations.md)
-- **KAG v2:** [`docs/kag_forecasting_recommendations.md`](./kag_forecasting_recommendations.md)
+- **Intelligence v1:** [`docs/kag_recommendations.md`](./kag_recommendations.md)
+- **Intelligence v2:** [`docs/kag_forecasting_recommendations.md`](./kag_forecasting_recommendations.md)
 - **Pipelines:** [`docs/pipelines.md`](./pipelines.md)
 - **Platform invariants:** [`docs/platform-architecture.md`](./platform-architecture.md)
