@@ -2,8 +2,6 @@ FROM node:22-alpine
 
 WORKDIR /app
 
-ENV NODE_ENV=production
-
 COPY package.json package-lock.json ./
 RUN npm ci
 
@@ -14,7 +12,9 @@ ARG API_UPSTREAM_URL=http://server:8080
 ENV NEXT_PUBLIC_API_BASE_URL=$NEXT_PUBLIC_API_BASE_URL
 ENV API_UPSTREAM_URL=$API_UPSTREAM_URL
 
-RUN npm run build
+RUN npm run build && npm prune --omit=dev
+
+ENV NODE_ENV=production
 
 EXPOSE 3000
 
