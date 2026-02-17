@@ -376,6 +376,27 @@ async function main() {
     return { sid, csrfToken };
   }
 
+  async function loadSessionWithProjectScope(sid) {
+    const { rows } = await pool.query(
+      `
+        SELECT
+          s.session_id,
+          s.username,
+          s.active_project_id,
+          s.csrf_token,
+          s.created_at,
+          s.last_seen_at,
+          p.account_scope_id
+        FROM sessions AS s
+        LEFT JOIN projects AS p ON p.id = s.active_project_id
+        WHERE s.session_id = $1
+        LIMIT 1
+      `,
+      [sid]
+    );
+    return rows[0] || null;
+  }
+
   function routePathForAuthCheck(pathName) {
     if (pathName === "/v1") return "/";
     if (pathName.startsWith("/v1/")) return pathName.slice(3);
@@ -408,29 +429,15 @@ async function main() {
       return sendError(reply, requestId, new ApiError(401, "unauthorized", "Unauthorized"));
     }
 
-    const { rows } = await pool.query(
-      `
-        SELECT
-          s.session_id,
-          s.username,
-          s.active_project_id,
-          s.csrf_token,
-          p.account_scope_id
-        FROM sessions AS s
-        LEFT JOIN projects AS p ON p.id = s.active_project_id
-        WHERE s.session_id = $1
-        LIMIT 1
-      `,
-      [sid]
-    );
-    if (!rows[0]) {
+    const sessionRow = await loadSessionWithProjectScope(sid);
+    if (!sessionRow) {
       reply.clearCookie(cookieName, cookieOptions);
       reply.clearCookie(csrfCookieName, csrfCookieOptions);
       return sendError(reply, requestId, new ApiError(401, "unauthorized", "Unauthorized"));
     }
 
     const preferredProjectIds = parseProjectIdsFromUrl(request.url);
-    request.auth = await hydrateSessionScope(pool, sid, rows[0], preferredProjectIds);
+    request.auth = await hydrateSessionScope(pool, sid, sessionRow, preferredProjectIds);
     await pool.query("UPDATE sessions SET last_seen_at = now() WHERE session_id = $1", [sid]);
 
     const isMutating = !["GET", "HEAD", "OPTIONS"].includes(String(request.method || "GET").toUpperCase());
@@ -535,30 +542,15 @@ async function main() {
     const sid = request.cookies?.[cookieName];
     if (!sid) return sendOk(reply, request.requestId, { authenticated: false });
 
-    const { rows } = await pool.query(
-      `
-        SELECT
-          s.session_id,
-          s.username,
-          s.active_project_id,
-          s.created_at,
-          s.last_seen_at,
-          p.account_scope_id
-        FROM sessions AS s
-        LEFT JOIN projects AS p ON p.id = s.active_project_id
-        WHERE s.session_id = $1
-        LIMIT 1
-      `,
-      [sid]
-    );
-    if (!rows[0]) {
+    const sessionRow = await loadSessionWithProjectScope(sid);
+    if (!sessionRow) {
       reply.clearCookie(cookieName, cookieOptions);
       reply.clearCookie(csrfCookieName, csrfCookieOptions);
       return sendOk(reply, request.requestId, { authenticated: false });
     }
 
     const preferredProjectIds = parseProjectIdsFromUrl(request.url);
-    const hydrated = await hydrateSessionScope(pool, sid, rows[0], preferredProjectIds);
+    const hydrated = await hydrateSessionScope(pool, sid, sessionRow, preferredProjectIds);
 
     return sendOk(reply, request.requestId, {
       authenticated: true,
