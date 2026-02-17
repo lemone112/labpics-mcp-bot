@@ -103,11 +103,13 @@ docker compose up --build
 Настроены 2 workflow:
 
 - `.github/workflows/deploy-dev.yml`
-  - авто на `push` в `main` (только если изменились `server/web/compose`)
+  - авто на `push` в `cursor/labpics_dashboard` (только если изменились `server/web/compose`)
   - окружение GitHub: `dev`
+  - целевой домен: `https://dev.dashboard.lab.pics`
 - `.github/workflows/deploy-prod.yml`
-  - manual `workflow_dispatch`
+  - manual `workflow_dispatch` + approval через environment `production`
   - окружение GitHub: `production`
+  - целевой домен: `https://dashboard.lab.pics`
 
 Оба workflow:
 
@@ -118,6 +120,7 @@ docker compose up --build
 5. делают smoke-check `/health` и `/login`
 
 Для production включается профиль `edge` (Caddy), который публикует UI на `https://dashboard.lab.pics` и проксирует `/api/*` в `server`.
+Для dev включается такой же профиль `edge` с доменом `https://dev.dashboard.lab.pics`.
 
 ---
 

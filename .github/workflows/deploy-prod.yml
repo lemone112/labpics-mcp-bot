@@ -1,20 +1,12 @@
 name: Deploy (prod)
 
 on:
-  push:
-    branches: [cursor/labpics_dashboard]
-    paths:
-      - "server/**"
-      - "web/**"
-      - "docker-compose.yml"
-      - "infra/caddy/**"
-      - ".github/workflows/deploy-prod.yml"
   workflow_dispatch:
     inputs:
       ref:
         description: "Git ref to deploy (branch or tag)"
         required: false
-        default: "main"
+        default: "cursor/labpics_dashboard"
 
 concurrency:
   group: web-prod-deploy

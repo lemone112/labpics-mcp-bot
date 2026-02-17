@@ -2,13 +2,14 @@ name: Deploy (dev)
 
 on:
   push:
-    branches: [main]
+    branches: [cursor/labpics_dashboard]
     paths:
       - "server/**"
       - "web/**"
       - "docker-compose.yml"
       - "infra/caddy/**"
       - ".github/workflows/deploy-dev.yml"
+  workflow_dispatch:
 
 concurrency:
   group: web-dev-deploy
@@ -129,11 +130,11 @@ jobs:
           EDGE_HTTPS_PORT=${EDGE_HTTPS_PORT:-443}
           NEXT_PUBLIC_API_BASE_URL=${NEXT_PUBLIC_API_BASE_URL:-/api}
           API_UPSTREAM_URL=${API_UPSTREAM_URL:-http://server:8080}
-          DOMAIN=${DOMAIN:-dashboard-dev.lab.pics}
+          DOMAIN=${DOMAIN:-dev.dashboard.lab.pics}
           API_UPSTREAM=${API_UPSTREAM:-server:8080}
           WEB_UPSTREAM=${WEB_UPSTREAM:-web:3000}
-          CORS_ORIGIN=${CORS_ORIGIN:-https://dashboard-dev.lab.pics}
-          ENABLE_EDGE_PROXY=${ENABLE_EDGE_PROXY:-false}
+          CORS_ORIGIN=${CORS_ORIGIN:-https://dev.dashboard.lab.pics}
+          ENABLE_EDGE_PROXY=${ENABLE_EDGE_PROXY:-true}
           NODE_ENV=production
           AUTH_USERNAME=${AUTH_USERNAME:-admin}
           AUTH_PASSWORD=${AUTH_PASSWORD:-admin}
@@ -167,7 +168,7 @@ jobs:
           set -euo pipefail
           remote_path="${DEPLOY_PATH:-/opt/labpics-web-dev}"
           compose_project="${COMPOSE_PROJECT_NAME:-labpics-dev}"
-          if [ "${ENABLE_EDGE_PROXY:-false}" = "true" ]; then
+          if [ "${ENABLE_EDGE_PROXY:-true}" = "true" ]; then
             ssh "$SSH_USER@$SSH_HOST" "cd '$remote_path' && COMPOSE_PROJECT_NAME='$compose_project' docker compose --profile edge --env-file .env up -d --build --remove-orphans"
           else
             ssh "$SSH_USER@$SSH_HOST" "cd '$remote_path' && COMPOSE_PROJECT_NAME='$compose_project' docker compose --env-file .env up -d --build --remove-orphans"
@@ -180,7 +181,7 @@ jobs:
           web_port="${WEB_PORT:-3000}"
           ssh "$SSH_USER@$SSH_HOST" "curl -fsS http://127.0.0.1:${api_port}/health >/dev/null"
           ssh "$SSH_USER@$SSH_HOST" "curl -fsS http://127.0.0.1:${web_port}/login >/dev/null"
-          if [ "${ENABLE_EDGE_PROXY:-false}" = "true" ]; then
-            domain="${DOMAIN:-dashboard-dev.lab.pics}"
+          if [ "${ENABLE_EDGE_PROXY:-true}" = "true" ]; then
+            domain="${DOMAIN:-dev.dashboard.lab.pics}"
             curl -fsS "https://${domain}/login" >/dev/null
           fi
