@@ -1,102 +1,49 @@
-# System architecture (Web-first MVP)
+# System architecture (web-first MVP)
 
-This branch implements **Web-first** architecture: a single server process (API + jobs) plus a Next.js UI, backed by Postgres (pgvector).
+This repository implements a web-first architecture:
+
+- a single Fastify server process (API + jobs)
+- a Next.js UI
+- Postgres (pgvector) for storage and vector search
 
 ## Components
 
-- **db**: Postgres 16 + pgvector (Docker image `pgvector/pgvector:pg16`)
-- **server**: Node.js + Fastify API + background-like jobs
-- **web**: Next.js UI
+- `server/` — Fastify API, job runners, scheduler/worker loop, DB migrations
+- `web/` — Next.js UI
+- `docker-compose.yml` — local/prod composition
 
-Composition is defined in [`/docker-compose.yml`](../docker-compose.yml).
+## Core loop (MVP)
 
-## Request flow
+1. Login
+2. Select an active project
+3. Sync Chatwoot into scoped tables
+4. Build embeddings for new/changed chunks
+5. Search with strict scope filtering and evidence links
 
-### UI → API
+## Scope model
 
-- Browser calls `NEXT_PUBLIC_API_BASE_URL` (default `/api`).
-- Next.js rewrites `/api/*` to `API_UPSTREAM_URL` (default `http://localhost:8080` locally or `http://server:8080` in Docker).
-- Auth is cookie-based session (`SESSION_COOKIE_NAME`, default `sid`).
+All non-public endpoints require a session and an active project.
 
-### API authentication
+Scope is enforced at multiple layers:
 
-- `POST /auth/login` creates a session row in `sessions` and sets cookie.
-- All routes except `/health`, `/metrics`, and `/auth/*` require a valid session cookie.
-- Protected mutating routes require CSRF header/token match.
+- DB schema constraints/triggers
+- explicit SQL filters
+- API middleware (resolving `active_project_id` and `account_scope_id`)
 
-### Project scoping
+## Jobs & worker
 
-- Active project is stored on the session row: `sessions.active_project_id`.
-- UI uses `/projects/:id/select` to set the active project.
-- Ingestion/search/jobs tables carry `(project_id, account_scope_id)`.
-- API SQL filters are scope-aware; cross-scope writes are blocked by DB trigger `enforce_project_scope_match()`.
-- `project_sources` prevents binding one external source to multiple projects.
+Two layers:
 
-## Jobs execution model
+- manual API-triggered jobs (`/jobs/*`)
+- scheduler tick (`/jobs/scheduler/tick`) which claims due work and records worker runs
 
-Manual jobs via API:
+## Integrations (current)
 
-- `POST /jobs/chatwoot/sync`
-- `POST /jobs/attio/sync`
-- `POST /jobs/linear/sync`
-- `POST /jobs/embeddings/run`
+- Chatwoot ingest is the MVP source of truth
+- Linear/Attio are optional and should follow preview→apply rules
 
-Scheduled jobs via worker tick:
+## Docs map
 
-- `GET /jobs/scheduler`
-- `POST /jobs/scheduler/tick`
-
-Worker/scheduler state:
-
-- `scheduled_jobs`
-- `worker_runs`
-- run history in scoped `job_runs`
-
-Scheduled handlers include:
-
-- ingestion/sync (Chatwoot, Attio, Linear)
-- embeddings
-- signals extraction + NBA generation
-- upsell radar
-- risk/health refresh
-- daily/weekly digests
-- analytics aggregates
-
-## Outbound / approval model
-
-- Draft/approval/send lifecycle is stored in `outbound_messages`.
-- Delivery attempts are stored in `outbound_attempts`.
-- Opt-out, stop-on-reply, and frequency caps are stored in `contact_channel_policies`.
-- Critical actions are written to `audit_events` with `evidence_refs`.
-
-## Control Tower + Intelligence layer
-
-Control Tower (`GET /control-tower`) is a scoped aggregate layer combining:
-
-- integration health/watermarks (Chatwoot, Attio, Linear)
-- delivery/commercial metrics
-- top NBA
-- risk/health indicators
-- latest evidence snippets
-
-Related domain APIs:
-
-- identity graph/linking (`/identity/*`)
-- CRM + offers (`/crm/*`, `/offers/*`)
-- signals/NBA (`/signals/*`, `/nba/*`)
-- upsell radar (`/upsell/*`)
-- deal→delivery continuity (`/continuity/*`)
-- digests/risk/analytics (`/digests/*`, `/risk/*`, `/analytics/*`)
-
-## Design constraints
-
-- **Idempotency**: raw rows use stable string IDs (`cw:<...>`, `cwmsg:<...>`).
-- **Observability**: every response includes `request_id` header/body for tracing.
-- **Evidence-first**: future entities must always refer back to raw or chunk rows.
-- **Safety rails for outbound**: idempotency keys, dedupe keys, approval state machine, opt-out/frequency controls.
-
-## What is intentionally missing
-
-- Webhooks (polling + jobs only)
-- Distributed queue system (single-process scheduler tick in MVP)
-- Deep bidirectional writeback to external systems (current write path is DB-first with preview/apply workflows)
+- platform constraints: [`docs/platform-architecture.md`](./platform-architecture.md)
+- pipelines/jobs: [`docs/pipelines.md`](./pipelines.md)
+- API contract: [`docs/api.md`](./api.md)
