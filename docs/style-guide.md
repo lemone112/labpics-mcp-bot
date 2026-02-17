@@ -12,6 +12,19 @@ This repository has two documentation layers:
 3. **Project isolation**: everything that reads or writes data is project-scoped unless explicitly stated otherwise.
 4. **Idempotency**: repeated runs must not create duplicates.
 
+## UI/UX design baseline
+
+For product UI quality rules, use:
+
+- [`docs/design-rules-2026.md`](./design-rules-2026.md)
+
+This includes:
+
+- scope visibility requirements,
+- empty/error state standards,
+- safe action guardrails,
+- repeatable hardening loop.
+
 ## Language
 
 - Prefer short sentences.

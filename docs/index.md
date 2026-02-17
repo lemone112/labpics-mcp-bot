@@ -14,6 +14,7 @@ This folder is the canonical documentation for **Labpics Web Platform (MVP)**.
 
 - Glossary (canonical terms): [`docs/glossary.md`](./glossary.md)
 - Documentation style rules: [`docs/style-guide.md`](./style-guide.md)
+- Design rules (2026 hardening): [`docs/design-rules-2026.md`](./design-rules-2026.md)
 - Scope control: [`docs/mvp-vs-roadmap.md`](./mvp-vs-roadmap.md)
 
 ## Quick links

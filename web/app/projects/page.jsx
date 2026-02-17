@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 
 import { PageShell } from "@/components/page-shell";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -8,10 +9,12 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Toast } from "@/components/ui/toast";
+import { EmptyState } from "@/components/ui/empty-state";
 import { apiFetch } from "@/lib/api";
 import { useAuthGuard } from "@/hooks/use-auth-guard";
 
 export default function ProjectsPage() {
+  const router = useRouter();
   const { loading, session } = useAuthGuard();
   const [projects, setProjects] = useState([]);
   const [activeProjectId, setActiveProjectId] = useState(null);
@@ -43,6 +46,7 @@ export default function ProjectsPage() {
       setName("");
       setToast({ type: "success", message: "Project created" });
       await loadProjects();
+      window.dispatchEvent(new Event("project-context-changed"));
     } catch (error) {
       setToast({ type: "error", message: error?.message || "Create failed" });
     } finally {
@@ -56,6 +60,7 @@ export default function ProjectsPage() {
       await apiFetch(`/projects/${projectId}/select`, { method: "POST" });
       setActiveProjectId(projectId);
       setToast({ type: "success", message: "Active project updated" });
+      window.dispatchEvent(new Event("project-context-changed"));
     } catch (error) {
       setToast({ type: "error", message: error?.message || "Select failed" });
     } finally {
@@ -67,9 +72,39 @@ export default function ProjectsPage() {
     return <div className="p-8 text-sm">Loading...</div>;
   }
 
+  const activeProject = projects.find((project) => project.id === activeProjectId) || null;
+
   return (
     <PageShell title="Projects" subtitle="Create and select active project for session">
       <div className="space-y-6">
+        <Card data-motion-item>
+          <CardHeader>
+            <CardTitle>Session scope</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {activeProject ? (
+              <div className="app-inset rounded-[var(--radius-md)] border border-[var(--border-subtle)] bg-[var(--surface-soft)] p-4">
+                <div className="text-xs uppercase tracking-[0.08em] text-[var(--text-subtle)]">Active project</div>
+                <div className="mt-1 text-base font-semibold text-[var(--text-strong)]">{activeProject.name}</div>
+                <div className="mt-1 font-mono text-xs text-[var(--text-muted)]">{activeProject.id}</div>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <Button size="sm" onClick={() => router.push("/jobs")}>
+                    Open Jobs
+                  </Button>
+                  <Button size="sm" variant="outline" onClick={() => router.push("/search")}>
+                    Open Search
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <EmptyState
+                title="No active project selected"
+                description="Select one project to enforce context for jobs and search."
+              />
+            )}
+          </CardContent>
+        </Card>
+
         <Card data-motion-item>
           <CardHeader>
             <CardTitle>New project</CardTitle>
@@ -125,8 +160,8 @@ export default function ProjectsPage() {
                 ))}
                 {!projects.length ? (
                   <TableRow>
-                    <TableCell colSpan={4} className="text-[var(--text-muted)]">
-                      No projects yet.
+                    <TableCell colSpan={4}>
+                      <EmptyState title="No projects yet" description="Create the first project to begin the MVP workflow." />
                     </TableCell>
                   </TableRow>
                 ) : null}

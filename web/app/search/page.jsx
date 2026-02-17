@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 
 import { PageShell } from "@/components/page-shell";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -8,20 +9,35 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Toast } from "@/components/ui/toast";
+import { EmptyState } from "@/components/ui/empty-state";
 import { apiFetch } from "@/lib/api";
 import { useAuthGuard } from "@/hooks/use-auth-guard";
+import { useProjectContext } from "@/hooks/use-project-context";
 
 export default function SearchPage() {
+  const router = useRouter();
   const { loading, session } = useAuthGuard();
+  const {
+    loading: projectLoading,
+    activeProject,
+    error: projectError,
+    refresh: refreshProjectContext,
+  } = useProjectContext(!loading && session?.authenticated);
   const [query, setQuery] = useState("");
   const [topK, setTopK] = useState(10);
   const [results, setResults] = useState([]);
+  const [hasSearched, setHasSearched] = useState(false);
   const [busy, setBusy] = useState(false);
   const [meta, setMeta] = useState(null);
   const [toast, setToast] = useState({ type: "info", message: "" });
 
   async function onSearch(event) {
     event.preventDefault();
+    if (!activeProject?.id) {
+      setToast({ type: "error", message: "Select an active project before search." });
+      return;
+    }
+    setHasSearched(true);
     setBusy(true);
     setToast({ type: "info", message: "" });
     try {
@@ -47,8 +63,46 @@ export default function SearchPage() {
     return <div className="p-8 text-sm">Loading...</div>;
   }
 
+  if (projectLoading && !activeProject) {
+    return (
+      <PageShell title="Search" subtitle="Evidence retrieval within active project scope">
+        <EmptyState title="Loading active project scope..." description="Checking session project context before search." />
+      </PageShell>
+    );
+  }
+
+  if (!projectLoading && !activeProject) {
+    return (
+      <PageShell title="Search" subtitle="Evidence retrieval within active project scope">
+        <EmptyState
+          title="No active project selected"
+          description={
+            projectError
+              ? "Project context failed to load. Open Projects and re-select active scope."
+              : "Search is project-scoped. Select a project first to avoid context mixing."
+          }
+          actions={
+            <>
+              <Button onClick={() => router.push("/projects")}>Open Projects</Button>
+              <Button variant="outline" onClick={refreshProjectContext}>
+                Retry context
+              </Button>
+            </>
+          }
+        />
+      </PageShell>
+    );
+  }
+
   return (
-    <PageShell title="Search" subtitle="Vector similarity search over ready embeddings">
+    <PageShell
+      title="Search"
+      subtitle={
+        activeProject
+          ? `Vector similarity search in project: ${activeProject.name}`
+          : "Loading active project scope..."
+      }
+    >
       <div className="space-y-6">
         <Card data-motion-item>
           <CardHeader>
@@ -61,6 +115,7 @@ export default function SearchPage() {
                 onChange={(e) => setQuery(e.target.value)}
                 placeholder="What did client promise about timeline?"
                 required
+                disabled={!activeProject}
               />
               <Input
                 type="number"
@@ -68,8 +123,9 @@ export default function SearchPage() {
                 max={50}
                 value={topK}
                 onChange={(e) => setTopK(e.target.value)}
+                disabled={!activeProject}
               />
-              <Button type="submit" disabled={busy}>
+              <Button type="submit" disabled={busy || !activeProject}>
                 {busy ? "Searching..." : "Search"}
               </Button>
             </form>
@@ -107,8 +163,23 @@ export default function SearchPage() {
                 ))}
                 {!results.length ? (
                   <TableRow>
-                    <TableCell colSpan={4} className="text-[var(--text-muted)]">
-                      No results yet.
+                    <TableCell colSpan={4}>
+                      {hasSearched ? (
+                        <EmptyState
+                          title="No results in current scope"
+                          description="Run Sync and Embeddings in Jobs, then try a narrower query."
+                          actions={
+                            <Button variant="outline" onClick={() => router.push("/jobs")}>
+                              Open Jobs
+                            </Button>
+                          }
+                        />
+                      ) : (
+                        <EmptyState
+                          title="Start with a scoped query"
+                          description="Ask about commitments, risks, deadlines, or client requests to retrieve evidence-backed context."
+                        />
+                      )}
                     </TableCell>
                   </TableRow>
                 ) : null}
