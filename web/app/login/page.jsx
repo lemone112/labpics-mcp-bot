@@ -170,7 +170,7 @@ export default function LoginPage() {
             ) : (
               <div className="space-y-4">
                 {!signupStatus.enabled ? (
-                  <div className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-800">
+                  <div className="rounded-md border border-secondary bg-secondary/40 p-3 text-sm text-secondary-foreground">
                     {!signupStatus.loaded
                       ? "Checking signup availability..."
                       : signupStatus.hasTelegramToken

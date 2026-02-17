@@ -7,27 +7,27 @@ import { cn } from "@/lib/utils";
 const statusMap = {
   pending: {
     label: "Pending",
-    className: "border-amber-300 bg-amber-50 text-amber-800 hover:bg-amber-100",
+    className: "border-border bg-secondary text-secondary-foreground hover:bg-secondary/80",
   },
   processing: {
     label: "Processing",
-    className: "border-sky-300 bg-sky-50 text-sky-800 hover:bg-sky-100",
+    className: "border-border bg-accent text-accent-foreground hover:bg-accent/80",
   },
   ready: {
     label: "Ready",
-    className: "border-emerald-300 bg-emerald-50 text-emerald-800 hover:bg-emerald-100",
+    className: "border-border bg-primary/10 text-primary hover:bg-primary/15",
   },
   completed: {
     label: "Completed",
-    className: "border-emerald-300 bg-emerald-50 text-emerald-800 hover:bg-emerald-100",
+    className: "border-border bg-primary/10 text-primary hover:bg-primary/15",
   },
   failed: {
     label: "Failed",
-    className: "border-rose-300 bg-rose-50 text-rose-800 hover:bg-rose-100",
+    className: "border-destructive/30 bg-destructive/10 text-destructive hover:bg-destructive/15",
   },
   running: {
     label: "Running",
-    className: "border-sky-300 bg-sky-50 text-sky-800 hover:bg-sky-100",
+    className: "border-border bg-accent text-accent-foreground hover:bg-accent/80",
   },
 };
 

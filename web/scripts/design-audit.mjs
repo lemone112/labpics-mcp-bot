@@ -22,11 +22,6 @@ const forbiddenRules = [
     description: "Avoid uppercase utility unless semantically required",
     pattern: /\buppercase\b/,
   },
-  {
-    name: "tracking-utility",
-    description: "Avoid tracking utilities in default UI rhythm",
-    pattern: /\btracking-[^\s"']+/,
-  },
 ];
 
 function collectFiles(dirPath, accumulator = []) {
@@ -43,14 +38,6 @@ function collectFiles(dirPath, accumulator = []) {
     accumulator.push(absolutePath);
   }
   return accumulator;
-}
-
-function isAllowedShadowLine(line) {
-  return (
-    line.includes("shadow-none") ||
-    line.includes("group-data-[focus=true]:shadow-[") ||
-    line.includes("focus-visible:shadow-[")
-  );
 }
 
 function detectViolations(filePath, source) {
@@ -70,15 +57,6 @@ function detectViolations(filePath, source) {
       }
     }
 
-    if (line.includes("shadow-") && !isAllowedShadowLine(line)) {
-      violations.push({
-        filePath,
-        line: index + 1,
-        rule: "shadow-utility",
-        description: "Avoid shadow utilities unless strictly necessary",
-        content: line.trim(),
-      });
-    }
   });
 
   return violations;

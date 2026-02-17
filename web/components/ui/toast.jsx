@@ -9,7 +9,7 @@ export function Toast({ type = "info", message, className }) {
 
   const style = {
     info: "border-border bg-card text-card-foreground",
-    success: "border-emerald-300 bg-emerald-50 text-emerald-900",
+    success: "border-primary/30 bg-primary/10 text-primary",
     error: "border-destructive/40 bg-destructive/10 text-destructive",
   };
 
