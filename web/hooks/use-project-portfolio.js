@@ -89,6 +89,20 @@ export function ProjectPortfolioProvider({ children }) {
 
       setLastConcreteProjectId(nextLastConcrete);
       setSelectedScopeId(nextScope);
+
+      const candidateActiveProjectId =
+        (nextActiveProjectId && nextProjectIdSet.has(nextActiveProjectId) ? nextActiveProjectId : null) ||
+        (nextLastConcrete && nextProjectIdSet.has(nextLastConcrete) ? nextLastConcrete : null) ||
+        nextProjectIds[0] ||
+        null;
+      if (!nextActiveProjectId && candidateActiveProjectId) {
+        try {
+          await apiFetch(`/projects/${candidateActiveProjectId}/select`, { method: "POST" });
+          setActiveProjectId(candidateActiveProjectId);
+        } catch {
+          // keep UI responsive; user can still choose project manually
+        }
+      }
     } catch (requestError) {
       setError(requestError?.message || "Не удалось загрузить список проектов");
       setProjects([]);
