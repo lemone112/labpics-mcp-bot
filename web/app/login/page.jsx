@@ -146,7 +146,6 @@ export default function LoginPage() {
                   setMode("signup");
                   setToast({ type: "info", message: "" });
                 }}
-                disabled={!signupStatus.enabled}
               >
                 Create account
               </Button>

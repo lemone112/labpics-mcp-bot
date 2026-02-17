@@ -57,7 +57,7 @@ export default function JobsPage() {
           <CardHeader>
             <CardTitle>Run jobs</CardTitle>
             <p className="text-sm text-[var(--text-muted)]">
-              Trigger ingestion and embeddings tasks for the active project.
+              Trigger ingestion and embeddings tasks for current workspace data.
             </p>
           </CardHeader>
           <CardContent className="flex flex-wrap gap-3">
