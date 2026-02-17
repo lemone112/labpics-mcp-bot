@@ -52,7 +52,7 @@ export function StatusChip({ status, className }) {
       variant="flat"
       color={chip.color}
       className={cn(
-        "border text-[11px] font-semibold tracking-[0.02em]",
+        "border text-xs font-medium",
         chip.className,
         className
       )}

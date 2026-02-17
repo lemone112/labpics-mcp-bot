@@ -36,9 +36,9 @@ const sizeMap = {
 };
 
 const sizeClassMap = {
-  default: "h-9 text-[13px]",
-  sm: "h-8 text-[12px]",
-  lg: "h-10 text-[14px]",
+  default: "h-9 text-sm",
+  sm: "h-8 text-xs",
+  lg: "h-10 text-sm",
 };
 
 export function Button({
@@ -58,7 +58,7 @@ export function Button({
       size={sizeMap[size] || "md"}
       radius="md"
       className={cn(
-        "font-medium tracking-[-0.01em] transition-transform active:scale-[0.99] disabled:border-[var(--border-subtle)] disabled:bg-[var(--surface-soft)] disabled:text-[var(--text-subtle)]",
+        "font-medium transition-transform active:scale-[0.99] disabled:border-[var(--border-subtle)] disabled:bg-[var(--surface-soft)] disabled:text-[var(--text-subtle)]",
         sizeClassMap[size] || sizeClassMap.default,
         config.className,
         className

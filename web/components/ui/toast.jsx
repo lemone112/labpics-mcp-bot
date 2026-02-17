@@ -22,7 +22,7 @@ export function Toast({ type = "info", message, className }) {
       title={message}
       hideIcon={false}
       className={cn(
-        "border border-[var(--border-subtle)] bg-white text-[13px] text-[var(--text-primary)] shadow-[var(--shadow-soft)]",
+        "border border-[var(--border-subtle)] bg-white text-sm text-[var(--text-primary)]",
         className
       )}
     />

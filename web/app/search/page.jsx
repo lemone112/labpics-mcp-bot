@@ -44,7 +44,7 @@ export default function SearchPage() {
   }
 
   if (loading || !session) {
-    return <div className="p-8 text-[var(--text-primary)]">Loading...</div>;
+    return <div className="p-8 text-sm">Loading...</div>;
   }
 
   return (
@@ -75,7 +75,7 @@ export default function SearchPage() {
             </form>
 
             {meta ? (
-              <div className="mt-3 text-xs text-[var(--text-muted)]">
+              <div className="mt-3 text-sm text-[var(--text-muted)]">
                 model: {meta.embedding_model || "-"} • topK: {meta.topK || "-"}
               </div>
             ) : null}
