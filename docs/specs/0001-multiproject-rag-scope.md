@@ -4,102 +4,245 @@ Status: **ready**
 
 ## Goal
 
-Make all RAG data and retrieval **strictly scoped to the active project**.
+Make ingestion, embeddings, and retrieval **strictly scoped to a project**.
 
-Today, `rag_chunks` does not contain `project_id`, and `POST /search` searches globally across all chunks.
+Today (Web-first branch):
+
+- `rag_chunks` has no `project_id` and `POST /search` searches globally.
+- Chatwoot sync and chunk creation are not bound to an “active project”.
+
+This spec makes **project_id mandatory for new data**, and makes unscoped legacy rows **inaccessible** (safe-by-default).
 
 ## Non-goals
 
-- Multi-tenant orgs
-- Role-based access (single admin user is fine for MVP)
+- Multi-tenant organizations
+- RBAC
+- Backfilling historic data to projects (explicitly skipped for MVP safety)
 
-## User story
+## Product requirement (why)
 
-As a PM/Owner, when I select an active project and run search, I must **never** see chunks belonging to other projects.
+A studio runs many projects. Mixing conversation memory across projects breaks trust. Project scoping must be **hard** (enforced in schema + queries), not “best effort”.
 
-## Design
+## Key design decision: how projects map to Chatwoot
 
-### Source of scoping
+### Problem
 
-- `sessions.active_project_id` is the single source of “current project context”.
-- All ingestion and retrieval must require an active project.
+Chatwoot has many possible “anchors”:
 
-### Data model change
+- Inbox
+- Conversation
+- Contact
+- Team
+- Labels
+
+We need a mapping strategy that:
+
+- is **stable** (doesn’t change unintentionally)
+- is **operationally convenient** (PM can set it once)
+- is **safe** (unknown mapping does not leak data)
+
+### Recommended v1 mapping (best trade-off)
+
+**Map `Chatwoot Inbox → Project`**, and treat that mapping as the ingestion boundary.
+
+Rationale:
+
+- Inbox is the most stable operational unit in Chatwoot for service delivery.
+- PMs already route customer messages by inbox.
+- This avoids ambiguous “contact used in multiple projects” cases.
+
+### Alternate mapping (supported later)
+
+- `conversation_id → project_id` mapping table (fine-grained overrides)
+- labels-based mapping
+
+Not included in v1 to avoid complexity.
+
+### New table: `project_chatwoot_inboxes`
+
+Add a mapping table, maintained via UI.
+
+Columns:
+
+- `project_id uuid not null references projects(id) on delete cascade`
+- `chatwoot_account_id bigint not null`
+- `inbox_id bigint not null`
+- `created_at timestamptz not null default now()`
+
+Constraints:
+
+- `unique(chatwoot_account_id, inbox_id)` so an inbox belongs to exactly one project.
+- `unique(project_id, chatwoot_account_id, inbox_id)` (optional redundant).
+
+### Safe default
+
+If an inbox is **not mapped**, its conversations/messages are **not ingested**.
+
+This guarantees no cross-project leakage.
+
+### How ingestion uses mapping
+
+During Chatwoot sync:
+
+1. Pull recent conversations.
+2. For each conversation, read `inbox_id`.
+3. Lookup `project_id` using `project_chatwoot_inboxes`.
+4. If no mapping → skip conversation (record in job meta as `skipped_unmapped`).
+5. If mapping exists → write raw + chunks with that `project_id`.
+
+## Data model changes
+
+### 1) Add `project_id` columns (new data only)
 
 Add `project_id` to:
 
 - `cw_conversations`
 - `cw_messages`
 - `rag_chunks`
-- `sync_watermarks` (or keep source as `chatwoot:<account_id>:<project_id>`)
 
-Rationale: enables strict scoping, simplifies queries, enables per-project watermarks.
+> Backfill: **not required**. Existing rows remain NULL and are treated as inaccessible.
+
+### 2) Scope watermarks per project
+
+Change `sync_watermarks.source` format to include project:
+
+- `chatwoot:<account_id>:<project_id>`
+
+This keeps the current table but makes watermarks project-specific.
+
+### 3) Add mapping table
+
+- `project_chatwoot_inboxes` as described above.
 
 ### Migration plan
 
-Add migration `0003_project_scope.sql`:
+Add migrations:
 
-1) Add columns:
+- `0003_project_scope.sql`
+  - add nullable `project_id` columns
+  - add indexes on `project_id`
+- `0004_chatwoot_inbox_mapping.sql`
+  - create `project_chatwoot_inboxes`
 
-- `ALTER TABLE cw_conversations ADD COLUMN project_id uuid REFERENCES projects(id) ON DELETE CASCADE;`
-- `ALTER TABLE cw_messages ADD COLUMN project_id uuid REFERENCES projects(id) ON DELETE CASCADE;`
-- `ALTER TABLE rag_chunks ADD COLUMN project_id uuid REFERENCES projects(id) ON DELETE CASCADE;`
+After rollout and once you are confident, you may add a follow-up migration to enforce NOT NULL for new rows (or enforce in code only for MVP).
 
-2) Backfill strategy (MVP acceptable):
+## API changes
 
-- If there is only 0–1 projects, backfill everything to that one.
-- Otherwise, leave NULL and treat unscoped rows as **inaccessible** (safe default).
+### Auth/session prerequisite
 
-3) Constraints:
+All endpoints below require an authenticated session. Additionally:
 
-- For new writes, enforce `project_id NOT NULL`.
-  - Implement as a code-level requirement first.
-  - Optionally add `NOT NULL` after backfill.
+- any endpoint that writes or reads project data must require a valid `active_project_id`.
 
-4) Indexes:
+If missing:
 
-- `CREATE INDEX IF NOT EXISTS rag_chunks_project_idx ON rag_chunks(project_id);`
-- `CREATE INDEX IF NOT EXISTS cw_messages_project_created_idx ON cw_messages(project_id, created_at DESC);`
-- If using ivfflat, keep embedding index as is; project filter will still help.
+- respond `400 { ok:false, error:'active_project_required' }`
 
-### API changes
+### `POST /jobs/chatwoot/sync`
 
-#### `POST /jobs/chatwoot/sync`
+Modify to:
 
-- Must require `sessions.active_project_id`.
-- Writes must set `project_id` on:
-  - `cw_conversations`
-  - `cw_messages`
-  - `rag_chunks`
-- Watermark must be stored per-project.
+- **do not rely solely on `active_project_id` for scoping**.
+- ingest based on `project_chatwoot_inboxes` mapping.
 
-#### `POST /jobs/embeddings/run`
+Why:
 
-- Must embed only chunks for active project:
-  - `WHERE project_id = $active_project_id AND embedding_status='pending'`.
+- A single “sync job” should be able to ingest multiple projects safely.
+- Active project is a UI context; mapping is the data governance boundary.
 
-#### `POST /search`
+Implementation detail:
 
-- Must search only `rag_chunks` for active project:
-  - `WHERE project_id = $active_project_id AND embedding_status='ready'`.
+- For each conversation, resolve `project_id` from mapping.
+- Write `cw_*` and `rag_chunks` with that `project_id`.
+- Update watermark per project (`chatwoot:<account_id>:<project_id>`).
 
-- Must return `active_project_id` in response meta.
+### `POST /jobs/embeddings/run`
 
-### UI changes
+For MVP simplicity, keep embeddings **active-project scoped**:
 
-- In `/jobs`, show active project name/id.
-- If no active project selected, show a blocking CTA linking to `/projects`.
+- requires `active_project_id`
+- embeds only chunks for that project
+
+SQL:
+
+- `WHERE project_id = $1 AND embedding_status='pending'`
+
+Later you can add a global embeddings worker.
+
+### `POST /search`
+
+Must be project-scoped:
+
+- requires `active_project_id`
+- searches only that project
+
+SQL:
+
+- `WHERE project_id = $1 AND embedding_status='ready'`
+
+Also update response:
+
+- include `active_project_id`
+
+## UI changes
+
+### New page: `/settings/chatwoot`
+
+Goal: manage mapping `Chatwoot inbox → project`.
+
+MVP UI:
+
+- list existing mappings
+- add mapping (project select + account_id + inbox_id)
+- delete mapping
+
+### Jobs page
+
+- show active project
+- show warning banner if no mappings exist (sync would ingest nothing)
+
+### Projects page
+
+- keep as is (create/select active project)
+
+## Operational workflow (recommended)
+
+1. Create project in `/projects`.
+2. Map its Chatwoot inbox(es) in `/settings/chatwoot`.
+3. Run `/jobs/chatwoot/sync`.
+4. Select project as active.
+5. Run embeddings.
+6. Use search.
 
 ## Acceptance criteria
 
-1) With two projects A and B, after syncing both, searching in A never returns rows from B.
-2) Running `/jobs/chatwoot/sync` without selecting a project fails with `400` `active_project_required`.
-3) Embeddings and search are filtered by `project_id`.
-4) Watermarks are per project and visible in `/jobs/status`.
+1. Unmapped inbox conversations are not ingested.
+2. All inserted `cw_*` and `rag_chunks` rows have `project_id`.
+3. Embeddings job only processes active project.
+4. Search never returns cross-project rows.
+5. Legacy rows with `project_id IS NULL` are never returned by search.
 
 ## Testing checklist
 
-- Create two projects
-- Select A → run sync → run embeddings → search
-- Select B → run sync → run embeddings → search
-- Ensure returned `conversation_global_id`/`message_global_id` sets differ per project.
+- Create Project A and Project B.
+- Add two inbox mappings (A->inbox1, B->inbox2).
+- Run chatwoot sync.
+- Verify counts per project in DB.
+- Select A, run embeddings, search.
+- Select B, run embeddings, search.
+
+## Observability
+
+Update `job_runs.meta` for chatwoot sync:
+
+- `processed_conversations`
+- `processed_messages`
+- `created_chunks`
+- `skipped_unmapped_conversations`
+- `watermarks_updated` (list of project_ids)
+
+## Rollout notes
+
+- Safe rollout: deploy migrations first, then code.
+- No backfill required.
+- If mapping is wrong, fix mapping and re-run sync; old wrong rows can be cleaned by deleting by `project_id` (optional admin tool).
