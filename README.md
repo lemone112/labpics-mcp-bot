@@ -6,7 +6,7 @@
 - `web/` — Next.js UI (login/projects/jobs/search)
 - `docker-compose.yml` — локальный и серверный запуск стека
 
-Legacy Cloudflare Workers (tgbot/agent-gw/cw-sync) удалены из кода и деплоя.
+Legacy bot/worker контур удален из кода и деплоя.
 
 ---
 
