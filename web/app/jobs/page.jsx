@@ -73,10 +73,14 @@ export default function JobsPage() {
             <CardTitle>RAG counts</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
               <div className="rounded border border-slate-800 p-3">
                 <div className="text-xs text-slate-400">Pending</div>
                 <div className="text-xl font-semibold">{status?.rag_counts?.pending ?? 0}</div>
+              </div>
+              <div className="rounded border border-slate-800 p-3">
+                <div className="text-xs text-slate-400">Processing</div>
+                <div className="text-xl font-semibold">{status?.rag_counts?.processing ?? 0}</div>
               </div>
               <div className="rounded border border-slate-800 p-3">
                 <div className="text-xs text-slate-400">Ready</div>
@@ -85,6 +89,41 @@ export default function JobsPage() {
               <div className="rounded border border-slate-800 p-3">
                 <div className="text-xs text-slate-400">Failed</div>
                 <div className="text-xl font-semibold">{status?.rag_counts?.failed ?? 0}</div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Data footprint</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
+              <div className="rounded border border-slate-800 p-3">
+                <div className="text-xs text-slate-400">Contacts</div>
+                <div className="text-xl font-semibold">{status?.entities?.contacts ?? 0}</div>
+              </div>
+              <div className="rounded border border-slate-800 p-3">
+                <div className="text-xs text-slate-400">Conversations</div>
+                <div className="text-xl font-semibold">{status?.entities?.conversations ?? 0}</div>
+              </div>
+              <div className="rounded border border-slate-800 p-3">
+                <div className="text-xs text-slate-400">Messages</div>
+                <div className="text-xl font-semibold">{status?.entities?.messages ?? 0}</div>
+              </div>
+              <div className="rounded border border-slate-800 p-3">
+                <div className="text-xs text-slate-400">DB size</div>
+                <div className="text-xl font-semibold">
+                  {typeof status?.storage?.database_bytes === "number"
+                    ? `${(status.storage.database_bytes / (1024 ** 3)).toFixed(2)} GB`
+                    : "-"}
+                </div>
+                <div className="mt-1 text-xs text-slate-500">
+                  {typeof status?.storage?.usage_percent === "number"
+                    ? `${status.storage.usage_percent}% of budget`
+                    : ""}
+                </div>
               </div>
             </div>
           </CardContent>

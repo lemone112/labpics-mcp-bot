@@ -6,7 +6,7 @@
 - `web/` — Next.js UI (login/projects/jobs/search)
 - `docker-compose.yml` — локальный и серверный запуск стека
 
-Legacy Cloudflare Workers (tgbot/agent-gw/cw-sync) удалены из кода и деплоя.
+Legacy bot/worker контур удален из кода и деплоя.
 
 ---
 
@@ -28,6 +28,10 @@ Legacy Cloudflare Workers (tgbot/agent-gw/cw-sync) удалены из кода 
   - `GET /jobs/status`
 - Search:
   - `POST /search` (vector similarity)
+- Data review:
+  - `GET /contacts`
+  - `GET /conversations`
+  - `GET /messages`
 
 ### UI (`web`)
 
@@ -47,6 +51,7 @@ Legacy Cloudflare Workers (tgbot/agent-gw/cw-sync) удалены из кода 
 - `CREATE EXTENSION IF NOT EXISTS vector;`
 - таблицы:
   - `projects`
+  - `cw_contacts`
   - `cw_conversations`
   - `cw_messages`
   - `rag_chunks`
@@ -55,7 +60,17 @@ Legacy Cloudflare Workers (tgbot/agent-gw/cw-sync) удалены из кода 
   - `sessions`
 - индексы:
   - `rag_chunks(conversation_global_id)`
-  - `ivfflat` по `rag_chunks.embedding`
+  - `hnsw`/`ivfflat` по `rag_chunks.embedding`
+  - статусные индексы для embeddings pipeline
+
+Оптимизации для self-hosted Postgres:
+
+- watermark-based sync без повторного полного обхода
+- batching для OpenAI embeddings
+- конкурентобезопасный claim (`FOR UPDATE SKIP LOCKED`) в embeddings job
+- reset embeddings только для реально изменившихся chunk'ов (hash-based)
+- хранение контактов отдельно (`cw_contacts`) + легкие review endpoints
+- мониторинг размера БД в `/jobs/status` + бюджет хранения (`STORAGE_BUDGET_GB`, по умолчанию 20 GB)
 
 Автоприменение миграций происходит при старте `server`.
 
@@ -130,19 +145,33 @@ docker compose up --build
 - `SESSION_COOKIE_NAME`
 - `CHATWOOT_BASE_URL`
 - `CHATWOOT_ACCOUNT_ID`
+- `CHATWOOT_CONVERSATIONS_LIMIT`
+- `CHATWOOT_CONVERSATIONS_PER_PAGE`
+- `CHATWOOT_PAGES_LIMIT`
+- `CHATWOOT_MESSAGES_LIMIT`
+- `CHATWOOT_LOOKBACK_DAYS`
 - `EMBEDDING_MODEL`
+- `EMBEDDING_DIM`
 - `EMBED_BATCH_SIZE`
+- `OPENAI_EMBED_MAX_INPUTS`
+- `OPENAI_TIMEOUT_MS`
+- `EMBED_STALE_RECOVERY_MINUTES`
 - `CHUNK_SIZE`
 - `MIN_EMBED_CHARS`
+- `SEARCH_IVFFLAT_PROBES`
+- `SEARCH_HNSW_EF_SEARCH`
+- `STORAGE_BUDGET_GB`
+- `STORAGE_ALERT_THRESHOLD_PCT`
 
 ---
 
 ## 6) Acceptance checklist
 
-1. `POST /jobs/chatwoot/sync` заполняет `cw_*` и создает `rag_chunks` со статусом `pending`.
+1. `POST /jobs/chatwoot/sync` заполняет `cw_contacts`, `cw_conversations`, `cw_messages` и создает `rag_chunks` со статусом `pending`.
 2. `POST /jobs/embeddings/run` переводит `pending -> ready`.
 3. `POST /search` возвращает релевантные chunks с source id.
-4. UI позволяет:
+4. `GET /jobs/status` показывает счетчики и storage bytes по ключевым таблицам.
+5. UI позволяет:
    - залогиниться
    - запустить Sync/Embeddings
    - выполнить поиск и увидеть источники.

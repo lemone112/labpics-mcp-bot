@@ -28,11 +28,7 @@ export async function fetchWithRetry(url, options = {}) {
       clearTimeout(timer);
 
       if (attempt < retries && shouldRetryStatus(response.status)) {
-        const body = await response.text().catch(() => "");
-        logger.warn(
-          { url, status: response.status, attempt, retries, body: body.slice(0, 200) },
-          "retrying fetch due to response status"
-        );
+        logger.warn({ url, status: response.status, attempt, retries }, "retrying fetch due to response status");
         await sleep(backoffMs * (attempt + 1));
         continue;
       }
