@@ -116,14 +116,17 @@ export async function getPortfolioOverview(pool, options = {}) {
     loopsRows,
     healthTrendRows,
     velocityRows,
-    blockersRows,
+    overdueIssuesRows,
     responseRows,
     agreementsCreatedRows,
-    agreementsCompletedRows,
+    signedOffersRows,
     risksTrendRows,
     burnBudgetRows,
     upsellTrendRows,
     financeStageRows,
+    kagScoresByProjectRows,
+    kagScoreTrendRows,
+    kagForecastRows,
   ] =
     await Promise.all([
       pool.query(
@@ -565,6 +568,62 @@ export async function getPortfolioOverview(pool, options = {}) {
         `,
         [accountScopeId, selectedProjectIds]
       ),
+      pool.query(
+        `
+          SELECT
+            p.id::text AS project_id,
+            p.name AS project_name,
+            COALESCE(max(CASE WHEN ks.score_type = 'project_health' THEN ks.score END), 0)::numeric(6,2) AS project_health,
+            COALESCE(max(CASE WHEN ks.score_type = 'risk' THEN ks.score END), 0)::numeric(6,2) AS risk,
+            COALESCE(max(CASE WHEN ks.score_type = 'client_value' THEN ks.score END), 0)::numeric(6,2) AS client_value,
+            COALESCE(max(CASE WHEN ks.score_type = 'upsell_likelihood' THEN ks.score END), 0)::numeric(6,2) AS upsell_likelihood
+          FROM projects AS p
+          LEFT JOIN kag_scores AS ks
+            ON ks.project_id = p.id
+           AND ks.account_scope_id = $1
+          WHERE p.account_scope_id = $1
+            AND p.id::text = ANY($2::text[])
+          GROUP BY p.id, p.name
+          ORDER BY p.name ASC
+        `,
+        [accountScopeId, selectedProjectIds]
+      ),
+      pool.query(
+        `
+          SELECT
+            snapshot_date::text AS point,
+            COALESCE(avg((scores_json -> 'project_health' ->> 'score')::numeric), 0)::numeric(6,2) AS project_health,
+            COALESCE(avg((scores_json -> 'risk' ->> 'score')::numeric), 0)::numeric(6,2) AS risk,
+            COALESCE(avg((scores_json -> 'client_value' ->> 'score')::numeric), 0)::numeric(6,2) AS client_value,
+            COALESCE(avg((scores_json -> 'upsell_likelihood' ->> 'score')::numeric), 0)::numeric(6,2) AS upsell_likelihood
+          FROM project_snapshots
+          WHERE account_scope_id = $1
+            AND project_id::text = ANY($2::text[])
+            AND publishable = true
+            AND snapshot_date >= current_date - interval '60 days'
+          GROUP BY snapshot_date
+          ORDER BY snapshot_date ASC
+          LIMIT 60
+        `,
+        [accountScopeId, selectedProjectIds]
+      ),
+      pool.query(
+        `
+          SELECT
+            risk_type,
+            COALESCE(avg(probability_7d), 0)::numeric(6,4) AS probability_7d,
+            COALESCE(avg(probability_14d), 0)::numeric(6,4) AS probability_14d,
+            COALESCE(avg(probability_30d), 0)::numeric(6,4) AS probability_30d,
+            COALESCE(avg(confidence), 0)::numeric(6,4) AS confidence
+          FROM kag_risk_forecasts
+          WHERE account_scope_id = $1
+            AND project_id::text = ANY($2::text[])
+            AND publishable = true
+          GROUP BY risk_type
+          ORDER BY risk_type ASC
+        `,
+        [accountScopeId, selectedProjectIds]
+      ),
     ]);
 
   const dashboardByProject = dashboardRows.rows.map((row) => {
@@ -663,6 +722,14 @@ export async function getPortfolioOverview(pool, options = {}) {
     max_discount_pct: toDiscountLimit(project.client_value_score),
   }));
 
+  const agreementsCreatedByPoint = new Map(
+    agreementsCreatedRows.rows.map((row) => [String(row.point), toNumber(row.value, 0)])
+  );
+  const signedOffersByPoint = new Map(
+    signedOffersRows.rows.map((row) => [String(row.point), toNumber(row.value, 0)])
+  );
+  const agreementPoints = [...new Set([...agreementsCreatedByPoint.keys(), ...signedOffersByPoint.keys()])].sort();
+
   const dashboardCharts = {
     health_score: healthTrendRows.rows.map((row) => ({
       point: row.point,
@@ -672,7 +739,7 @@ export async function getPortfolioOverview(pool, options = {}) {
       point: row.point,
       value: toNumber(row.value, 0),
     })),
-    blockers_count: blockersRows.rows.map((row) => ({
+    overdue_issues_count: overdueIssuesRows.rows.map((row) => ({
       point: row.point,
       value: toNumber(row.value, 0),
     })),
@@ -680,13 +747,11 @@ export async function getPortfolioOverview(pool, options = {}) {
       point: row.point,
       value: toNumber(row.value, 0),
     })),
-    agreements_created_vs_completed: agreementsCreatedRows.rows.map((row) => {
-      const point = row.point;
-      const completed = agreementsCompletedRows.rows.find((entry) => entry.point === point);
+    agreements_vs_signed_offers: agreementPoints.map((point) => {
       return {
         point,
-        created: toNumber(row.value, 0),
-        completed: toNumber(completed?.value, 0),
+        agreements: agreementsCreatedByPoint.get(point) || 0,
+        signed_offers: signedOffersByPoint.get(point) || 0,
       };
     }),
     risks_trend: risksTrendRows.rows.map((row) => ({
@@ -702,6 +767,28 @@ export async function getPortfolioOverview(pool, options = {}) {
     upsell_potential_score: upsellTrendRows.rows.map((row) => ({
       point: row.point,
       value: toNumber(row.value, 0),
+    })),
+    kag_scores_by_project: kagScoresByProjectRows.rows.map((row) => ({
+      project_id: row.project_id,
+      project_name: row.project_name,
+      project_health: toNumber(row.project_health, 0),
+      risk: toNumber(row.risk, 0),
+      client_value: toNumber(row.client_value, 0),
+      upsell_likelihood: toNumber(row.upsell_likelihood, 0),
+    })),
+    kag_scores_trend: kagScoreTrendRows.rows.map((row) => ({
+      point: row.point,
+      project_health: toNumber(row.project_health, 0),
+      risk: toNumber(row.risk, 0),
+      client_value: toNumber(row.client_value, 0),
+      upsell_likelihood: toNumber(row.upsell_likelihood, 0),
+    })),
+    kag_risk_forecast_probabilities: kagForecastRows.rows.map((row) => ({
+      risk_type: row.risk_type,
+      probability_7d: toNumber(row.probability_7d, 0),
+      probability_14d: toNumber(row.probability_14d, 0),
+      probability_30d: toNumber(row.probability_30d, 0),
+      confidence: toNumber(row.confidence, 0),
     })),
   };
 

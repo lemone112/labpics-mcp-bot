@@ -62,6 +62,15 @@ function numberValue(value) {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
+function formatRiskTypeRu(riskType) {
+  const key = String(riskType || "").toLowerCase();
+  if (key === "delivery_risk") return "Риск поставки";
+  if (key === "finance_risk") return "Финансовый риск";
+  if (key === "client_risk") return "Риск по клиенту";
+  if (key === "scope_risk") return "Риск scope creep";
+  return key || "Риск";
+}
+
 function useFormatters() {
   const moneyFormatter = useMemo(
     () =>
@@ -101,21 +110,26 @@ function renderDashboardCharts(payload, moneyFormatter, numberFormatter) {
   const charts = payload?.dashboard?.charts || {};
   const health = Array.isArray(charts.health_score) ? charts.health_score : [];
   const velocity = Array.isArray(charts.velocity_completed_issues) ? charts.velocity_completed_issues : [];
-  const blockers = Array.isArray(charts.blockers_count) ? charts.blockers_count : [];
+  const overdueIssues = Array.isArray(charts.overdue_issues_count) ? charts.overdue_issues_count : [];
   const responsiveness = Array.isArray(charts.client_responsiveness_minutes) ? charts.client_responsiveness_minutes : [];
-  const agreements = Array.isArray(charts.agreements_created_vs_completed) ? charts.agreements_created_vs_completed : [];
+  const agreements = Array.isArray(charts.agreements_vs_signed_offers) ? charts.agreements_vs_signed_offers : [];
   const risks = Array.isArray(charts.risks_trend) ? charts.risks_trend : [];
   const burnBudget = Array.isArray(charts.burn_vs_budget) ? charts.burn_vs_budget : [];
   const upsell = Array.isArray(charts.upsell_potential_score) ? charts.upsell_potential_score : [];
+  const kagScoresByProject = Array.isArray(charts.kag_scores_by_project) ? charts.kag_scores_by_project : [];
+  const kagScoreTrend = Array.isArray(charts.kag_scores_trend) ? charts.kag_scores_trend : [];
+  const kagForecastProbabilities = Array.isArray(charts.kag_risk_forecast_probabilities)
+    ? charts.kag_risk_forecast_probabilities
+    : [];
 
   return (
     <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 xl:grid-cols-3">
       <Card data-motion-item>
         <CardHeader>
-          <CardTitle>Project Health Score</CardTitle>
+          <CardTitle>Индекс здоровья проекта</CardTitle>
         </CardHeader>
         <CardContent>
-          <ChartContainer config={{ value: { label: "Health score", markerClassName: "bg-primary" } }}>
+          <ChartContainer config={{ value: { label: "Индекс", markerClassName: "bg-primary" } }}>
             <AreaChart data={health.map((item) => ({ ...item, label: toRuDateLabel(item.point) }))}>
               <CartesianGrid vertical={false} />
               <XAxis dataKey="label" tickLine={false} axisLine={false} minTickGap={24} />
@@ -129,10 +143,10 @@ function renderDashboardCharts(payload, moneyFormatter, numberFormatter) {
 
       <Card data-motion-item>
         <CardHeader>
-          <CardTitle>Velocity / Completed issues</CardTitle>
+          <CardTitle>Скорость выполнения задач</CardTitle>
         </CardHeader>
         <CardContent>
-          <ChartContainer config={{ value: { label: "Completed", markerClassName: "bg-chart-2" } }}>
+          <ChartContainer config={{ value: { label: "Завершено", markerClassName: "bg-chart-2" } }}>
             <BarChart data={velocity.map((item) => ({ ...item, label: toRuDateLabel(item.point) }))}>
               <CartesianGrid vertical={false} />
               <XAxis dataKey="label" tickLine={false} axisLine={false} minTickGap={24} />
@@ -146,11 +160,11 @@ function renderDashboardCharts(payload, moneyFormatter, numberFormatter) {
 
       <Card data-motion-item>
         <CardHeader>
-          <CardTitle>Blockers count</CardTitle>
+          <CardTitle>Просроченные задачи (Linear)</CardTitle>
         </CardHeader>
         <CardContent>
-          <ChartContainer config={{ value: { label: "Blockers", markerClassName: "bg-destructive" } }}>
-            <LineChart data={blockers.map((item) => ({ ...item, label: toRuDateLabel(item.point) }))}>
+          <ChartContainer config={{ value: { label: "Просрочено", markerClassName: "bg-destructive" } }}>
+            <LineChart data={overdueIssues.map((item) => ({ ...item, label: toRuDateLabel(item.point) }))}>
               <CartesianGrid vertical={false} />
               <XAxis dataKey="label" tickLine={false} axisLine={false} minTickGap={24} />
               <YAxis tickLine={false} axisLine={false} />
@@ -163,10 +177,10 @@ function renderDashboardCharts(payload, moneyFormatter, numberFormatter) {
 
       <Card data-motion-item>
         <CardHeader>
-          <CardTitle>Client responsiveness (avg minutes)</CardTitle>
+          <CardTitle>Скорость ответа клиенту (мин)</CardTitle>
         </CardHeader>
         <CardContent>
-          <ChartContainer config={{ value: { label: "Avg min", markerClassName: "bg-chart-3" } }}>
+          <ChartContainer config={{ value: { label: "Среднее, мин", markerClassName: "bg-chart-3" } }}>
             <LineChart data={responsiveness.map((item) => ({ ...item, label: toRuDateLabel(item.point) }))}>
               <CartesianGrid vertical={false} />
               <XAxis dataKey="label" tickLine={false} axisLine={false} minTickGap={24} />
@@ -180,13 +194,13 @@ function renderDashboardCharts(payload, moneyFormatter, numberFormatter) {
 
       <Card data-motion-item>
         <CardHeader>
-          <CardTitle>Agreements created vs completed</CardTitle>
+          <CardTitle>Договоренности vs подписанные офферы</CardTitle>
         </CardHeader>
         <CardContent>
           <ChartContainer
             config={{
-              created: { label: "Created", markerClassName: "bg-chart-1" },
-              completed: { label: "Completed", markerClassName: "bg-chart-4" },
+              agreements: { label: "Договоренности", markerClassName: "bg-chart-1" },
+              signed_offers: { label: "Подписанные офферы", markerClassName: "bg-chart-4" },
             }}
           >
             <BarChart data={agreements.map((item) => ({ ...item, label: toRuDateLabel(item.point) }))}>
@@ -195,8 +209,8 @@ function renderDashboardCharts(payload, moneyFormatter, numberFormatter) {
               <YAxis tickLine={false} axisLine={false} />
               <ChartTooltip content={<ChartTooltipContent formatter={(value) => numberFormatter.format(numberValue(value))} />} />
               <ChartLegend content={<ChartLegendContent />} />
-              <Bar dataKey="created" stackId="a" fill="hsl(var(--chart-1))" radius={[4, 4, 0, 0]} />
-              <Bar dataKey="completed" stackId="a" fill="hsl(var(--chart-4))" radius={[4, 4, 0, 0]} />
+              <Bar dataKey="agreements" stackId="a" fill="hsl(var(--chart-1))" radius={[4, 4, 0, 0]} />
+              <Bar dataKey="signed_offers" stackId="a" fill="hsl(var(--chart-4))" radius={[4, 4, 0, 0]} />
             </BarChart>
           </ChartContainer>
         </CardContent>
@@ -204,13 +218,13 @@ function renderDashboardCharts(payload, moneyFormatter, numberFormatter) {
 
       <Card data-motion-item>
         <CardHeader>
-          <CardTitle>Risks trend</CardTitle>
+          <CardTitle>Динамика рисков</CardTitle>
         </CardHeader>
         <CardContent>
           <ChartContainer
             config={{
-              count: { label: "Risk count", markerClassName: "bg-destructive" },
-              severity_avg: { label: "Severity avg", markerClassName: "bg-chart-5" },
+              count: { label: "Количество рисков", markerClassName: "bg-destructive" },
+              severity_avg: { label: "Средняя критичность", markerClassName: "bg-chart-5" },
             }}
           >
             <LineChart data={risks.map((item) => ({ ...item, label: toRuDateLabel(item.point) }))}>
@@ -228,13 +242,13 @@ function renderDashboardCharts(payload, moneyFormatter, numberFormatter) {
 
       <Card data-motion-item>
         <CardHeader>
-          <CardTitle>Finance burn vs budget</CardTitle>
+          <CardTitle>Факт затрат vs pipeline</CardTitle>
         </CardHeader>
         <CardContent>
           <ChartContainer
             config={{
-              burn: { label: "Burn", markerClassName: "bg-destructive" },
-              budget: { label: "Budget", markerClassName: "bg-primary" },
+              burn: { label: "Факт затрат", markerClassName: "bg-destructive" },
+              budget: { label: "Пайплайн", markerClassName: "bg-primary" },
             }}
           >
             <AreaChart data={burnBudget.map((item) => ({ ...item, label: toRuDateLabel(item.point) }))}>
@@ -252,16 +266,106 @@ function renderDashboardCharts(payload, moneyFormatter, numberFormatter) {
 
       <Card data-motion-item>
         <CardHeader>
-          <CardTitle>Upsell potential score</CardTitle>
+          <CardTitle>Потенциал апсейла</CardTitle>
         </CardHeader>
         <CardContent>
-          <ChartContainer config={{ value: { label: "Upsell score", markerClassName: "bg-primary" } }}>
+          <ChartContainer config={{ value: { label: "Индекс апсейла", markerClassName: "bg-primary" } }}>
             <BarChart data={upsell.map((item) => ({ ...item, label: toRuDateLabel(item.point), value: numberValue(item.value) * 100 }))}>
               <CartesianGrid vertical={false} />
               <XAxis dataKey="label" tickLine={false} axisLine={false} minTickGap={24} />
               <YAxis tickLine={false} axisLine={false} domain={[0, 100]} />
               <ChartTooltip content={<ChartTooltipContent formatter={(value) => `${Math.round(numberValue(value))}%`} />} />
               <Bar dataKey="value" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
+            </BarChart>
+          </ChartContainer>
+        </CardContent>
+      </Card>
+
+      <Card data-motion-item>
+        <CardHeader>
+          <CardTitle>KAG-рейтинги по проектам</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <ChartContainer
+            config={{
+              project_health: { label: "Здоровье", markerClassName: "bg-primary" },
+              risk: { label: "Риск", markerClassName: "bg-destructive" },
+              client_value: { label: "Ценность клиента", markerClassName: "bg-chart-2" },
+              upsell_likelihood: { label: "Вероятность апсейла", markerClassName: "bg-chart-4" },
+            }}
+          >
+            <BarChart data={kagScoresByProject}>
+              <CartesianGrid vertical={false} />
+              <XAxis dataKey="project_name" tickLine={false} axisLine={false} minTickGap={12} />
+              <YAxis tickLine={false} axisLine={false} domain={[0, 100]} />
+              <ChartTooltip content={<ChartTooltipContent formatter={(value) => numberFormatter.format(numberValue(value))} />} />
+              <ChartLegend content={<ChartLegendContent />} />
+              <Bar dataKey="project_health" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
+              <Bar dataKey="risk" fill="hsl(var(--destructive))" radius={[4, 4, 0, 0]} />
+              <Bar dataKey="client_value" fill="hsl(var(--chart-2))" radius={[4, 4, 0, 0]} />
+              <Bar dataKey="upsell_likelihood" fill="hsl(var(--chart-4))" radius={[4, 4, 0, 0]} />
+            </BarChart>
+          </ChartContainer>
+        </CardContent>
+      </Card>
+
+      <Card data-motion-item>
+        <CardHeader>
+          <CardTitle>KAG-рейтинги (тренд по снапшотам)</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <ChartContainer
+            config={{
+              project_health: { label: "Здоровье", markerClassName: "bg-primary" },
+              risk: { label: "Риск", markerClassName: "bg-destructive" },
+              client_value: { label: "Ценность клиента", markerClassName: "bg-chart-2" },
+              upsell_likelihood: { label: "Вероятность апсейла", markerClassName: "bg-chart-4" },
+            }}
+          >
+            <LineChart data={kagScoreTrend.map((item) => ({ ...item, label: toRuDateLabel(item.point) }))}>
+              <CartesianGrid vertical={false} />
+              <XAxis dataKey="label" tickLine={false} axisLine={false} minTickGap={24} />
+              <YAxis tickLine={false} axisLine={false} domain={[0, 100]} />
+              <ChartTooltip content={<ChartTooltipContent formatter={(value) => numberFormatter.format(numberValue(value))} />} />
+              <ChartLegend content={<ChartLegendContent />} />
+              <Line dataKey="project_health" type="monotone" stroke="hsl(var(--primary))" strokeWidth={2} dot={false} />
+              <Line dataKey="risk" type="monotone" stroke="hsl(var(--destructive))" strokeWidth={2} dot={false} />
+              <Line dataKey="client_value" type="monotone" stroke="hsl(var(--chart-2))" strokeWidth={2} dot={false} />
+              <Line dataKey="upsell_likelihood" type="monotone" stroke="hsl(var(--chart-4))" strokeWidth={2} dot={false} />
+            </LineChart>
+          </ChartContainer>
+        </CardContent>
+      </Card>
+
+      <Card data-motion-item>
+        <CardHeader>
+          <CardTitle>KAG-прогноз рисков (7/14/30 дней)</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <ChartContainer
+            config={{
+              probability_7d: { label: "7 дней", markerClassName: "bg-chart-3" },
+              probability_14d: { label: "14 дней", markerClassName: "bg-chart-2" },
+              probability_30d: { label: "30 дней", markerClassName: "bg-destructive" },
+            }}
+          >
+            <BarChart
+              data={kagForecastProbabilities.map((item) => ({
+                ...item,
+                risk_label: formatRiskTypeRu(item.risk_type),
+                probability_7d: numberValue(item.probability_7d) * 100,
+                probability_14d: numberValue(item.probability_14d) * 100,
+                probability_30d: numberValue(item.probability_30d) * 100,
+              }))}
+            >
+              <CartesianGrid vertical={false} />
+              <XAxis dataKey="risk_label" tickLine={false} axisLine={false} minTickGap={12} />
+              <YAxis tickLine={false} axisLine={false} domain={[0, 100]} />
+              <ChartTooltip content={<ChartTooltipContent formatter={(value) => `${Math.round(numberValue(value))}%`} />} />
+              <ChartLegend content={<ChartLegendContent />} />
+              <Bar dataKey="probability_7d" fill="hsl(var(--chart-3))" radius={[4, 4, 0, 0]} />
+              <Bar dataKey="probability_14d" fill="hsl(var(--chart-2))" radius={[4, 4, 0, 0]} />
+              <Bar dataKey="probability_30d" fill="hsl(var(--destructive))" radius={[4, 4, 0, 0]} />
             </BarChart>
           </ChartContainer>
         </CardContent>
@@ -300,7 +404,7 @@ function renderRisks(risks, isAllProjects) {
           <CardContent className="space-y-2 pt-4">
             <div className="flex flex-wrap items-center gap-2">
               {isAllProjects ? <ProjectBadge projectId={risk.project_id} projectName={risk.project_name} /> : <Badge variant="outline">{risk.project_name}</Badge>}
-              <Badge variant={numberValue(risk.severity) >= 4 ? "destructive" : "secondary"}>Severity {Math.round(numberValue(risk.severity))}</Badge>
+              <Badge variant={numberValue(risk.severity) >= 4 ? "destructive" : "secondary"}>Критичность {Math.round(numberValue(risk.severity))}</Badge>
               <Badge variant="outline">{risk.source}</Badge>
             </div>
             <p className="text-sm">{risk.title}</p>
@@ -333,16 +437,16 @@ function renderFinance(financePayload, moneyFormatter, numberFormatter) {
     <div className="space-y-4">
       <div className="grid grid-cols-1 gap-3 md:grid-cols-3 xl:grid-cols-6">
         <StatTile label="Сумма сделок" value={moneyFormatter.format(numberValue(totals.deal_amount))} />
-        <StatTile label="Pipeline" value={moneyFormatter.format(numberValue(totals.pipeline_amount))} />
-        <StatTile label="Expected revenue" value={moneyFormatter.format(numberValue(totals.expected_revenue))} />
-        <StatTile label="Signed total" value={moneyFormatter.format(numberValue(totals.signed_total))} />
-        <StatTile label="Costs" value={moneyFormatter.format(numberValue(totals.costs_amount))} />
-        <StatTile label="Gross margin" value={moneyFormatter.format(numberValue(totals.gross_margin))} />
+        <StatTile label="Пайплайн" value={moneyFormatter.format(numberValue(totals.pipeline_amount))} />
+        <StatTile label="Ожидаемая выручка" value={moneyFormatter.format(numberValue(totals.expected_revenue))} />
+        <StatTile label="Подписано" value={moneyFormatter.format(numberValue(totals.signed_total))} />
+        <StatTile label="Затраты" value={moneyFormatter.format(numberValue(totals.costs_amount))} />
+        <StatTile label="Валовая маржа" value={moneyFormatter.format(numberValue(totals.gross_margin))} />
       </div>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 xl:grid-cols-3">
         <Card data-motion-item>
-          <CardHeader><CardTitle>Revenue по проектам</CardTitle></CardHeader>
+          <CardHeader><CardTitle>Выручка по проектам</CardTitle></CardHeader>
           <CardContent>
             <ChartContainer>
               <BarChart data={revenueByProject}>
@@ -357,7 +461,7 @@ function renderFinance(financePayload, moneyFormatter, numberFormatter) {
         </Card>
 
         <Card data-motion-item>
-          <CardHeader><CardTitle>Costs по проектам</CardTitle></CardHeader>
+          <CardHeader><CardTitle>Затраты по проектам</CardTitle></CardHeader>
           <CardContent>
             <ChartContainer>
               <BarChart data={costsByProject}>
@@ -372,7 +476,7 @@ function renderFinance(financePayload, moneyFormatter, numberFormatter) {
         </Card>
 
         <Card data-motion-item>
-          <CardHeader><CardTitle>Margin</CardTitle></CardHeader>
+          <CardHeader><CardTitle>Маржа</CardTitle></CardHeader>
           <CardContent>
             <ChartContainer>
               <BarChart data={marginByProject}>
@@ -387,7 +491,7 @@ function renderFinance(financePayload, moneyFormatter, numberFormatter) {
         </Card>
 
         <Card data-motion-item>
-          <CardHeader><CardTitle>Burn rate</CardTitle></CardHeader>
+          <CardHeader><CardTitle>Темп затрат</CardTitle></CardHeader>
           <CardContent>
             <ChartContainer>
               <LineChart data={burnTrend.map((item) => ({ ...item, label: toRuDateLabel(item.point) }))}>
@@ -402,7 +506,7 @@ function renderFinance(financePayload, moneyFormatter, numberFormatter) {
         </Card>
 
         <Card data-motion-item>
-          <CardHeader><CardTitle>Forecast completion date proxy</CardTitle></CardHeader>
+          <CardHeader><CardTitle>Прогноз до завершения (дни)</CardTitle></CardHeader>
           <CardContent>
             <ChartContainer>
               <BarChart data={forecastCompletion}>
@@ -417,12 +521,12 @@ function renderFinance(financePayload, moneyFormatter, numberFormatter) {
         </Card>
 
         <Card data-motion-item>
-          <CardHeader><CardTitle>Budget vs Actual</CardTitle></CardHeader>
+          <CardHeader><CardTitle>План vs факт</CardTitle></CardHeader>
           <CardContent>
             <ChartContainer
               config={{
-                budget: { label: "Budget", markerClassName: "bg-primary" },
-                actual: { label: "Actual", markerClassName: "bg-destructive" },
+                budget: { label: "План", markerClassName: "bg-primary" },
+                actual: { label: "Факт", markerClassName: "bg-destructive" },
               }}
             >
               <BarChart data={budgetActual.map((item) => ({ ...item, label: toRuDateLabel(item.point) }))}>
@@ -439,7 +543,7 @@ function renderFinance(financePayload, moneyFormatter, numberFormatter) {
         </Card>
 
         <Card data-motion-item>
-          <CardHeader><CardTitle>Unit economics proxy</CardTitle></CardHeader>
+          <CardHeader><CardTitle>Прокси юнит-экономики</CardTitle></CardHeader>
           <CardContent>
             <ChartContainer>
               <BarChart data={unitEconomics}>
@@ -454,7 +558,7 @@ function renderFinance(financePayload, moneyFormatter, numberFormatter) {
         </Card>
 
         <Card data-motion-item>
-          <CardHeader><CardTitle>Funnel / Nodes (стадии)</CardTitle></CardHeader>
+          <CardHeader><CardTitle>Воронка (стадии)</CardTitle></CardHeader>
           <CardContent>
             <ChartContainer>
               <PieChart>
@@ -472,7 +576,7 @@ function renderFinance(financePayload, moneyFormatter, numberFormatter) {
             <CardContent className="pt-4">
               <div className="flex items-center justify-between gap-2">
                 <ProjectBadge projectId={row.project_id} projectName={row.project_name} />
-                <span className="text-xs text-muted-foreground">Прогноз: {Math.round(numberValue(row.forecast_days))} дн.</span>
+                <span className="text-xs text-muted-foreground">Прогноз до закрытия: {Math.round(numberValue(row.forecast_days))} дн.</span>
               </div>
             </CardContent>
           </Card>
@@ -497,7 +601,7 @@ function renderOffers(payload, isAllProjects, moneyFormatter) {
 
       <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
         <Card data-motion-item>
-          <CardHeader><CardTitle>Upsell opportunities</CardTitle></CardHeader>
+          <CardHeader><CardTitle>Возможности допродажи</CardTitle></CardHeader>
           <CardContent className="space-y-2">
             {(offers.upsell || []).map((item) => (
               <div key={item.id} className="rounded-md border p-2">
@@ -509,7 +613,7 @@ function renderOffers(payload, isAllProjects, moneyFormatter) {
                 <p className="text-xs text-muted-foreground">{item.rationale || "Без описания"}</p>
               </div>
             ))}
-            {!offers.upsell?.length ? <p className="text-sm text-muted-foreground">Пока нет upsell opportunities.</p> : null}
+            {!offers.upsell?.length ? <p className="text-sm text-muted-foreground">Пока нет возможностей допродажи.</p> : null}
           </CardContent>
         </Card>
 
