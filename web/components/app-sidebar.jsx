@@ -1,53 +1,49 @@
 "use client";
 
-import { useEffect, useRef } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { animate, stagger } from "animejs";
+import {
+  BarChartIcon,
+  ChatBubbleIcon,
+  ClockIcon,
+  DashboardIcon,
+  ExitIcon,
+  FileTextIcon,
+  IdCardIcon,
+  MagnifyingGlassIcon,
+  ReaderIcon,
+  RocketIcon,
+} from "@radix-ui/react-icons";
 
-import { cn } from "@/lib/utils";
-import { apiFetch } from "@/lib/api";
-import { Button } from "@/components/ui/button";
-import { MOTION, motionEnabled } from "@/lib/motion";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { apiFetch } from "@/lib/api";
+import {
+  Sidebar,
+  SidebarContent,
+  SidebarFooter,
+  SidebarGroup,
+  SidebarGroupLabel,
+  SidebarHeader,
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
+} from "@/components/ui/sidebar";
 
-const items = [
-  { href: "/projects", label: "Projects" },
-  { href: "/control-tower", label: "Control Tower" },
-  { href: "/jobs", label: "Jobs" },
-  { href: "/search", label: "Search" },
-  { href: "/crm", label: "CRM" },
-  { href: "/signals", label: "Signals" },
-  { href: "/offers", label: "Offers" },
-  { href: "/digests", label: "Digests" },
-  { href: "/analytics", label: "Analytics" },
+const NAV_ITEMS = [
+  { href: "/control-tower", label: "Control Tower", icon: DashboardIcon },
+  { href: "/projects", label: "Projects", icon: RocketIcon },
+  { href: "/jobs", label: "Jobs", icon: ClockIcon },
+  { href: "/search", label: "Search", icon: MagnifyingGlassIcon },
+  { href: "/crm", label: "CRM", icon: IdCardIcon },
+  { href: "/signals", label: "Signals", icon: ChatBubbleIcon },
+  { href: "/offers", label: "Offers", icon: FileTextIcon },
+  { href: "/digests", label: "Digests", icon: ReaderIcon },
+  { href: "/analytics", label: "Analytics", icon: BarChartIcon },
 ];
 
-export function AppSidebar() {
+export function AppSidebar(props) {
   const pathname = usePathname();
   const router = useRouter();
-  const navRef = useRef(null);
-
-  useEffect(() => {
-    const nav = navRef.current;
-    if (!nav || typeof window === "undefined") return undefined;
-    if (!motionEnabled()) return undefined;
-
-    const links = nav.querySelectorAll("[data-nav-item]");
-    if (!links.length) return undefined;
-
-    const animation = animate(links, {
-      opacity: [0, 1],
-      translateX: [-6, 0],
-      delay: stagger(MOTION.stagger.base),
-      duration: MOTION.durations.base,
-      ease: MOTION.easing.standard,
-    });
-
-    return () => {
-      animation.cancel();
-    };
-  }, []);
 
   async function onLogout() {
     try {
@@ -59,42 +55,63 @@ export function AppSidebar() {
   }
 
   return (
-    <aside className="flex w-full max-w-60 shrink-0 flex-col border-r bg-card/50 p-3">
-      <div className="mb-4 border-b px-2 pb-3">
-        <div className="flex items-center justify-between gap-2">
-          <h1 className="text-sm font-semibold">Labpics</h1>
-          <ThemeToggle />
-        </div>
-        <p className="mt-0.5 text-xs text-muted-foreground">Operations workspace</p>
-      </div>
+    <Sidebar collapsible="icon" variant="floating" {...props}>
+      <SidebarHeader>
+        <SidebarMenu>
+          <SidebarMenuItem>
+            <SidebarMenuButton size="lg" asChild>
+              <Link href="/control-tower">
+                <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground">
+                  <DashboardIcon className="size-4" />
+                </div>
+                <div className="flex flex-col gap-0.5 leading-none">
+                  <span className="font-semibold">Labpics</span>
+                  <span className="text-xs text-sidebar-foreground/70">Operations workspace</span>
+                </div>
+              </Link>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+        </SidebarMenu>
+      </SidebarHeader>
 
-      <p className="mb-2 px-2 text-xs text-muted-foreground">Navigation</p>
-      <nav ref={navRef} className="space-y-1.5">
-        {items.map((item) => {
-          const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
-              data-nav-item
-              className={cn(
-                "block rounded-md border px-2.5 py-1.5 text-sm font-medium transition-colors",
-                active
-                  ? "border-border bg-background text-foreground shadow-sm"
-                  : "border-transparent text-muted-foreground hover:border-border hover:bg-background hover:text-foreground"
-              )}
-            >
-              {item.label}
-            </Link>
-          );
-        })}
-      </nav>
+      <SidebarContent>
+        <SidebarGroup>
+          <SidebarGroupLabel>Navigation</SidebarGroupLabel>
+          <SidebarMenu>
+            {NAV_ITEMS.map((item) => {
+              const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
+              const Icon = item.icon;
+              return (
+                <SidebarMenuItem key={item.href}>
+                  <SidebarMenuButton asChild isActive={active} tooltip={item.label}>
+                    <Link href={item.href}>
+                      <Icon />
+                      <span>{item.label}</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              );
+            })}
+          </SidebarMenu>
+        </SidebarGroup>
+      </SidebarContent>
 
-      <div className="mt-auto border-t px-2 pt-3">
-        <Button variant="secondary" className="w-full justify-start" onClick={onLogout}>
-          Logout
-        </Button>
-      </div>
-    </aside>
+      <SidebarFooter>
+        <SidebarMenu>
+          <SidebarMenuItem>
+            <div className="flex items-center justify-between rounded-md border border-sidebar-border/70 px-2 py-1.5 group-data-[collapsible=icon]:hidden">
+              <span className="text-xs text-sidebar-foreground/80">Theme</span>
+              <ThemeToggle />
+            </div>
+          </SidebarMenuItem>
+          <SidebarMenuItem>
+            <SidebarMenuButton onClick={onLogout} tooltip="Logout">
+              <ExitIcon />
+              <span>Logout</span>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+        </SidebarMenu>
+      </SidebarFooter>
+    </Sidebar>
   );
 }
