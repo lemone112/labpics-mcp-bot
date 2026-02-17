@@ -6,20 +6,6 @@
 - Правила оформления: [`docs/style-guide.md`](../style-guide.md)
 - Границы MVP vs Roadmap: [`docs/mvp-vs-roadmap.md`](../mvp-vs-roadmap.md)
 
-## Целевые инварианты (для требований)
-
-1. **Никакого смешивания проектов.** Система никогда не читает/пишет данные другого проекта.
-2. **Evidence-first.** Любая ценная производная сущность должна ссылаться на первоисточники.
-3. **Safe-by-default.** Если привязка неоднозначна — система не действует автоматически.
-4. **Идемпотентность.** Повторные прогоны джоб не создают дубликаты или мусор.
-5. **Объяснимость.** Любое действие/вывод должны показывать «почему» и «на основании чего».
-
-## Статусы спек
-
-- **Draft** — гипотеза/черновик; ещё нет стабильного контракта.
-- **Ready** — согласованный контракт; можно реализовывать.
-- **Implemented** — есть реализация в коде; любые изменения — через PR и миграции/контракты.
-
 ## Индекс (MVP — сейчас)
 
 - [0001 — Мультипроектная изоляция памяти (RAG)](./0001-multiproject-rag-scope.md)
@@ -36,7 +22,7 @@
 - [0004 — Weekly digest v1](./0004-weekly-digest-v1.md)
 - [0005 — Интеграции Linear/Attio: preview/apply](./0005-integrations-linear-attio-preview.md)
 - [0010 — Accounts & Opportunities (CRM ядро) v1](./0010-accounts-and-opportunities-v1.md)
-- [0011 — Signals & Next Best Action (продажи + PM)](./0011-signals-and-next-best-action.md)
+- [0011 — Signals & Next Best Action](./0011-signals-and-next-best-action.md)
 - [0012 — Offers / SOW / Quote Builder](./0012-offers-sow-and-quote-builder.md)
 - [0013 — Campaigns / Sequences / Compliance](./0013-campaigns-sequences-and-compliance.md)
 - [0014 — Health Score & Risk Radar](./0014-health-score-and-risk-radar.md)
