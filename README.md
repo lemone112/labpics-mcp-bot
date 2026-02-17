@@ -114,8 +114,8 @@ docker compose up --build
 Оба workflow:
 
 1. валидируют сборку (`server` + `web`)
-2. синхронизируют код по SSH на сервер
-3. обновляют `.env` на сервере
+2. запускают deploy job на self-hosted GitHub Runner (на целевом сервере)
+3. формируют runtime `.env` из GitHub Secrets/Variables
 4. выполняют `docker compose up -d --build`
 5. делают smoke-check `/health` и `/login`
 
@@ -128,9 +128,6 @@ docker compose up --build
 
 ### Secrets
 
-- `SSH_HOST`
-- `SSH_USER`
-- `SSH_PRIVATE_KEY`
 - `POSTGRES_PASSWORD`
 - `AUTH_PASSWORD`
 - `OPENAI_API_KEY`
@@ -138,7 +135,6 @@ docker compose up --build
 
 ### Variables
 
-- `DEPLOY_PATH` (например `/opt/labpics-web-dev` или `/opt/labpics-web-prod`)
 - `COMPOSE_PROJECT_NAME` (например `labpics-dev`, `labpics-prod`)
 - `POSTGRES_DB`
 - `POSTGRES_USER`
@@ -173,6 +169,11 @@ docker compose up --build
 - `SEARCH_HNSW_EF_SEARCH`
 - `STORAGE_BUDGET_GB`
 - `STORAGE_ALERT_THRESHOLD_PCT`
+
+### Runner requirement
+
+- Для `deploy-dev` и `deploy-prod` нужен self-hosted GitHub Actions Runner на сервере деплоя.
+- Runner должен иметь Docker Engine + Docker Compose plugin и права на запуск `docker compose`.
 
 ---
 

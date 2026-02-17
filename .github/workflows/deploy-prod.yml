@@ -41,16 +41,12 @@ jobs:
           npm run build
 
   deploy-prod:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     environment: production
     needs: validate
     permissions:
       contents: read
     env:
-      SSH_HOST: ${{ secrets.SSH_HOST }}
-      SSH_USER: ${{ secrets.SSH_USER }}
-      SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
-      DEPLOY_PATH: ${{ vars.DEPLOY_PATH }}
       COMPOSE_PROJECT_NAME: ${{ vars.COMPOSE_PROJECT_NAME }}
       POSTGRES_DB: ${{ vars.POSTGRES_DB }}
       POSTGRES_USER: ${{ vars.POSTGRES_USER }}
@@ -96,43 +92,15 @@ jobs:
         with:
           ref: ${{ inputs.ref || github.ref_name }}
 
-      - name: Configure SSH key
+      - name: Check Docker Compose
         run: |
           set -euo pipefail
-          : "${SSH_HOST:?Missing SSH_HOST secret}"
-          : "${SSH_USER:?Missing SSH_USER secret}"
-          : "${SSH_PRIVATE_KEY:?Missing SSH_PRIVATE_KEY secret}"
-          install -d -m 700 ~/.ssh
-          raw_key="$(printf "%s" "$SSH_PRIVATE_KEY" | tr -d '\r')"
-          printf "%s" "$raw_key" | sed 's/\\n/\n/g' > ~/.ssh/id_ed25519
-          if ! ssh-keygen -l -f ~/.ssh/id_ed25519 >/dev/null 2>&1; then
-            if printf "%s" "$raw_key" | base64 -d > ~/.ssh/id_ed25519 2>/dev/null && ssh-keygen -l -f ~/.ssh/id_ed25519 >/dev/null 2>&1; then
-              echo "decoded SSH_PRIVATE_KEY from base64"
-            else
-              echo "SSH_PRIVATE_KEY is invalid. Use OpenSSH private key text or base64-encoded private key." >&2
-              exit 255
-            fi
-          fi
-          chmod 600 ~/.ssh/id_ed25519
-          ssh-keyscan -H "$SSH_HOST" >> ~/.ssh/known_hosts
+          docker compose version
 
-      - name: Sync repository to remote
+      - name: Render environment file
         run: |
           set -euo pipefail
-          remote_path="${DEPLOY_PATH:-/opt/labpics-web-prod}"
-          ssh "$SSH_USER@$SSH_HOST" "mkdir -p '$remote_path'"
-          rsync -az --delete \
-            --exclude '.git' \
-            --exclude '**/node_modules' \
-            --exclude '**/.next' \
-            --exclude '.env' \
-            ./ "$SSH_USER@$SSH_HOST:$remote_path/"
-
-      - name: Upload environment file
-        run: |
-          set -euo pipefail
-          remote_path="${DEPLOY_PATH:-/opt/labpics-web-prod}"
-          cat > .env.deploy <<EOF
+          cat > .env <<EOF
           POSTGRES_DB=${POSTGRES_DB:-labpics}
           POSTGRES_USER=${POSTGRES_USER:-app}
           POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-app}
@@ -174,17 +142,15 @@ jobs:
           STORAGE_BUDGET_GB=${STORAGE_BUDGET_GB:-20}
           STORAGE_ALERT_THRESHOLD_PCT=${STORAGE_ALERT_THRESHOLD_PCT:-85}
           EOF
-          scp .env.deploy "$SSH_USER@$SSH_HOST:$remote_path/.env"
 
       - name: Deploy compose stack
         run: |
           set -euo pipefail
-          remote_path="${DEPLOY_PATH:-/opt/labpics-web-prod}"
           compose_project="${COMPOSE_PROJECT_NAME:-labpics-prod}"
           if [ "${ENABLE_EDGE_PROXY:-true}" = "true" ]; then
-            ssh "$SSH_USER@$SSH_HOST" "cd '$remote_path' && COMPOSE_PROJECT_NAME='$compose_project' docker compose --profile edge --env-file .env up -d --build --remove-orphans"
+            COMPOSE_PROJECT_NAME="$compose_project" docker compose --profile edge --env-file .env up -d --build --remove-orphans
           else
-            ssh "$SSH_USER@$SSH_HOST" "cd '$remote_path' && COMPOSE_PROJECT_NAME='$compose_project' docker compose --env-file .env up -d --build --remove-orphans"
+            COMPOSE_PROJECT_NAME="$compose_project" docker compose --env-file .env up -d --build --remove-orphans
           fi
 
       - name: Smoke check remote services
@@ -192,8 +158,8 @@ jobs:
           set -euo pipefail
           api_port="${API_PORT:-8080}"
           web_port="${WEB_PORT:-3000}"
-          ssh "$SSH_USER@$SSH_HOST" "curl -fsS http://127.0.0.1:${api_port}/health >/dev/null"
-          ssh "$SSH_USER@$SSH_HOST" "curl -fsS http://127.0.0.1:${web_port}/login >/dev/null"
+          curl -fsS "http://127.0.0.1:${api_port}/health" >/dev/null
+          curl -fsS "http://127.0.0.1:${web_port}/login" >/dev/null
           if [ "${ENABLE_EDGE_PROXY:-true}" = "true" ]; then
             domain="${DOMAIN:-dashboard.lab.pics}"
             curl -fsS "https://${domain}/login" >/dev/null
