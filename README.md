@@ -15,10 +15,7 @@ Legacy bot/worker контур удален из кода и деплоя.
 ### API (`server`)
 
 - Auth/session:
-  - `GET /auth/providers`
   - `POST /auth/login`
-  - `GET /auth/google/start`
-  - `GET /auth/google/callback`
   - `POST /auth/logout`
   - `GET /auth/me`
 - Projects:
@@ -133,7 +130,6 @@ docker compose up --build
 
 - `POSTGRES_PASSWORD`
 - `AUTH_PASSWORD`
-- `GOOGLE_OAUTH_CLIENT_SECRET` (optional, если включен Google login)
 - `OPENAI_API_KEY`
 - `CHATWOOT_API_TOKEN`
 
@@ -154,10 +150,6 @@ docker compose up --build
 - `CORS_ORIGIN`
 - `AUTH_USERNAME`
 - `SESSION_COOKIE_NAME`
-- `GOOGLE_OAUTH_CLIENT_ID` (optional)
-- `GOOGLE_OAUTH_REDIRECT_URL` (optional, dev: `https://dev.dashboard.lab.pics/api/auth/google/callback`, prod: `https://dashboard.lab.pics/api/auth/google/callback`)
-- `GOOGLE_OAUTH_ALLOWED_DOMAINS` (optional, csv)
-- `GOOGLE_OAUTH_ALLOWED_EMAILS` (optional, csv)
 - `CHATWOOT_BASE_URL`
 - `CHATWOOT_ACCOUNT_ID`
 - `CHATWOOT_CONVERSATIONS_LIMIT`
@@ -182,15 +174,6 @@ docker compose up --build
 
 - Для `deploy-dev` и `deploy-prod` нужен self-hosted GitHub Actions Runner на сервере деплоя.
 - Runner должен иметь Docker Engine + Docker Compose plugin и права на запуск `docker compose`.
-
-### Google OAuth setup (optional)
-
-1. Создай OAuth client в Google Cloud Console (Web application).
-2. Добавь Authorized redirect URI:
-   - `https://dev.dashboard.lab.pics/api/auth/google/callback`
-   - `https://dashboard.lab.pics/api/auth/google/callback`
-3. Заполни `GOOGLE_OAUTH_CLIENT_ID` (Variable) и `GOOGLE_OAUTH_CLIENT_SECRET` (Secret).
-4. При необходимости ограничь вход через `GOOGLE_OAUTH_ALLOWED_DOMAINS`/`GOOGLE_OAUTH_ALLOWED_EMAILS`.
 
 ---
 
