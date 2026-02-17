@@ -1,15 +1,20 @@
-# API reference (MVP)
+# API reference (актуально)
 
-Base URL:
+Базовые URL:
 
-- browser/UI: `NEXT_PUBLIC_API_BASE_URL` (default `/api`)
-- direct backend: `http://localhost:8080`
+- для UI: `NEXT_PUBLIC_API_BASE_URL` (обычно `/api`)
+- прямой backend: `http://localhost:8080`
 
-Every response includes `request_id` in the body and `x-request-id` in headers.
+Ответы содержат:
 
-## Access model
+- `request_id` в body,
+- `x-request-id` в headers.
 
-Public routes:
+---
+
+## 1) Доступ и авторизация
+
+Public:
 
 - `GET /health`
 - `GET /metrics`
@@ -18,16 +23,14 @@ Public routes:
 - `GET /auth/me`
 - `GET /auth/signup/status`
 
-All other routes require a valid session cookie.
+Остальные маршруты:
 
-## MVP endpoints (implemented)
+- требуют валидную session cookie,
+- mutating-запросы требуют CSRF (`x-csrf-token`).
 
-### Auth
+---
 
-- `POST /auth/login`
-- `POST /auth/logout`
-- `GET /auth/me`
-- `GET /auth/signup/status`
+## 2) Core endpoints
 
 ### Projects
 
@@ -35,30 +38,99 @@ All other routes require a valid session cookie.
 - `POST /projects`
 - `POST /projects/:id/select`
 
-### Jobs
-
-- `POST /jobs/chatwoot/sync`
-- `POST /jobs/embeddings/run`
-- `GET /jobs/scheduler`
-- `POST /jobs/scheduler/tick`
-- `GET /jobs/status`
-
-### Search
+### Search / RAG
 
 - `POST /search`
-
-### Data review
-
 - `GET /contacts`
 - `GET /conversations`
 - `GET /messages`
 
-## Planned / roadmap endpoints
+### Jobs / Scheduler
 
-These are intentionally not treated as MVP contracts. Keep them behind feature flags or in separate modules until implemented:
+- `POST /jobs/chatwoot/sync`
+- `POST /jobs/attio/sync`
+- `POST /jobs/linear/sync`
+- `POST /jobs/embeddings/run`
+- `GET /jobs/status`
+- `GET /jobs/scheduler`
+- `POST /jobs/scheduler/tick`
 
-- audit/evidence APIs (`/audit`, `/evidence/*`)
-- outbound/approval APIs (`/outbound/*`)
-- Control Tower, identity linking, CRM, signals/NBA, digests, analytics
+---
 
-If you implement one of these, add it to the MVP section and update the relevant spec.
+## 3) Connectors и reliability
+
+- `GET /connectors/state`
+- `GET /connectors/errors`
+- `POST /connectors/sync`
+- `POST /connectors/:name/sync`
+- `POST /connectors/errors/retry`
+
+Назначение:
+
+- запуск и диагностика инкрементального синка,
+- контроль retry/DLQ по ошибкам интеграций.
+
+---
+
+## 4) KAG v1 (signals/scores/nba)
+
+- `POST /kag/refresh`
+- `GET /kag/signals`
+- `GET /kag/scores`
+- `GET /kag/recommendations`
+- `GET /kag/events`
+
+Также доступны legacy:
+
+- `POST /signals/extract`
+- `GET /signals`
+- `POST /signals/:id/status`
+- `GET /nba`
+- `POST /nba/:id/status`
+
+---
+
+## 5) KAG v2 (snapshot/similarity/forecast/recommendations lifecycle)
+
+### Snapshots / outcomes
+
+- `POST /kag/snapshots/refresh`
+- `GET /kag/snapshots`
+- `GET /kag/outcomes`
+
+### Similarity
+
+- `POST /kag/similarity/rebuild`
+- `GET /kag/similar-cases`
+
+### Forecasting
+
+- `POST /kag/v2/forecast/refresh`
+- `GET /kag/v2/forecast`
+
+### Recommendations v2
+
+- `POST /kag/v2/recommendations/refresh`
+- `GET /kag/v2/recommendations`
+- `POST /kag/v2/recommendations/:id/status`
+- `POST /kag/v2/recommendations/:id/feedback`
+
+---
+
+## 6) CRM / Offers / Analytics / Control Tower
+
+Примеры ключевых групп:
+
+- CRM: `/crm/accounts`, `/crm/opportunities`, `/crm/overview`
+- Offers: `/offers`, `/offers/:id/approve-*`
+- Digests: `/digests/daily*`, `/digests/weekly*`
+- Risk/analytics: `/risk/*`, `/analytics/*`
+- Control tower: `/control-tower`, `/portfolio/*`
+
+---
+
+## 7) Замечания по контракту
+
+- API остаётся обратносовместимым для существующих контуров.
+- Feature flags могут отключать вычислительные KAG-части без падения API.
+- Для production-интеграций опирайтесь на runbooks и scheduler cadence из `docs/pipelines.md`.
