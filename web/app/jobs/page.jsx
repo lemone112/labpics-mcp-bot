@@ -46,7 +46,7 @@ export default function JobsPage() {
   }
 
   if (loading || !session) {
-    return <div className="p-8 text-[var(--text-primary)]">Loading...</div>;
+    return <div className="p-8 text-sm">Loading...</div>;
   }
 
   return (
@@ -78,19 +78,19 @@ export default function JobsPage() {
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
-              <div className="rounded-[var(--radius-sm)] border border-[var(--border-subtle)] bg-[var(--surface-soft)] p-3">
+              <div className="app-inset border border-[var(--border-subtle)] bg-[var(--surface-soft)] p-3">
                 <div className="text-xs text-[var(--text-muted)]">Pending</div>
                 <div className="text-xl font-semibold">{status?.rag_counts?.pending ?? 0}</div>
               </div>
-              <div className="rounded-[var(--radius-sm)] border border-[var(--border-subtle)] bg-[var(--surface-soft)] p-3">
+              <div className="app-inset border border-[var(--border-subtle)] bg-[var(--surface-soft)] p-3">
                 <div className="text-xs text-[var(--text-muted)]">Processing</div>
                 <div className="text-xl font-semibold">{status?.rag_counts?.processing ?? 0}</div>
               </div>
-              <div className="rounded-[var(--radius-sm)] border border-[var(--border-subtle)] bg-[var(--surface-soft)] p-3">
+              <div className="app-inset border border-[var(--border-subtle)] bg-[var(--surface-soft)] p-3">
                 <div className="text-xs text-[var(--text-muted)]">Ready</div>
                 <div className="text-xl font-semibold">{status?.rag_counts?.ready ?? 0}</div>
               </div>
-              <div className="rounded-[var(--radius-sm)] border border-[var(--border-subtle)] bg-[var(--surface-soft)] p-3">
+              <div className="app-inset border border-[var(--border-subtle)] bg-[var(--surface-soft)] p-3">
                 <div className="text-xs text-[var(--text-muted)]">Failed</div>
                 <div className="text-xl font-semibold">{status?.rag_counts?.failed ?? 0}</div>
               </div>
@@ -104,19 +104,19 @@ export default function JobsPage() {
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
-              <div className="rounded-[var(--radius-sm)] border border-[var(--border-subtle)] bg-[var(--surface-soft)] p-3">
+              <div className="app-inset border border-[var(--border-subtle)] bg-[var(--surface-soft)] p-3">
                 <div className="text-xs text-[var(--text-muted)]">Contacts</div>
                 <div className="text-xl font-semibold">{status?.entities?.contacts ?? 0}</div>
               </div>
-              <div className="rounded-[var(--radius-sm)] border border-[var(--border-subtle)] bg-[var(--surface-soft)] p-3">
+              <div className="app-inset border border-[var(--border-subtle)] bg-[var(--surface-soft)] p-3">
                 <div className="text-xs text-[var(--text-muted)]">Conversations</div>
                 <div className="text-xl font-semibold">{status?.entities?.conversations ?? 0}</div>
               </div>
-              <div className="rounded-[var(--radius-sm)] border border-[var(--border-subtle)] bg-[var(--surface-soft)] p-3">
+              <div className="app-inset border border-[var(--border-subtle)] bg-[var(--surface-soft)] p-3">
                 <div className="text-xs text-[var(--text-muted)]">Messages</div>
                 <div className="text-xl font-semibold">{status?.entities?.messages ?? 0}</div>
               </div>
-              <div className="rounded-[var(--radius-sm)] border border-[var(--border-subtle)] bg-[var(--surface-soft)] p-3">
+              <div className="app-inset border border-[var(--border-subtle)] bg-[var(--surface-soft)] p-3">
                 <div className="text-xs text-[var(--text-muted)]">DB size</div>
                 <div className="text-xl font-semibold">
                   {typeof status?.storage?.database_bytes === "number"

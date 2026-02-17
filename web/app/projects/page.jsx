@@ -64,7 +64,7 @@ export default function ProjectsPage() {
   }
 
   if (loading || !session) {
-    return <div className="p-8 text-[var(--text-primary)]">Loading...</div>;
+    return <div className="p-8 text-sm">Loading...</div>;
   }
 
   return (

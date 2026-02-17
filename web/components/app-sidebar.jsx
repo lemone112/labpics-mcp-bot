@@ -53,13 +53,11 @@ export function AppSidebar() {
   return (
     <aside className="flex w-full max-w-56 shrink-0 flex-col border-r border-[var(--border-subtle)] bg-[var(--surface-2)] p-3">
       <div className="mb-4 border-b border-[var(--border-subtle)] px-2 pb-3">
-        <h1 className="text-[13px] font-semibold tracking-[-0.01em] text-[var(--text-strong)]">Labpics</h1>
-        <p className="mt-0.5 text-[11px] text-[var(--text-muted)]">Operations workspace</p>
+        <h1 className="text-sm font-semibold text-[var(--text-strong)]">Labpics</h1>
+        <p className="mt-0.5 text-xs text-[var(--text-muted)]">Operations workspace</p>
       </div>
 
-      <p className="mb-2 px-2 text-[10px] font-semibold uppercase tracking-[0.09em] text-[var(--text-subtle)]">
-        Navigation
-      </p>
+      <p className="mb-2 px-2 text-xs text-[var(--text-subtle)]">Navigation</p>
       <nav ref={navRef} className="space-y-1.5">
         {items.map((item) => {
           const active = pathname === item.href;
@@ -69,7 +67,7 @@ export function AppSidebar() {
               href={item.href}
               data-nav-item
               className={cn(
-                "block rounded-[var(--radius-sm)] border px-2.5 py-1.5 text-[13px] font-medium transition-colors",
+                "block rounded-[var(--radius-sm)] border px-2.5 py-1.5 text-sm font-medium transition-colors",
                 active
                   ? "border-[var(--border-subtle)] bg-[var(--surface-1)] text-[var(--text-strong)]"
                   : "border-transparent text-[var(--text-primary)] hover:border-[var(--border-subtle)] hover:bg-[var(--surface-1)]"

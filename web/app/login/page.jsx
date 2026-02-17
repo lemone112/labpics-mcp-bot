@@ -41,22 +41,18 @@ export default function LoginPage() {
       <MotionGroup className="w-full max-w-md">
         <Card data-motion-item className="w-full">
           <CardHeader>
-            <CardTitle className="text-[20px]">Sign in</CardTitle>
+            <CardTitle>Sign in</CardTitle>
             <CardDescription>Use API credentials from server environment.</CardDescription>
           </CardHeader>
           <CardContent>
             <form className="space-y-4" onSubmit={onSubmit}>
               <div className="space-y-1">
-                <label className="text-xs uppercase tracking-[0.09em] text-[var(--text-muted)]">
-                  Username
-                </label>
+                <label className="text-sm text-[var(--text-muted)]">Username</label>
                 <Input value={username} onChange={(e) => setUsername(e.target.value)} required />
               </div>
 
               <div className="space-y-1">
-                <label className="text-xs uppercase tracking-[0.09em] text-[var(--text-muted)]">
-                  Password
-                </label>
+                <label className="text-sm text-[var(--text-muted)]">Password</label>
                 <Input
                   type="password"
                   value={password}

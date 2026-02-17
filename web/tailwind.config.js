@@ -12,9 +12,9 @@ const sharedLayout = {
     large: "1px",
   },
   boxShadow: {
-    small: "0 1px 2px rgba(16, 24, 40, 0.06)",
-    medium: "0 8px 24px rgba(16, 24, 40, 0.06)",
-    large: "0 16px 42px rgba(16, 24, 40, 0.09)",
+    small: "none",
+    medium: "none",
+    large: "none",
   },
 };
 
