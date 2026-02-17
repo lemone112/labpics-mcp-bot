@@ -157,9 +157,26 @@ jobs:
           set -euo pipefail
           api_port="${API_PORT:-8080}"
           web_port="${WEB_PORT:-3000}"
-          curl -fsS "http://127.0.0.1:${api_port}/health" >/dev/null
-          curl -fsS "http://127.0.0.1:${web_port}/login" >/dev/null
+          wait_for_url() {
+            local url="$1"
+            local attempts="${2:-30}"
+            local sleep_s="${3:-2}"
+            local i=1
+            while [ "$i" -le "$attempts" ]; do
+              if curl -fsS --max-time 10 "$url" >/dev/null; then
+                return 0
+              fi
+              echo "waiting for $url ($i/$attempts)"
+              sleep "$sleep_s"
+              i=$((i + 1))
+            done
+            echo "smoke check failed for $url" >&2
+            return 1
+          }
+
+          wait_for_url "http://127.0.0.1:${api_port}/health"
+          wait_for_url "http://127.0.0.1:${web_port}/login"
           if [ "${ENABLE_EDGE_PROXY:-true}" = "true" ]; then
             domain="${DOMAIN:-dev.dashboard.lab.pics}"
-            curl -fsS "https://${domain}/login" >/dev/null
+            wait_for_url "https://${domain}/login" 40 3
           fi
