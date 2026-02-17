@@ -1,40 +1,102 @@
 # Runbooks
 
-## 1) "Search returns no results"
+Operational playbooks for the MVP.
 
-Checklist:
+> If you are new: start from [`docs/index.md`](./index.md) → run the MVP loop → then use this page when something breaks.
 
-- Go to `/jobs` and check RAG counts.
-  - If `pending > 0`: run **Embeddings** job.
-  - If `ready = 0`: you likely haven't synced any messages or chunking is not creating chunks.
+## Incident templates
 
-- Verify Chatwoot sync watermark exists in `sync_watermarks`.
-- Verify `OPENAI_API_KEY` is configured.
+Each runbook uses the same structure:
 
-## 2) "Chatwoot sync job fails"
+- **Symptom**
+- **Impact**
+- **Checks** (UI, DB, logs, env)
+- **Fix**
+- **Evidence to capture** (for an issue)
 
-- Check `/jobs` latest run error.
-- Verify env:
+---
+
+## Runbook: Search returns no results
+
+**Symptom**
+- `/search` returns empty results for queries that should match.
+
+**Impact**
+- Users cannot retrieve evidence-backed context.
+
+**Checks**
+1. Open `/jobs` and inspect latest runs.
+   - If there are pending sync runs: complete sync first.
+   - If embeddings show `ready = 0`: embeddings are missing.
+2. Confirm project scope
+   - Ensure the UI is set to the intended project (no cross-project assumptions).
+3. Verify environment
+   - `OPENAI_API_KEY` is set on the server.
+
+**Fix**
+- Run **Sync** job, then **Embeddings** job.
+- If embeddings keep failing: set `EMBED_BATCH_SIZE=20` and retry.
+
+**Evidence to capture**
+- Screenshot of `/jobs` status
+- The job run error text
+- Project id/name
+
+---
+
+## Runbook: Chatwoot sync job fails
+
+**Symptom**
+- Sync job shows failed status.
+
+**Checks**
+- In `/jobs`, open the latest error details.
+- Verify env variables:
   - `CHATWOOT_BASE_URL`
   - `CHATWOOT_API_TOKEN`
   - `CHATWOOT_ACCOUNT_ID`
 
-## 3) "Auth loop / unauthorized"
+**Fix**
+- Correct env vars and re-run the sync job.
 
-- Ensure cookie is being set (check browser devtools).
-- Confirm `CORS_ORIGIN` matches UI origin.
-- Confirm server is not behind a proxy stripping cookies.
+**Evidence to capture**
+- The failing request/endpoint (if present in logs)
+- The account id and inbox id (if applicable)
 
-## 4) "Embeddings job fails"
+---
 
-- Check OpenAI key.
-- Reduce `EMBED_BATCH_SIZE` to 20.
-- Inspect logs for response status.
+## Runbook: Auth loop / unauthorized
 
-## 5) DB migrations
+**Symptom**
+- UI redirects back to login or API returns 401/403.
 
-Run inside server container:
+**Checks**
+- Browser devtools: cookie is set and sent.
+- Server env: `CORS_ORIGIN` matches UI origin.
+- Reverse proxy: cookies are not stripped.
 
-- `npm run migrate`
+**Fix**
+- Align `CORS_ORIGIN` and proxy settings, then re-login.
 
-Migrations are in `server/db/migrations/`.
+**Evidence to capture**
+- Response headers
+- Server logs around auth
+
+---
+
+## Runbook: Embeddings job fails
+
+**Symptom**
+- Embeddings job fails or stalls.
+
+**Checks**
+- Validate OpenAI key and quotas.
+- Inspect error logs from the job run.
+
+**Fix**
+- Reduce `EMBED_BATCH_SIZE` to 20 and retry.
+
+**Evidence to capture**
+- Error message
+- Batch size
+- Approx message/chunk counts
