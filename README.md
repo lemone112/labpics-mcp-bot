@@ -7,7 +7,7 @@
 - `docs/` — каноническая документация
 - `docker-compose.yml` — локальный и серверный запуск стека
 
-Worker-контур снова введен как единый scheduler/worker слой (`server/src/worker-loop.js`).
+Worker-контур введен как единый scheduler/worker слой (`server/src/worker-loop.js`).
 
 ---
 
