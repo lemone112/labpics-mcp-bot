@@ -127,85 +127,85 @@ export default function ConversationsPage() {
           actionLabel="Open Projects"
         />
       ) : (
-      <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1.2fr_1fr]">
-        <Card>
-          <CardHeader>
-            <CardTitle>Conversation list</CardTitle>
-            <CardDescription>Select row to inspect message snippets and source IDs.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Conversation</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Inbox</TableHead>
-                  <TableHead>Updated</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {conversations.map((conversation) => (
-                  <TableRow
-                    key={conversation.id}
-                    className={selectedConversationId === conversation.id ? "bg-slate-900/70" : undefined}
-                  >
-                    <TableCell>
-                      <button
-                        className="font-mono text-xs text-cyan-200 underline-offset-4 hover:underline"
-                        onClick={() => setSelectedConversationId(conversation.id)}
+        <div className="space-y-6">
+          <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1.2fr_1fr]">
+            <Card>
+              <CardHeader>
+                <CardTitle>Conversation list</CardTitle>
+                <CardDescription>Select row to inspect message snippets and source IDs.</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Conversation</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Inbox</TableHead>
+                      <TableHead>Updated</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {conversations.map((conversation) => (
+                      <TableRow
+                        key={conversation.id}
+                        className={selectedConversationId === conversation.id ? "bg-slate-900/70" : undefined}
                       >
-                        {conversation.conversation_id}
-                      </button>
-                    </TableCell>
-                    <TableCell>{conversation.status || "-"}</TableCell>
-                    <TableCell>{conversation.inbox_id ?? "-"}</TableCell>
-                    <TableCell>{formatDateTime(conversation.updated_at || conversation.created_at)}</TableCell>
-                  </TableRow>
-                ))}
-                {!conversations.length ? (
-                  <TableRow>
-                    <TableCell colSpan={4} className="text-slate-400">
-                      No conversations found. Run sync job first.
-                    </TableCell>
-                  </TableRow>
-                ) : null}
-              </TableBody>
-            </Table>
-          </CardContent>
-        </Card>
+                        <TableCell>
+                          <button
+                            className="font-mono text-xs text-cyan-200 underline-offset-4 hover:underline"
+                            onClick={() => setSelectedConversationId(conversation.id)}
+                          >
+                            {conversation.conversation_id}
+                          </button>
+                        </TableCell>
+                        <TableCell>{conversation.status || "-"}</TableCell>
+                        <TableCell>{conversation.inbox_id ?? "-"}</TableCell>
+                        <TableCell>{formatDateTime(conversation.updated_at || conversation.created_at)}</TableCell>
+                      </TableRow>
+                    ))}
+                    {!conversations.length ? (
+                      <TableRow>
+                        <TableCell colSpan={4} className="text-slate-400">
+                          No conversations found. Run sync job first.
+                        </TableCell>
+                      </TableRow>
+                    ) : null}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Details panel</CardTitle>
-            <CardDescription>
-              {selectedConversation
-                ? `Conversation ${selectedConversation.conversation_id} · ${buildConversationGlobalId(selectedConversation)}`
-                : "Select conversation from list"}
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {messagesBusy ? <p className="text-sm text-slate-400">Loading messages...</p> : null}
-            {messages.map((message) => (
-              <article key={message.id} className="rounded-md border border-slate-800 p-3">
-                <div className="mb-2 flex items-center justify-between gap-2 text-xs">
-                  <span className="font-mono text-slate-500">{message.id}</span>
-                  <Badge variant={message.private ? "warning" : "default"}>
-                    {message.private ? "private" : message.sender_type || "message"}
-                  </Badge>
-                </div>
-                <p className="text-sm text-slate-200">{message.content_snippet || "-"}</p>
-                <p className="mt-2 text-[11px] text-slate-500">{formatDateTime(message.created_at || message.updated_at)}</p>
-              </article>
-            ))}
-            {!messages.length && !messagesBusy ? (
-              <p className="text-sm text-slate-400">No messages for selected conversation.</p>
-            ) : null}
-          </CardContent>
-        </Card>
-      </div>
-      <div className="mt-6">
-        <Toast type={toast.type} message={toast.message} />
-      </div>
+            <Card>
+              <CardHeader>
+                <CardTitle>Details panel</CardTitle>
+                <CardDescription>
+                  {selectedConversation
+                    ? `Conversation ${selectedConversation.conversation_id} · ${buildConversationGlobalId(selectedConversation)}`
+                    : "Select conversation from list"}
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {messagesBusy ? <p className="text-sm text-slate-400">Loading messages...</p> : null}
+                {messages.map((message) => (
+                  <article key={message.id} className="rounded-md border border-slate-800 p-3">
+                    <div className="mb-2 flex items-center justify-between gap-2 text-xs">
+                      <span className="font-mono text-slate-500">{message.id}</span>
+                      <Badge variant={message.private ? "warning" : "default"}>
+                        {message.private ? "private" : message.sender_type || "message"}
+                      </Badge>
+                    </div>
+                    <p className="text-sm text-slate-200">{message.content_snippet || "-"}</p>
+                    <p className="mt-2 text-[11px] text-slate-500">{formatDateTime(message.created_at || message.updated_at)}</p>
+                  </article>
+                ))}
+                {!messages.length && !messagesBusy ? (
+                  <p className="text-sm text-slate-400">No messages for selected conversation.</p>
+                ) : null}
+              </CardContent>
+            </Card>
+          </div>
+          <Toast type={toast.type} message={toast.message} />
+        </div>
       )}
     </PageShell>
   );
