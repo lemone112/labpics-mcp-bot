@@ -143,8 +143,8 @@ Columns:
 - `source_external_id text not null`
 - `source_url text`
 - `created_by text`
+- `import_from_ts timestamptz not null` (safe ingestion window start)
 - `metadata jsonb not null default '{}'::jsonb`
-  - expected key: `import_from_ts` (ISO timestamp for safe ingestion window)
 - `is_active boolean not null default true`
 - `created_at timestamptz not null default now()`
 - `updated_at timestamptz not null default now()`

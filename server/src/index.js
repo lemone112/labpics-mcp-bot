@@ -295,6 +295,7 @@ async function main() {
           source_external_id,
           source_url,
           created_by,
+          import_from_ts,
           metadata,
           is_active,
           created_at,
@@ -345,13 +346,13 @@ async function main() {
     const sourceUrl = sourceUrlRaw ? sourceUrlRaw.slice(0, 400) : null;
     const metadataRaw = body?.metadata && typeof body.metadata === "object" ? body.metadata : {};
     const metadata = { ...metadataRaw };
-    const requestedImportFrom = Object.prototype.hasOwnProperty.call(metadata, "import_from_ts")
-      ? toTimestampOrNull(metadata.import_from_ts)
+    const requestedImportFrom = Object.prototype.hasOwnProperty.call(body, "import_from_ts")
+      ? toTimestampOrNull(body.import_from_ts)
       : null;
-    if (Object.prototype.hasOwnProperty.call(metadata, "import_from_ts") && !requestedImportFrom) {
+    if (Object.prototype.hasOwnProperty.call(body, "import_from_ts") && !requestedImportFrom) {
       return reply.code(400).send({ ok: false, error: "invalid_import_from_ts", request_id: request.requestId });
     }
-    metadata.import_from_ts = requestedImportFrom || new Date().toISOString();
+    const importFromTs = requestedImportFrom || new Date().toISOString();
 
     const inserted = await pool.query(
       `
@@ -362,12 +363,13 @@ async function main() {
           source_external_id,
           source_url,
           created_by,
+          import_from_ts,
           metadata,
           is_active,
           created_at,
           updated_at
         )
-        VALUES($1::uuid, $2, $3, $4, $5, $6, $7::jsonb, true, now(), now())
+        VALUES($1::uuid, $2, $3, $4, $5, $6, $7::timestamptz, $8::jsonb, true, now(), now())
         ON CONFLICT (source_type, source_account_id, source_external_id)
         DO NOTHING
         RETURNING
@@ -378,12 +380,22 @@ async function main() {
           source_external_id,
           source_url,
           created_by,
+          import_from_ts,
           metadata,
           is_active,
           created_at,
           updated_at
       `,
-      [projectId, sourceType, sourceAccountId, sourceExternalId, sourceUrl, request.auth?.username || null, JSON.stringify(metadata)]
+      [
+        projectId,
+        sourceType,
+        sourceAccountId,
+        sourceExternalId,
+        sourceUrl,
+        request.auth?.username || null,
+        importFromTs,
+        JSON.stringify(metadata),
+      ]
     );
 
     if (inserted.rows[0]) {
@@ -400,6 +412,7 @@ async function main() {
           source_external_id,
           source_url,
           created_by,
+          import_from_ts,
           metadata,
           is_active,
           created_at,
@@ -695,6 +708,7 @@ async function main() {
                  AND psl.project_id = $1::uuid
                  AND psl.is_active = true
                 WHERE m.contact_global_id = cw_contacts.id
+                  AND COALESCE(m.created_at, m.updated_at) >= psl.import_from_ts
               )
             ORDER BY updated_at DESC NULLS LAST
             LIMIT $3
@@ -717,6 +731,7 @@ async function main() {
                AND psl.project_id = $1::uuid
                AND psl.is_active = true
               WHERE m.contact_global_id = cw_contacts.id
+                AND COALESCE(m.created_at, m.updated_at) >= psl.import_from_ts
             )
             ORDER BY updated_at DESC NULLS LAST
             LIMIT $2
@@ -754,6 +769,7 @@ async function main() {
               AND psl.source_account_id = cw_conversations.account_id::text
               AND psl.source_external_id = cw_conversations.inbox_id::text
               AND psl.is_active = true
+              AND COALESCE(cw_conversations.updated_at, cw_conversations.created_at) >= psl.import_from_ts
           )
         ORDER BY COALESCE(updated_at, created_at) DESC
         LIMIT $2
@@ -793,6 +809,7 @@ async function main() {
                   AND psl.source_account_id = c.account_id::text
                   AND psl.source_external_id = c.inbox_id::text
                   AND psl.is_active = true
+                  AND COALESCE(cw_messages.created_at, cw_messages.updated_at) >= psl.import_from_ts
               )
             ORDER BY created_at DESC NULLS LAST
             LIMIT $3
@@ -820,6 +837,7 @@ async function main() {
                 AND psl.source_account_id = c.account_id::text
                 AND psl.source_external_id = c.inbox_id::text
                 AND psl.is_active = true
+                AND COALESCE(cw_messages.created_at, cw_messages.updated_at) >= psl.import_from_ts
             )
             ORDER BY created_at DESC NULLS LAST
             LIMIT $2

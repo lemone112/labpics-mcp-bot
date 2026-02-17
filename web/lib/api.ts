@@ -239,6 +239,7 @@ export function createProjectLink(payload: {
   source_type: string;
   source_account_id?: string;
   source_external_id: string;
+  import_from_ts?: string;
   source_url?: string;
   metadata?: Record<string, unknown>;
 }) {

@@ -130,6 +130,7 @@ export interface ProjectSourceLink {
   source_external_id: string;
   source_url: string | null;
   created_by: string | null;
+  import_from_ts: string;
   metadata: Record<string, unknown>;
   is_active: boolean;
   created_at: string;

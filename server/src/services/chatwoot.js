@@ -204,7 +204,7 @@ async function getWatermark(pool, source) {
 async function getLinkedInboxRules(pool, projectId, accountId) {
   const { rows } = await pool.query(
     `
-      SELECT source_external_id, metadata, created_at
+      SELECT source_external_id, import_from_ts, metadata, created_at
       FROM project_source_links
       WHERE project_id = $1::uuid
         AND source_type = 'chatwoot_inbox'
@@ -220,6 +220,7 @@ async function getLinkedInboxRules(pool, projectId, accountId) {
     const inboxId = toBigIntOrNull(row.source_external_id);
     if (!Number.isFinite(inboxId)) continue;
     const importFrom =
+      toIsoTime(row.import_from_ts) ||
       toIsoTime(row?.metadata?.import_from_ts) ||
       toIsoTime(row.created_at) ||
       new Date().toISOString();

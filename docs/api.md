@@ -91,9 +91,9 @@ Body:
 - `source_type` (required, currently `chatwoot_inbox`)
 - `source_external_id` (required, inbox id for Chatwoot)
 - `source_account_id` (optional, defaults to `CHATWOOT_ACCOUNT_ID`)
+- `import_from_ts` (optional ISO timestamp; if omitted, link creation time is used)
 - `source_url` (optional)
 - `metadata` (optional object)
-  - optional `metadata.import_from_ts` (ISO timestamp) to define explicit import window start
 
 If source is already linked to another project, returns:
 - `409 source_already_linked_to_other_project`

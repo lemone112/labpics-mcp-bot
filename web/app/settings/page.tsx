@@ -176,6 +176,9 @@ export default function SettingsPage() {
                     <div>
                       <p className="text-sm text-slate-100">Inbox {link.source_external_id}</p>
                       <p className="font-mono text-xs text-slate-500">account {link.source_account_id}</p>
+                      <p className="text-[11px] text-slate-500">
+                        import from {new Date(link.import_from_ts).toLocaleString()}
+                      </p>
                     </div>
                     <Button size="sm" variant="outline" disabled={busy} onClick={() => void onDeleteLink(link.id)}>
                       Remove
