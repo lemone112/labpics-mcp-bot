@@ -22,6 +22,10 @@ function mapByKey(items = [], keyField) {
   return out;
 }
 
+function signalValue(signalMap, signalKey) {
+  return Number(signalMap?.[signalKey]?.value || 0);
+}
+
 function collectEvidenceRefs(items = [], max = 40) {
   const out = [];
   const seen = new Set();
