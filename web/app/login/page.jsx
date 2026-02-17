@@ -44,7 +44,7 @@ export default function LoginPage() {
             <div className="mx-auto mb-3 flex size-10 items-center justify-center rounded-xl bg-primary text-primary-foreground">
               <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 6v12a3 3 0 1 0 3-3H6a3 3 0 1 0 3 3V6a3 3 0 1 0-3 3h12a3 3 0 1 0-3-3"/></svg>
             </div>
-            <CardTitle className="text-lg">Вход в систему</CardTitle>
+            <CardTitle className="text-base">Вход в систему</CardTitle>
             <CardDescription>Введите учётные данные для авторизации.</CardDescription>
           </CardHeader>
           <CardContent>

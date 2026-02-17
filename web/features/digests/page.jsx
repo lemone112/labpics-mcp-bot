@@ -124,7 +124,7 @@ export default function DigestsFeaturePage() {
                 ))}
                 {!daily.length ? (
                   <TableRow>
-                    <TableCell colSpan={3}>Ежедневных дайджестов пока нет.</TableCell>
+                    <TableCell colSpan={3} className="text-muted-foreground">Ежедневных дайджестов пока нет.</TableCell>
                   </TableRow>
                 ) : null}
               </TableBody>
@@ -155,7 +155,7 @@ export default function DigestsFeaturePage() {
                 ))}
                 {!weekly.length ? (
                   <TableRow>
-                    <TableCell colSpan={3}>Еженедельных дайджестов пока нет.</TableCell>
+                    <TableCell colSpan={3} className="text-muted-foreground">Еженедельных дайджестов пока нет.</TableCell>
                   </TableRow>
                 ) : null}
               </TableBody>

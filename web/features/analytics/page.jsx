@@ -158,7 +158,7 @@ export default function AnalyticsFeaturePage() {
                 ))}
                 {!overview?.revenue?.length ? (
                   <TableRow>
-                    <TableCell colSpan={4}>Снэпшотов пока нет.</TableCell>
+                    <TableCell colSpan={4} className="text-muted-foreground">Снэпшотов пока нет.</TableCell>
                   </TableRow>
                 ) : null}
               </TableBody>
@@ -191,7 +191,7 @@ export default function AnalyticsFeaturePage() {
                 ))}
                 {!risk?.risks?.length ? (
                   <TableRow>
-                    <TableCell colSpan={4}>Рисков пока нет.</TableCell>
+                    <TableCell colSpan={4} className="text-muted-foreground">Рисков пока нет.</TableCell>
                   </TableRow>
                 ) : null}
               </TableBody>
@@ -224,7 +224,7 @@ export default function AnalyticsFeaturePage() {
                 ))}
                 {!evidence.length ? (
                   <TableRow>
-                    <TableCell colSpan={4}>Доказательств пока нет.</TableCell>
+                    <TableCell colSpan={4} className="text-muted-foreground">Доказательств пока нет.</TableCell>
                   </TableRow>
                 ) : null}
               </TableBody>

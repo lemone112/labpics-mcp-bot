@@ -9,6 +9,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Toast } from "@/components/ui/toast";
+import { EmptyState } from "@/components/ui/empty-state";
 import { apiFetch } from "@/lib/api";
 import { useAuthGuard } from "@/hooks/use-auth-guard";
 import { useProjectPortfolio } from "@/hooks/use-project-portfolio";
@@ -82,46 +83,46 @@ export default function ProjectsFeaturePage() {
             <CardTitle>Список проектов</CardTitle>
           </CardHeader>
           <CardContent>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Название</TableHead>
-                  <TableHead>ID</TableHead>
-                  <TableHead>Создан</TableHead>
-                  <TableHead>Действие</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {projects.map((project) => (
-                  <TableRow key={project.id}>
-                    <TableCell>{project.name}</TableCell>
-                    <TableCell className="font-mono text-xs text-muted-foreground">{project.id}</TableCell>
-                    <TableCell>{new Date(project.created_at).toLocaleString()}</TableCell>
-                    <TableCell>
-                      <Button
-                        variant={activeProjectId === project.id ? "secondary" : "outline"}
-                        size="sm"
-                        disabled={busy}
-                        onClick={() => onSelect(project.id)}
-                      >
-                        {activatingProjectId === String(project.id)
-                          ? "Переключение..."
-                          : activeProjectId === project.id
-                            ? "Активен"
-                            : "Выбрать"}
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                ))}
-                {!projects.length ? (
+            {projects.length ? (
+              <Table>
+                <TableHeader>
                   <TableRow>
-                    <TableCell colSpan={4} className="text-muted-foreground">
-                      Проектов пока нет.
-                    </TableCell>
+                    <TableHead>Название</TableHead>
+                    <TableHead>ID</TableHead>
+                    <TableHead>Создан</TableHead>
+                    <TableHead>Действие</TableHead>
                   </TableRow>
-                ) : null}
-              </TableBody>
-            </Table>
+                </TableHeader>
+                <TableBody>
+                  {projects.map((project) => (
+                    <TableRow key={project.id}>
+                      <TableCell>{project.name}</TableCell>
+                      <TableCell className="font-mono text-xs text-muted-foreground">{project.id}</TableCell>
+                      <TableCell>{new Date(project.created_at).toLocaleString()}</TableCell>
+                      <TableCell>
+                        <Button
+                          variant={activeProjectId === project.id ? "secondary" : "outline"}
+                          size="sm"
+                          disabled={busy}
+                          onClick={() => onSelect(project.id)}
+                        >
+                          {activatingProjectId === String(project.id)
+                            ? "Переключение..."
+                            : activeProjectId === project.id
+                              ? "Активен"
+                              : "Выбрать"}
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            ) : (
+              <EmptyState
+                title="Проектов пока нет"
+                description="Создайте первый проект, чтобы начать работу с платформой."
+              />
+            )}
           </CardContent>
         </Card>
 

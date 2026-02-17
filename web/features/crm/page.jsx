@@ -236,7 +236,7 @@ export default function CrmFeaturePage() {
                 ))}
                 {!accounts.length ? (
                   <TableRow>
-                    <TableCell colSpan={4}>Аккаунтов пока нет.</TableCell>
+                    <TableCell colSpan={4} className="text-muted-foreground">Аккаунтов пока нет.</TableCell>
                   </TableRow>
                 ) : null}
               </TableBody>

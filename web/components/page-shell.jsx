@@ -87,7 +87,7 @@ export function PageShell({ title, subtitle, children }) {
             </Breadcrumb>
           </header>
 
-          <MotionGroup className="flex flex-1 flex-col gap-4 overflow-y-auto p-4 pb-24 pt-0 md:pb-4 lg:p-6 lg:pb-6 lg:pt-0">
+          <MotionGroup className="flex flex-1 flex-col gap-4 overflow-y-auto p-4 pb-24 pt-3 md:pb-4 lg:p-6 lg:pb-6 lg:pt-4">
             <div className="space-y-4">
               {subtitle ? <p className="text-sm text-muted-foreground">{subtitle}</p> : null}
               {children}

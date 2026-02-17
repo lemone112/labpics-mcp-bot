@@ -208,7 +208,7 @@ export default function OffersFeaturePage() {
                 ))}
                 {!offers.length ? (
                   <TableRow>
-                    <TableCell colSpan={5}>Офферов пока нет.</TableCell>
+                    <TableCell colSpan={5} className="text-muted-foreground">Офферов пока нет.</TableCell>
                   </TableRow>
                 ) : null}
               </TableBody>
@@ -255,7 +255,7 @@ export default function OffersFeaturePage() {
                 ))}
                 {!outbound.length ? (
                   <TableRow>
-                    <TableCell colSpan={4}>Исходящих сообщений пока нет.</TableCell>
+                    <TableCell colSpan={4} className="text-muted-foreground">Исходящих сообщений пока нет.</TableCell>
                   </TableRow>
                 ) : null}
               </TableBody>
