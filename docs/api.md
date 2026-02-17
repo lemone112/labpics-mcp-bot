@@ -3,315 +3,62 @@
 Base URL:
 
 - browser/UI: `NEXT_PUBLIC_API_BASE_URL` (default `/api`)
-- direct backend (without Next.js proxy): `http://localhost:8080`
-- versioned alias: every route is available under `/v1/...` too
+- direct backend: `http://localhost:8080`
 
-Every response includes `request_id` in body and `x-request-id` in headers.
+Every response includes `request_id` in the body and `x-request-id` in headers.
 
-## Access and security model
+## Access model
 
 Public routes:
 
 - `GET /health`
 - `GET /metrics`
-- all `"/auth/*"` routes
+- `POST /auth/login`
+- `POST /auth/logout`
+- `GET /auth/me`
+- `GET /auth/signup/status`
 
-All other routes require a valid session cookie (`SESSION_COOKIE_NAME`, default `sid`).
+All other routes require a valid session cookie.
 
-### CSRF for protected mutating routes
+## MVP endpoints (implemented)
 
-For authenticated non-GET routes, send:
+### Auth
 
-- cookie: `CSRF_COOKIE_NAME` (default `csrf_token`)
-- header: `x-csrf-token` with matching value
+- `POST /auth/login`
+- `POST /auth/logout`
+- `GET /auth/me`
+- `GET /auth/signup/status`
 
-If token is missing/mismatch, API returns `403 csrf_invalid`.
+### Projects
 
-## Health
+- `GET /projects`
+- `POST /projects`
+- `POST /projects/:id/select`
 
-### `GET /health`
+### Jobs
 
-Returns service liveness.
+- `POST /jobs/chatwoot/sync`
+- `POST /jobs/embeddings/run`
+- `GET /jobs/scheduler`
+- `POST /jobs/scheduler/tick`
+- `GET /jobs/status`
 
-## Auth
+### Search
 
-### `POST /auth/login`
+- `POST /search`
 
-Body:
+### Data review
 
-- `username` (string)
-- `password` (string)
+- `GET /contacts`
+- `GET /conversations`
+- `GET /messages`
 
-On success sets session cookie.
-Also sets CSRF cookie.
+## Planned / roadmap endpoints
 
-### Signup endpoints
+These are intentionally not treated as MVP contracts. Keep them behind feature flags or in separate modules until implemented:
 
-Signup and Telegram confirmation flow are currently disabled by product decision.
+- audit/evidence APIs (`/audit`, `/evidence/*`)
+- outbound/approval APIs (`/outbound/*`)
+- Control Tower, identity linking, CRM, signals/NBA, digests, analytics
 
-- `GET /auth/signup/status` returns `enabled: false`
-- `POST /auth/signup/start` returns `410 signup_disabled`
-- `POST /auth/signup/confirm` returns `410 signup_disabled`
-- `POST /auth/telegram/webhook` returns `410 telegram_disabled`
-
-### `POST /auth/logout`
-
-Clears session cookie and deletes session row when cookie is present.
-
-### `GET /auth/me`
-
-Returns either:
-
-- `{ authenticated: false }`
-- authenticated session payload (`username`, `active_project_id`, `account_scope_id`, timestamps)
-
-## Projects
-
-### `GET /projects`
-
-Returns:
-
-- `projects[]`
-- `active_project_id`
-
-### `POST /projects`
-
-Body:
-
-- `name` (2..160 chars)
-- `account_scope_key` (optional)
-- `account_scope_name` (optional)
-
-### `POST /projects/:id/select`
-
-Sets `sessions.active_project_id` for current session.  
-All scoped routes below require active project selection.
-
-## Data review
-
-### `GET /contacts`
-
-Query params:
-
-- `limit` (1..500, default 100)
-- `q` (optional text filter)
-
-### `GET /conversations`
-
-Query params:
-
-- `limit` (1..500, default 100)
-
-### `GET /messages`
-
-Query params:
-
-- `limit` (1..500, default 100)
-- `conversation_global_id` (optional exact filter)
-
-## Jobs
-
-### `POST /jobs/chatwoot/sync`
-
-Runs Chatwoot poll sync. Writes/updates:
-
-- `cw_contacts`
-- `cw_conversations`
-- `cw_messages`
-- `rag_chunks` (`pending` for new or changed chunks)
-- `sync_watermarks`
-
-Scope behavior:
-
-- source binding is resolved from `project_sources` (or first bootstrap from env `CHATWOOT_ACCOUNT_ID`)
-- writes are strictly filtered by `(project_id, account_scope_id)`
-
-### `POST /jobs/embeddings/run`
-
-Processes `rag_chunks` with `embedding_status='pending'`.
-Rows transition through `processing` to `ready` or `failed`.
-
-### `POST /jobs/attio/sync`
-
-Runs Attio sync (`attio_accounts_raw`, `attio_opportunities_raw`) with scoped watermark updates (`sync_watermarks`, `source=attio:*`).
-Supports idempotent upserts and retries.
-
-### `POST /jobs/linear/sync`
-
-Runs Linear sync (`linear_projects_raw`, `linear_issues_raw`) with scoped watermark updates (`sync_watermarks`, `source=linear:*`).
-Supports idempotent upserts and retries.
-
-### `GET /jobs/status`
-
-Returns:
-
-- latest run per job (`job_runs`)
-- `rag_counts` (`pending|processing|ready|failed`)
-- entity counts (`contacts|conversations|messages|rag_chunks`)
-- storage summary (`database_bytes`, `usage_percent`, table sizes)
-- recent `sync_watermarks`
-
-### `GET /jobs/scheduler`
-
-Returns configured scheduled jobs for active project.
-
-### `POST /jobs/scheduler/tick`
-
-Runs due scheduler jobs (worker tick) for active project.
-
-## Control Tower
-
-### `GET /control-tower`
-
-Unified project/account snapshot:
-
-- integration sync watermarks (Chatwoot/Attio/Linear)
-- top metrics (money, delivery, comms)
-- top NBA
-- risk overview
-- recent evidence
-
-## Identity graph / linking
-
-### `POST /identity/suggestions/preview`
-
-Generate/update cross-system link suggestions (`Chatwoot ↔ Attio ↔ Linear`) with confidence + evidence refs.
-
-### `GET /identity/suggestions`
-
-List suggestions with status filters.
-
-### `POST /identity/suggestions/apply`
-
-Apply selected suggestions into `identity_links` with audit trail.
-
-### `GET /identity/links`
-
-List active/inactive identity links.
-
-## CRM / Offers
-
-### `GET /crm/accounts`, `POST /crm/accounts`
-### `GET /crm/opportunities`, `POST /crm/opportunities`
-### `POST /crm/opportunities/:id/stage`
-### `GET /crm/overview`
-
-CRM entities and stage movement (with mandatory audit + evidence refs for stage updates).
-
-### `GET /offers`, `POST /offers`
-### `POST /offers/:id/approve-discount`
-### `POST /offers/:id/approve-send`
-
-Offer builder + approval trail for discount/send actions.
-
-## Signals / NBA / Upsell / Continuity
-
-### `POST /signals/extract`
-### `GET /signals`
-### `POST /signals/:id/status`
-
-Signal extraction and lifecycle (`proposed → accepted/dismissed → done`).
-
-### `GET /nba`
-### `POST /nba/:id/status`
-
-Next Best Action retrieval and status updates.
-
-### `POST /upsell/radar/refresh`
-### `GET /upsell/radar`
-### `POST /upsell/:id/status`
-
-Upsell radar generation from chat/deal context.
-
-### `POST /continuity/preview`
-### `GET /continuity/actions`
-### `POST /continuity/apply`
-
-Deal→Delivery continuity preview/apply into Linear task context.
-
-## Digests / Risk / Analytics
-
-### `POST /digests/daily/generate`, `GET /digests/daily`
-### `POST /digests/weekly/generate`, `GET /digests/weekly`
-
-Daily/weekly digest generation and history.
-
-### `POST /risk/refresh`, `GET /risk/overview`
-
-Risk pattern engine + health score snapshots.
-
-### `POST /analytics/refresh`, `GET /analytics/overview`, `GET /analytics/drilldown`
-
-Pipeline/forecast (Attio), delivery metrics (Linear), comms metrics (Chatwoot), drill-down to evidence.
-
-## Search
-
-### `POST /search`
-
-Body:
-
-- `query` (string, required)
-- `topK` (int, 1..50, default 10)
-
-Performs cosine-distance vector search over `rag_chunks` with `embedding_status='ready'`.
-Search is strictly filtered by `(project_id, account_scope_id)`.
-
-## Audit & evidence
-
-### `GET /audit`
-
-Returns audit events for active project.
-
-Query params:
-
-- `action` (optional exact filter)
-- `limit`, `offset`
-
-### `GET /evidence/search`
-
-Full-text evidence search in normalized `evidence_items`.
-
-Query params:
-
-- `q` (required for non-empty result)
-- `limit`
-
-## Outbound / approval
-
-### `GET /outbound`
-
-List outbound messages for active project.
-
-### `POST /outbound/draft`
-
-Create or upsert outbound draft with idempotency key.
-
-Body:
-
-- `channel` (`email|chatwoot|telegram`)
-- `recipient_ref`
-- `payload` (object)
-- `idempotency_key` (required)
-- `dedupe_key` (optional)
-- `max_retries` (optional)
-- `evidence_refs` (optional array)
-
-### `POST /outbound/:id/approve`
-
-Move outbound message to `approved`.
-
-### `POST /outbound/:id/send`
-
-Send approved outbound message with policy checks:
-
-- opt-out
-- stop-on-reply
-- frequency cap
-
-### `POST /outbound/opt-out`
-
-Update recipient/channel policy (opt-out, cap, stop-on-reply).
-
-### `POST /outbound/process`
-
-Process due approved/failed outbounds (retry loop).
+If you implement one of these, add it to the MVP section and update the relevant spec.
