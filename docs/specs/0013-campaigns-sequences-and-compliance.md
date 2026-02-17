@@ -6,7 +6,6 @@
 
 > Roadmap: CRM/PM/Sales
 
-
 ## Цель
 
 Дать студии управляемые рассылки для:
@@ -21,6 +20,14 @@
 - обязательный opt-out,
 - частотные ограничения,
 - approval.
+
+## Инварианты
+
+- **Compliance-first**: opt-out и suppression list сильнее любых кампаний.
+- **Safe-by-default**: никаких отправок без approve.
+- **Frequency caps** обязательны.
+- **Stop on reply**: любой ответ клиента останавливает текущий sequence.
+- **Auditability**: кто утвердил и кто отправил фиксируется.
 
 ## Каналы (v1)
 
@@ -70,6 +77,13 @@ Telegram — только если юридически/этически ок.
 - Opt-out останавливает всё по каналу.
 - Без approve ничего не отправляется.
 
+## UX
+
+- Campaign list + статусы
+- Campaign builder (segment + sequence)
+- Approval queue (список draft outbound)
+- Отчёты: sent/open/click/reply, conversions, opt-out rate
+
 ## Метрики
 
 - sent/open/click/reply
@@ -83,3 +97,4 @@ Telegram — только если юридически/этически ок.
 - Approval обязателен.
 - Частотные лимиты соблюдаются.
 - Opt-out работает.
+- Reply останавливает sequence.

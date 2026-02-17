@@ -6,7 +6,6 @@
 
 > Roadmap: CRM/PM/Sales
 
-
 ## Цель
 
 Дать финансовую управляемость:
@@ -15,6 +14,12 @@
 - план/факт по проектам
 - маржинальность
 - вклад допродаж/кампаний
+
+## Инварианты
+
+- **Auditability**: все числа должны уметь drill-down до сущностей (opportunity/offer/project/cost rows).
+- **No silent edits**: ручные правки модели затрат/ставок фиксируются.
+- **Consistency**: forecast использует только open opportunities и их probability.
 
 ## Сущности
 
@@ -44,7 +49,7 @@
 
 ## Атрибуция допродаж
 
-- opportunity.offer может ссылаться на signal_id и campaign_id.
+- offer может ссылаться на signal_id и campaign_id.
 - считаем expansion revenue.
 
 ## UX
@@ -57,3 +62,4 @@
 - Есть pipeline агрегаты.
 - Есть forecast 30/60/90.
 - Есть маржа по проектам (простая).
+- Любой показатель имеет drill-down.

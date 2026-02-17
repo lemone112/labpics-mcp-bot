@@ -6,7 +6,6 @@
 
 > Roadmap: CRM/PM/Sales
 
-
 ## Цель
 
 Ускорить коммерческий цикл и увеличить средний чек:
@@ -15,6 +14,14 @@
 - Offer builder (сборка предложения)
 - SOW/Quote generator (черновик)
 - Approval (скидки/отправка)
+
+## Инварианты
+
+- **Evidence-first**: у Offer всегда есть `evidence_refs` (почему именно этот пакет/аддон).
+- **Safe-by-default**: отправка и любые финансовые изменения (скидки/override цены) — только после approve.
+- **Idempotency**: повторное нажатие “Send” не создаёт дубликаты отправок; используется outbox-идемпотентность.
+- **Auditability**: изменение цены/скидки/статуса фиксируется в `offer_events`.
+- **Scope baseline**: принятый Offer создаёт baseline scope для health/risk (см. 0014).
 
 ## Не-цели (v1)
 
@@ -51,7 +58,17 @@
 - `created_at`, `updated_at`
 
 ### offer_events (audit)
-- changes + actor + evidence
+- `id`, `offer_id`
+- `event_type` (created|price_changed|discount_changed|approved|sent|accepted|rejected)
+- `old_value` (jsonb)
+- `new_value` (jsonb)
+- `actor_user_id`
+- `evidence_refs` (jsonb[])
+- `created_at`
+
+### outbound_message (связь с 0011/0013)
+- Offer→Send создаёт `outbound_message` со ссылкой на offer_id
+- отправка через outbox с idempotency_key = offer_id + channel + version
 
 ## Политика скидок (v1)
 
@@ -75,7 +92,8 @@ SOW должен включать:
 ## UX
 
 - Offer builder: packages → add-ons → assumptions → preview SOW
-- Approve → Send
+- Состояния: draft → approve → send
+- Ошибки: “нет approve”, “нет evidence”, “не указан currency/price_type”, “частотный лимит outbound”
 
 ## Связь с сигналами
 
@@ -87,4 +105,4 @@ SOW должен включать:
 - Offer создаётся из Opportunity.
 - SOW генерируется как черновик.
 - Discount требует approve.
-- Отправка требует approve.
+- Отправка требует approve и не дублируется при ретраях.
