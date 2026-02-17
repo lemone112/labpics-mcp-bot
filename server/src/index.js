@@ -23,6 +23,7 @@ import {
   runAllConnectorsSync,
   runConnectorSync,
 } from "./services/connector-sync.js";
+import { listSyncReconciliation, runSyncReconciliation } from "./services/reconciliation.js";
 import { applyIdentitySuggestions, listIdentityLinks, listIdentitySuggestions, previewIdentitySuggestions } from "./services/identity-graph.js";
 import { extractSignalsAndNba, getTopNba, listNba, listSignals, updateNbaStatus, updateSignalStatus } from "./services/signals.js";
 import { listUpsellRadar, refreshUpsellRadar, updateUpsellStatus } from "./services/upsell.js";
@@ -142,6 +143,34 @@ function parseProjectIdsFromUrl(rawUrl) {
     for (const id of chunkIds) candidates.push(id);
   }
   return parseProjectIdsInput(candidates, 100);
+}
+
+function parseProjectIdsFromRequestPayload(payload, max = 100) {
+  if (!payload || typeof payload !== "object") return [];
+  const candidates = [];
+  const directKeys = ["project_id", "projectId", "active_project_id", "activeProjectId"];
+  const listKeys = ["project_ids", "projectIds", "selected_project_ids", "selectedProjectIds"];
+
+  for (const key of directKeys) {
+    const value = String(payload?.[key] || "").trim();
+    if (value) candidates.push(value);
+  }
+  for (const key of listKeys) {
+    const values = parseProjectIdsInput(payload?.[key], max);
+    for (const item of values) candidates.push(item);
+  }
+  return parseProjectIdsInput(candidates, max);
+}
+
+function collectPreferredProjectIds(request) {
+  const urlProjectIds = parseProjectIdsFromUrl(request.url);
+  const queryProjectIds = parseProjectIdsFromRequestPayload(request.query || {}, 100);
+  const bodyProjectIds = parseProjectIdsFromRequestPayload(request.body || {}, 100);
+  const paramsProjectIds = parseProjectIdsFromRequestPayload(request.params || {}, 100);
+  return parseProjectIdsInput(
+    [...urlProjectIds, ...queryProjectIds, ...bodyProjectIds, ...paramsProjectIds],
+    100
+  );
 }
 
 async function pickSessionFallbackProject(pool, preferredProjectIds = []) {
@@ -447,6 +476,18 @@ async function main() {
         return sendError(reply, requestId, new ApiError(403, "csrf_invalid", "Invalid CSRF token"));
       }
     }
+  });
+
+  app.addHook("preValidation", async (request, reply) => {
+    const rawPath = request.url.split("?")[0];
+    const pathName = routePathForAuthCheck(rawPath);
+    const isPublic = pathName === "/health" || pathName === "/metrics" || pathName.startsWith("/auth/");
+    if (isPublic) return;
+    if (!request.auth?.session_id) return;
+    if (request.auth?.active_project_id && request.auth?.account_scope_id) return;
+
+    const preferredProjectIds = collectPreferredProjectIds(request);
+    request.auth = await hydrateSessionScope(pool, request.auth.session_id, request.auth, preferredProjectIds);
   });
 
   app.addHook("onResponse", async (_request, reply) => {
@@ -999,6 +1040,35 @@ async function main() {
       limit: request.query?.limit,
     });
     return sendOk(reply, request.requestId, { errors });
+  });
+
+  registerGet("/connectors/reconciliation", async (request, reply) => {
+    const scope = requireProjectScope(request);
+    const result = await listSyncReconciliation(pool, scope, {
+      days: request.query?.days,
+      limit: request.query?.limit,
+    });
+    return sendOk(reply, request.requestId, result);
+  });
+
+  registerPost("/connectors/reconciliation/run", async (request, reply) => {
+    const scope = requireProjectScope(request);
+    const result = await runSyncReconciliation(pool, scope, {
+      source: "manual",
+    });
+    await writeAuditEvent(pool, {
+      projectId: scope.projectId,
+      accountScopeId: scope.accountScopeId,
+      actorUsername: request.auth?.username || null,
+      action: "connectors.reconciliation.run",
+      entityType: "sync_reconciliation_metrics",
+      entityId: scope.projectId,
+      status: "ok",
+      requestId: request.requestId,
+      payload: result.summary,
+      evidenceRefs: [],
+    });
+    return sendOk(reply, request.requestId, { result });
   });
 
   registerPost("/connectors/sync", async (request, reply) => {
@@ -1613,6 +1683,7 @@ async function main() {
           action_type: result.run?.action_type,
           action_status: result.run?.status,
           attempts: result.run?.attempts,
+          correlation_id: result.run?.correlation_id || null,
           error_message: result.run?.error_message || null,
           idempotent: Boolean(result.idempotent),
         },
@@ -1655,6 +1726,7 @@ async function main() {
           action_type: result.run?.action_type,
           action_status: result.run?.status,
           attempts: result.run?.attempts,
+          correlation_id: result.run?.correlation_id || null,
           retry: true,
         },
         evidenceRefs: result.recommendation.evidence_refs || [],

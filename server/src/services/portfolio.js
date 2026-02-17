@@ -127,6 +127,9 @@ export async function getPortfolioOverview(pool, options = {}) {
     kagScoresByProjectRows,
     kagScoreTrendRows,
     kagForecastRows,
+    reconciliationTrendRows,
+    recommendationFunnelRows,
+    recommendationSignalDriverRows,
   ] =
     await Promise.all([
       pool.query(
@@ -673,6 +676,82 @@ export async function getPortfolioOverview(pool, options = {}) {
         `,
         [accountScopeId, selectedProjectIds]
       ),
+      pool.query(
+        `
+          SELECT
+            date_trunc('day', captured_at)::date::text AS point,
+            avg(completeness_pct)::numeric(6,2) AS completeness_pct,
+            sum(missing_count)::int AS missing_count,
+            sum(duplicate_count)::int AS duplicate_count
+          FROM sync_reconciliation_metrics
+          WHERE account_scope_id = $1
+            AND project_id::text = ANY($2::text[])
+            AND connector <> 'portfolio'
+            AND captured_at >= now() - interval '60 days'
+          GROUP BY 1
+          ORDER BY 1 ASC
+          LIMIT 60
+        `,
+        [accountScopeId, selectedProjectIds]
+      ),
+      pool.query(
+        `
+          SELECT
+            date_trunc('week', created_at)::date::text AS point,
+            sum(
+              CASE
+                WHEN action = 'recommendation_shown'
+                THEN GREATEST(COALESCE((payload ->> 'total')::int, 1), 1)
+                ELSE 0
+              END
+            )::int AS shown,
+            sum(CASE WHEN action = 'recommendation_action_taken' THEN 1 ELSE 0 END)::int AS action_taken,
+            sum(
+              CASE
+                WHEN action = 'recommendation_feedback_updated'
+                  AND lower(COALESCE(payload ->> 'helpful_feedback', '')) IN ('yes', 'true', 'helpful')
+                THEN 1
+                ELSE 0
+              END
+            )::int AS helpful_yes,
+            sum(
+              CASE
+                WHEN action = 'recommendation_feedback_updated'
+                  AND lower(COALESCE(payload ->> 'helpful_feedback', '')) IN ('no', 'false', 'not_helpful')
+                THEN 1
+                ELSE 0
+              END
+            )::int AS helpful_no
+          FROM audit_events
+          WHERE account_scope_id = $1
+            AND project_id::text = ANY($2::text[])
+            AND action IN ('recommendation_shown', 'recommendation_action_taken', 'recommendation_feedback_updated')
+            AND created_at >= now() - interval '120 days'
+          GROUP BY 1
+          ORDER BY 1 ASC
+          LIMIT 52
+        `,
+        [accountScopeId, selectedProjectIds]
+      ),
+      pool.query(
+        `
+          SELECT
+            signal_id,
+            count(*)::int AS used_count
+          FROM (
+            SELECT
+              jsonb_object_keys(COALESCE(signal_snapshot, '{}'::jsonb)) AS signal_id
+            FROM recommendations_v2
+            WHERE account_scope_id = $1
+              AND project_id::text = ANY($2::text[])
+              AND created_at >= now() - interval '60 days'
+          ) AS extracted
+          GROUP BY signal_id
+          ORDER BY used_count DESC, signal_id ASC
+          LIMIT 12
+        `,
+        [accountScopeId, selectedProjectIds]
+      ),
     ]);
 
   const dashboardByProject = dashboardRows.rows.map((row) => {
@@ -718,6 +797,23 @@ export async function getPortfolioOverview(pool, options = {}) {
       client_value_score_total: 0,
     }
   );
+  const recommendationFunnelTotals = recommendationFunnelRows.rows.reduce(
+    (acc, row) => {
+      acc.shown += toNumber(row.shown, 0);
+      acc.action_taken += toNumber(row.action_taken, 0);
+      acc.helpful_yes += toNumber(row.helpful_yes, 0);
+      acc.helpful_no += toNumber(row.helpful_no, 0);
+      return acc;
+    },
+    {
+      shown: 0,
+      action_taken: 0,
+      helpful_yes: 0,
+      helpful_no: 0,
+    }
+  );
+  const latestSyncCompletenessRow = reconciliationTrendRows.rows[reconciliationTrendRows.rows.length - 1] || null;
+  const latestSyncCompletenessPct = toNumber(latestSyncCompletenessRow?.completeness_pct, 100);
 
   const dashboardTrendRaw = trendRows.rows.map((row) => ({
     period_start: row.period_start,
@@ -841,6 +937,23 @@ export async function getPortfolioOverview(pool, options = {}) {
       probability_30d: toNumber(row.probability_30d, 0),
       confidence: toNumber(row.confidence, 0),
     })),
+    sync_reconciliation_completeness: reconciliationTrendRows.rows.map((row) => ({
+      point: row.point,
+      completeness_pct: toNumber(row.completeness_pct, 0),
+      missing_count: toNumber(row.missing_count, 0),
+      duplicate_count: toNumber(row.duplicate_count, 0),
+    })),
+    recommendation_funnel: recommendationFunnelRows.rows.map((row) => ({
+      point: row.point,
+      shown: toNumber(row.shown, 0),
+      action_taken: toNumber(row.action_taken, 0),
+      helpful_yes: toNumber(row.helpful_yes, 0),
+      helpful_no: toNumber(row.helpful_no, 0),
+    })),
+    recommendation_signal_drivers: recommendationSignalDriverRows.rows.map((row) => ({
+      signal_id: row.signal_id,
+      used_count: toNumber(row.used_count, 0),
+    })),
   };
 
   const financeCharts = {
@@ -903,6 +1016,20 @@ export async function getPortfolioOverview(pool, options = {}) {
           dashboardByProject.length > 0
             ? Number((dashboardTotals.client_value_score_total / dashboardByProject.length).toFixed(2))
             : 0,
+        recommendation_shown_30d: recommendationFunnelTotals.shown,
+        recommendation_actions_30d: recommendationFunnelTotals.action_taken,
+        recommendation_helpful_yes_30d: recommendationFunnelTotals.helpful_yes,
+        recommendation_helpful_ratio_pct:
+          recommendationFunnelTotals.helpful_yes + recommendationFunnelTotals.helpful_no > 0
+            ? Number(
+                (
+                  (recommendationFunnelTotals.helpful_yes /
+                    (recommendationFunnelTotals.helpful_yes + recommendationFunnelTotals.helpful_no)) *
+                  100
+                ).toFixed(2)
+              )
+            : 0,
+        sync_completeness_pct: Number(latestSyncCompletenessPct.toFixed(2)),
       },
       by_project: dashboardByProject,
       trend: dashboardTrend,

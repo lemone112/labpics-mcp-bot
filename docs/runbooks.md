@@ -134,5 +134,21 @@
 - доля `process_failed` и `process_warning` в `kag_event_log`,
 - рост `connector_errors` и dead-letter записей,
 - lag по `connector_sync_state.cursor_ts`,
+- тренд `sync_reconciliation_metrics.completeness_pct` и рост `missing_count/duplicate_count`,
 - доля `publishable=false` в snapshots/forecasts,
 - доля рекомендаций со статусом `new` без обработки.
+
+---
+
+## 9) Как дебажить цепочку event → recommendation → action
+
+1. Найти событие в `audit_events` по `action IN ('recommendation_shown', 'recommendation_action_taken')`.
+2. В `payload` взять `recommendation_id` и `correlation_id`.
+3. Найти `recommendation_action_runs` по `correlation_id`.
+4. Если статус `failed`:
+   - проверить `attempts/max_retries`,
+   - проверить `next_retry_at`,
+   - сопоставить `request_id` в audit log.
+5. Если action типа `send_message`:
+   - пройти в `outbound_messages` через `idempotency_key` (`rec_action_send:*`),
+   - проверить `outbound_attempts` и provider ошибки.

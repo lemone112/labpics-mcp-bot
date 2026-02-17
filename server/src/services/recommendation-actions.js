@@ -41,6 +41,13 @@ function buildActionDedupeKey(recommendationId, actionType, payload = {}) {
     .digest("hex");
 }
 
+function buildActionCorrelationId(recommendationId, actionType, dedupeKey) {
+  const safeRecommendationId = asText(recommendationId, 120) || "recommendation";
+  const safeActionType = asText(actionType, 80) || "action";
+  const safeDedupe = asText(dedupeKey, 80) || crypto.createHash("sha1").update(String(Date.now())).digest("hex");
+  return `rec.${safeRecommendationId}.${safeActionType}.${safeDedupe.slice(0, 16)}`;
+}
+
 function recommendationScope(recommendation) {
   return {
     projectId: recommendation.project_id,
@@ -102,6 +109,8 @@ async function upsertActionRun(pool, recommendation, actionType, actionPayload =
   const payload = actionPayload && typeof actionPayload === "object" ? actionPayload : {};
   const dedupeKey =
     asText(payload.dedupe_key, 200) || buildActionDedupeKey(recommendation.id, actionType, payload);
+  const correlationId =
+    asText(payload.correlation_id, 200) || buildActionCorrelationId(recommendation.id, actionType, dedupeKey);
   const maxRetries = clampInt(payload.max_retries, 3, 0, 10);
   const { rows } = await pool.query(
     `
@@ -116,10 +125,11 @@ async function upsertActionRun(pool, recommendation, actionType, actionPayload =
         attempts,
         max_retries,
         dedupe_key,
+        correlation_id,
         created_by,
         updated_at
       )
-      VALUES ($1, $2, $3, $4, 'pending', $5::jsonb, '{}'::jsonb, 0, $6, $7, $8, now())
+      VALUES ($1, $2, $3, $4, 'pending', $5::jsonb, '{}'::jsonb, 0, $6, $7, $8, $9, now())
       ON CONFLICT (project_id, dedupe_key)
       DO UPDATE SET
         updated_at = now()
@@ -133,6 +143,7 @@ async function upsertActionRun(pool, recommendation, actionType, actionPayload =
       JSON.stringify(payload),
       maxRetries,
       dedupeKey,
+      correlationId,
       actorUsername,
     ]
   );
@@ -274,6 +285,7 @@ async function createOrUpdateTaskAction(pool, recommendation, actionPayload = {}
       JSON.stringify({
         source: "recommendation_action",
         recommendation_id: recommendation.id,
+        correlation_id: actionPayload.correlation_id || null,
         category: recommendation.category,
         owner_role: recommendation.owner_role,
       }),
@@ -347,6 +359,7 @@ async function sendMessageAction(pool, recommendation, run, actionPayload = {}, 
       payload: {
         text: messageBody,
         recommendation_id: recommendation.id,
+        correlation_id: run.correlation_id,
         category: recommendation.category,
       },
       evidence_refs: recommendation.evidence_refs || [],
@@ -408,6 +421,7 @@ async function setReminderAction(pool, recommendation, actionPayload = {}) {
       JSON.stringify({
         source: "recommendation_action",
         recommendation_id: recommendation.id,
+        correlation_id: actionPayload.correlation_id || null,
         category: recommendation.category,
         note,
       }),
@@ -421,14 +435,18 @@ async function setReminderAction(pool, recommendation, actionPayload = {}) {
 }
 
 async function executeAction(pool, recommendation, run, actionPayload = {}, actorUsername = null, requestId = null) {
+  const payload = {
+    ...(actionPayload && typeof actionPayload === "object" ? actionPayload : {}),
+    correlation_id: run.correlation_id,
+  };
   if (run.action_type === RECOMMENDATION_ACTION_TYPES.CREATE_OR_UPDATE_TASK) {
-    return createOrUpdateTaskAction(pool, recommendation, actionPayload);
+    return createOrUpdateTaskAction(pool, recommendation, payload);
   }
   if (run.action_type === RECOMMENDATION_ACTION_TYPES.SEND_MESSAGE) {
-    return sendMessageAction(pool, recommendation, run, actionPayload, actorUsername, requestId);
+    return sendMessageAction(pool, recommendation, run, payload, actorUsername, requestId);
   }
   if (run.action_type === RECOMMENDATION_ACTION_TYPES.SET_REMINDER) {
-    return setReminderAction(pool, recommendation, actionPayload);
+    return setReminderAction(pool, recommendation, payload);
   }
   throw new Error("unsupported_recommendation_action_type");
 }

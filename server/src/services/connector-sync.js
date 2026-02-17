@@ -14,6 +14,7 @@ import {
 } from "./connector-state.js";
 import { syncConnectorEventLog } from "./event-log.js";
 import { failProcessRun, finishProcessRun, startProcessRun, warnProcess } from "./kag-process-log.js";
+import { runSyncReconciliation } from "./reconciliation.js";
 
 const CONNECTORS = ["chatwoot", "linear", "attio"];
 
@@ -186,15 +187,43 @@ export async function runAllConnectorsSync(pool, scope, logger = console) {
       payload: summary,
     });
   }
+  let reconciliation = null;
+  try {
+    reconciliation = await runSyncReconciliation(pool, scope, { source: "sync_cycle" });
+    const threshold = Number.parseFloat(process.env.CONNECTOR_RECONCILIATION_MIN_COMPLETENESS_PCT || "95");
+    const minCompleteness = Number.isFinite(threshold) ? Math.max(0, Math.min(threshold, 100)) : 95;
+    const completeness = Number(reconciliation?.summary?.completeness_pct || 0);
+    if (completeness < minCompleteness) {
+      await warnProcess(pool, scope, "connectors_sync_cycle", "Reconciliation completeness is below threshold", {
+        payload: {
+          threshold: minCompleteness,
+          completeness,
+          summary: reconciliation?.summary || {},
+        },
+      });
+    }
+  } catch (error) {
+    await warnProcess(pool, scope, "connectors_sync_cycle", "Reconciliation after sync cycle failed", {
+      payload: {
+        error: String(error?.message || error),
+      },
+    });
+  }
   await finishProcessRun(pool, scope, run, {
     counters: {
       total: summary.total,
       ok: summary.ok,
       failed: summary.failed,
     },
-    payload: summary,
+    payload: {
+      ...summary,
+      reconciliation,
+    },
   });
-  return summary;
+  return {
+    ...summary,
+    reconciliation,
+  };
 }
 
 export async function listConnectorSyncState(pool, scope) {

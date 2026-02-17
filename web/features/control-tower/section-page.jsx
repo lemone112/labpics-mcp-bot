@@ -125,6 +125,13 @@ function renderDashboardCharts(payload, moneyFormatter, numberFormatter) {
   const kagForecastProbabilities = Array.isArray(charts.kag_risk_forecast_probabilities)
     ? charts.kag_risk_forecast_probabilities
     : [];
+  const syncReconciliation = Array.isArray(charts.sync_reconciliation_completeness)
+    ? charts.sync_reconciliation_completeness
+    : [];
+  const recommendationFunnel = Array.isArray(charts.recommendation_funnel) ? charts.recommendation_funnel : [];
+  const recommendationSignalDrivers = Array.isArray(charts.recommendation_signal_drivers)
+    ? charts.recommendation_signal_drivers
+    : [];
 
   return (
     <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 xl:grid-cols-3">
@@ -370,6 +377,73 @@ function renderDashboardCharts(payload, moneyFormatter, numberFormatter) {
               <Bar dataKey="probability_7d" fill="hsl(var(--chart-3))" radius={[4, 4, 0, 0]} />
               <Bar dataKey="probability_14d" fill="hsl(var(--chart-2))" radius={[4, 4, 0, 0]} />
               <Bar dataKey="probability_30d" fill="hsl(var(--destructive))" radius={[4, 4, 0, 0]} />
+            </BarChart>
+          </ChartContainer>
+        </CardContent>
+      </Card>
+
+      <Card data-motion-item>
+        <CardHeader>
+          <CardTitle>Полнота синхронизации источников</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <ChartContainer
+            config={{
+              completeness_pct: { label: "Полнота, %", markerClassName: "bg-primary" },
+              missing_count: { label: "Пропуски", markerClassName: "bg-destructive" },
+            }}
+          >
+            <LineChart data={syncReconciliation.map((item) => ({ ...item, label: toRuDateLabel(item.point) }))}>
+              <CartesianGrid vertical={false} />
+              <XAxis dataKey="label" tickLine={false} axisLine={false} minTickGap={24} />
+              <YAxis tickLine={false} axisLine={false} domain={[0, 100]} />
+              <ChartTooltip content={<ChartTooltipContent formatter={(value) => numberFormatter.format(numberValue(value))} />} />
+              <ChartLegend content={<ChartLegendContent />} />
+              <Line dataKey="completeness_pct" type="monotone" stroke="hsl(var(--primary))" strokeWidth={2} dot={false} />
+              <Line dataKey="missing_count" type="monotone" stroke="hsl(var(--destructive))" strokeWidth={2} dot={false} />
+            </LineChart>
+          </ChartContainer>
+        </CardContent>
+      </Card>
+
+      <Card data-motion-item>
+        <CardHeader>
+          <CardTitle>Funnel рекомендаций (показ → действие → полезность)</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <ChartContainer
+            config={{
+              shown: { label: "Показано", markerClassName: "bg-chart-3" },
+              action_taken: { label: "Действий", markerClassName: "bg-primary" },
+              helpful_yes: { label: "Полезно", markerClassName: "bg-chart-2" },
+            }}
+          >
+            <BarChart data={recommendationFunnel.map((item) => ({ ...item, label: toRuDateLabel(item.point) }))}>
+              <CartesianGrid vertical={false} />
+              <XAxis dataKey="label" tickLine={false} axisLine={false} minTickGap={24} />
+              <YAxis tickLine={false} axisLine={false} />
+              <ChartTooltip content={<ChartTooltipContent formatter={(value) => numberFormatter.format(numberValue(value))} />} />
+              <ChartLegend content={<ChartLegendContent />} />
+              <Bar dataKey="shown" fill="hsl(var(--chart-3))" radius={[4, 4, 0, 0]} />
+              <Bar dataKey="action_taken" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
+              <Bar dataKey="helpful_yes" fill="hsl(var(--chart-2))" radius={[4, 4, 0, 0]} />
+            </BarChart>
+          </ChartContainer>
+        </CardContent>
+      </Card>
+
+      <Card data-motion-item>
+        <CardHeader>
+          <CardTitle>Драйверы рекомендаций (top signals)</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <ChartContainer config={{ used_count: { label: "Использований", markerClassName: "bg-chart-4" } }}>
+            <BarChart data={recommendationSignalDrivers}>
+              <CartesianGrid vertical={false} />
+              <XAxis dataKey="signal_id" tickLine={false} axisLine={false} minTickGap={8} />
+              <YAxis tickLine={false} axisLine={false} />
+              <ChartTooltip content={<ChartTooltipContent formatter={(value) => numberFormatter.format(numberValue(value))} />} />
+              <Bar dataKey="used_count" fill="hsl(var(--chart-4))" radius={[4, 4, 0, 0]} />
             </BarChart>
           </ChartContainer>
         </CardContent>

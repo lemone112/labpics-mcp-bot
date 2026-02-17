@@ -10,6 +10,7 @@ import { buildProjectSnapshot } from "./snapshots.js";
 import { rebuildCaseSignatures } from "./similarity.js";
 import { refreshRiskForecasts } from "./forecasting.js";
 import { refreshRecommendationsV2 } from "./recommendations-v2.js";
+import { runSyncReconciliation } from "./reconciliation.js";
 
 function toPositiveInt(value, fallback, min = 1, max = 2_592_000) {
   const parsed = Number.parseInt(String(value ?? ""), 10);
@@ -27,6 +28,8 @@ function createHandlers(customHandlers = {}) {
     attio_sync: async ({ pool, scope, logger }) => runConnectorSync(pool, scope, "attio", logger),
     linear_sync: async ({ pool, scope, logger }) => runConnectorSync(pool, scope, "linear", logger),
     connectors_sync_cycle: async ({ pool, scope, logger }) => runAllConnectorsSync(pool, scope, logger),
+    connectors_reconciliation_daily: async ({ pool, scope }) =>
+      runSyncReconciliation(pool, scope, { source: "daily_job" }),
     connector_errors_retry: async ({ pool, scope, logger }) => retryConnectorErrors(pool, scope, { logger }),
     embeddings_run: async ({ pool, scope, logger }) => runEmbeddings(pool, scope, logger),
     signals_extraction: async ({ pool, scope }) => extractSignalsAndNba(pool, scope),
@@ -69,6 +72,7 @@ function createHandlers(customHandlers = {}) {
 export async function ensureDefaultScheduledJobs(pool, scope) {
   const defaults = [
     { jobType: "connectors_sync_cycle", cadenceSeconds: 900 },
+    { jobType: "connectors_reconciliation_daily", cadenceSeconds: 86400 },
     { jobType: "connector_errors_retry", cadenceSeconds: 300 },
     { jobType: "embeddings_run", cadenceSeconds: 1200 },
     { jobType: "signals_extraction", cadenceSeconds: 900 },
