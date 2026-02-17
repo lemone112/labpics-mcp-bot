@@ -45,13 +45,13 @@ export default function JobsPage() {
   }
 
   if (loading || !session) {
-    return <div className="p-8 text-slate-300">Loading...</div>;
+    return <div className="p-8 text-[var(--text-primary)]">Loading...</div>;
   }
 
   return (
     <PageShell title="Jobs" subtitle="Trigger Chatwoot sync and embeddings jobs">
       <div className="space-y-6">
-        <Card>
+        <Card data-motion-item>
           <CardHeader>
             <CardTitle>Run jobs</CardTitle>
           </CardHeader>
@@ -68,58 +68,58 @@ export default function JobsPage() {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card data-motion-item>
           <CardHeader>
             <CardTitle>RAG counts</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
-              <div className="rounded border border-slate-800 p-3">
-                <div className="text-xs text-slate-400">Pending</div>
+              <div className="rounded-[var(--radius-sm)] border border-[var(--border-subtle)] bg-[var(--surface-soft)] p-3">
+                <div className="text-xs text-[var(--text-muted)]">Pending</div>
                 <div className="text-xl font-semibold">{status?.rag_counts?.pending ?? 0}</div>
               </div>
-              <div className="rounded border border-slate-800 p-3">
-                <div className="text-xs text-slate-400">Processing</div>
+              <div className="rounded-[var(--radius-sm)] border border-[var(--border-subtle)] bg-[var(--surface-soft)] p-3">
+                <div className="text-xs text-[var(--text-muted)]">Processing</div>
                 <div className="text-xl font-semibold">{status?.rag_counts?.processing ?? 0}</div>
               </div>
-              <div className="rounded border border-slate-800 p-3">
-                <div className="text-xs text-slate-400">Ready</div>
+              <div className="rounded-[var(--radius-sm)] border border-[var(--border-subtle)] bg-[var(--surface-soft)] p-3">
+                <div className="text-xs text-[var(--text-muted)]">Ready</div>
                 <div className="text-xl font-semibold">{status?.rag_counts?.ready ?? 0}</div>
               </div>
-              <div className="rounded border border-slate-800 p-3">
-                <div className="text-xs text-slate-400">Failed</div>
+              <div className="rounded-[var(--radius-sm)] border border-[var(--border-subtle)] bg-[var(--surface-soft)] p-3">
+                <div className="text-xs text-[var(--text-muted)]">Failed</div>
                 <div className="text-xl font-semibold">{status?.rag_counts?.failed ?? 0}</div>
               </div>
             </div>
           </CardContent>
         </Card>
 
-        <Card>
+        <Card data-motion-item>
           <CardHeader>
             <CardTitle>Data footprint</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
-              <div className="rounded border border-slate-800 p-3">
-                <div className="text-xs text-slate-400">Contacts</div>
+              <div className="rounded-[var(--radius-sm)] border border-[var(--border-subtle)] bg-[var(--surface-soft)] p-3">
+                <div className="text-xs text-[var(--text-muted)]">Contacts</div>
                 <div className="text-xl font-semibold">{status?.entities?.contacts ?? 0}</div>
               </div>
-              <div className="rounded border border-slate-800 p-3">
-                <div className="text-xs text-slate-400">Conversations</div>
+              <div className="rounded-[var(--radius-sm)] border border-[var(--border-subtle)] bg-[var(--surface-soft)] p-3">
+                <div className="text-xs text-[var(--text-muted)]">Conversations</div>
                 <div className="text-xl font-semibold">{status?.entities?.conversations ?? 0}</div>
               </div>
-              <div className="rounded border border-slate-800 p-3">
-                <div className="text-xs text-slate-400">Messages</div>
+              <div className="rounded-[var(--radius-sm)] border border-[var(--border-subtle)] bg-[var(--surface-soft)] p-3">
+                <div className="text-xs text-[var(--text-muted)]">Messages</div>
                 <div className="text-xl font-semibold">{status?.entities?.messages ?? 0}</div>
               </div>
-              <div className="rounded border border-slate-800 p-3">
-                <div className="text-xs text-slate-400">DB size</div>
+              <div className="rounded-[var(--radius-sm)] border border-[var(--border-subtle)] bg-[var(--surface-soft)] p-3">
+                <div className="text-xs text-[var(--text-muted)]">DB size</div>
                 <div className="text-xl font-semibold">
                   {typeof status?.storage?.database_bytes === "number"
                     ? `${(status.storage.database_bytes / (1024 ** 3)).toFixed(2)} GB`
                     : "-"}
                 </div>
-                <div className="mt-1 text-xs text-slate-500">
+                <div className="mt-1 text-xs text-[var(--text-subtle)]">
                   {typeof status?.storage?.usage_percent === "number"
                     ? `${status.storage.usage_percent}% of budget`
                     : ""}
@@ -129,7 +129,7 @@ export default function JobsPage() {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card data-motion-item>
           <CardHeader>
             <CardTitle>Latest job runs</CardTitle>
           </CardHeader>
@@ -156,7 +156,7 @@ export default function JobsPage() {
                 ))}
                 {!status?.jobs?.length ? (
                   <TableRow>
-                    <TableCell colSpan={5} className="text-slate-400">
+                    <TableCell colSpan={5} className="text-[var(--text-muted)]">
                       No job runs yet.
                     </TableCell>
                   </TableRow>

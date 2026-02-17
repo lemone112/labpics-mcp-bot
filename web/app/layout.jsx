@@ -1,4 +1,5 @@
 import "./globals.css";
+import { Providers } from "@/app/providers";
 
 export const metadata = {
   title: "Labpics MVP",
@@ -7,8 +8,10 @@ export const metadata = {
 
 export default function RootLayout({ children }) {
   return (
-    <html lang="en">
-      <body>{children}</body>
+    <html lang="en" className="dark" data-theme="dark" suppressHydrationWarning>
+      <body className="antialiased">
+        <Providers>{children}</Providers>
+      </body>
     </html>
   );
 }

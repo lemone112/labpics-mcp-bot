@@ -64,13 +64,13 @@ export default function ProjectsPage() {
   }
 
   if (loading || !session) {
-    return <div className="p-8 text-slate-300">Loading...</div>;
+    return <div className="p-8 text-[var(--text-primary)]">Loading...</div>;
   }
 
   return (
     <PageShell title="Projects" subtitle="Create and select active project for session">
       <div className="space-y-6">
-        <Card>
+        <Card data-motion-item>
           <CardHeader>
             <CardTitle>New project</CardTitle>
           </CardHeader>
@@ -91,7 +91,7 @@ export default function ProjectsPage() {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card data-motion-item>
           <CardHeader>
             <CardTitle>Project list</CardTitle>
           </CardHeader>
@@ -109,7 +109,7 @@ export default function ProjectsPage() {
                 {projects.map((project) => (
                   <TableRow key={project.id}>
                     <TableCell>{project.name}</TableCell>
-                    <TableCell className="font-mono text-xs text-slate-400">{project.id}</TableCell>
+                    <TableCell className="font-mono text-xs text-[var(--text-muted)]">{project.id}</TableCell>
                     <TableCell>{new Date(project.created_at).toLocaleString()}</TableCell>
                     <TableCell>
                       <Button
@@ -125,7 +125,7 @@ export default function ProjectsPage() {
                 ))}
                 {!projects.length ? (
                   <TableRow>
-                    <TableCell colSpan={4} className="text-slate-400">
+                    <TableCell colSpan={4} className="text-[var(--text-muted)]">
                       No projects yet.
                     </TableCell>
                   </TableRow>

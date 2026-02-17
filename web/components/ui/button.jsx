@@ -1,18 +1,39 @@
 "use client";
 
+import { Button as HeroButton } from "@heroui/react";
+
 import { cn } from "@/lib/utils";
 
-const variants = {
-  default: "bg-cyan-500 text-slate-950 hover:bg-cyan-400",
-  secondary: "bg-slate-800 text-slate-100 hover:bg-slate-700 border border-slate-700",
-  outline: "border border-cyan-500 text-cyan-300 hover:bg-cyan-500/10",
-  danger: "bg-rose-500 text-white hover:bg-rose-400",
+const variantConfig = {
+  default: {
+    variant: "solid",
+    color: "primary",
+    className:
+      "bg-[linear-gradient(135deg,var(--brand-500),var(--brand-400))] text-[#041018] shadow-[var(--shadow-glow)] hover:brightness-105",
+  },
+  secondary: {
+    variant: "flat",
+    color: "default",
+    className:
+      "border border-[var(--border-strong)] bg-[var(--surface-soft)] text-[var(--text-primary)] hover:bg-[rgba(148,163,184,0.15)]",
+  },
+  outline: {
+    variant: "bordered",
+    color: "primary",
+    className:
+      "border-[var(--border-accent)] bg-transparent text-[var(--brand-300)] hover:bg-[rgba(34,211,238,0.08)]",
+  },
+  danger: {
+    variant: "solid",
+    color: "danger",
+    className: "bg-[var(--danger-500)] text-white hover:brightness-105",
+  },
 };
 
-const sizes = {
-  default: "h-10 px-4 py-2 text-sm",
-  sm: "h-8 px-3 text-xs",
-  lg: "h-11 px-6 text-base",
+const sizeMap = {
+  default: "md",
+  sm: "sm",
+  lg: "lg",
 };
 
 export function Button({
@@ -22,13 +43,18 @@ export function Button({
   type = "button",
   ...props
 }) {
+  const config = variantConfig[variant] || variantConfig.default;
+
   return (
-    <button
+    <HeroButton
       type={type}
+      variant={config.variant}
+      color={config.color}
+      size={sizeMap[size] || "md"}
+      radius="md"
       className={cn(
-        "inline-flex items-center justify-center rounded-md font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400 disabled:cursor-not-allowed disabled:opacity-50",
-        variants[variant] || variants.default,
-        sizes[size] || sizes.default,
+        "font-medium tracking-[-0.01em] transition-transform active:scale-[0.99]",
+        config.className,
         className
       )}
       {...props}
