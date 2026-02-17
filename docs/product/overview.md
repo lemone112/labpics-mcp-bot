@@ -19,7 +19,7 @@ Minimum loop:
 
 - **Chatwoot → DB sync** (raw conversations + messages)
 - **Chunking + embeddings** stored in Postgres/pgvector
-- **Vector search** over embedded chunks (project-scoped)
+- **Vector search** over embedded chunks (global scope in current MVP)
 - **Project selection** stored per session
 - **Jobs UI** for triggering sync/embeddings and observing status
 

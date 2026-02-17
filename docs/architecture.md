@@ -14,7 +14,8 @@ Composition is defined in [`/docker-compose.yml`](../docker-compose.yml).
 
 ### UI → API
 
-- Browser calls `NEXT_PUBLIC_API_BASE_URL` (default `http://localhost:8080`).
+- Browser calls `NEXT_PUBLIC_API_BASE_URL` (default `/api`).
+- Next.js rewrites `/api/*` to `API_UPSTREAM_URL` (default `http://localhost:8080` locally or `http://server:8080` in Docker).
 - Auth is cookie-based session (`SESSION_COOKIE_NAME`, default `sid`).
 
 ### API authentication
@@ -26,6 +27,8 @@ Composition is defined in [`/docker-compose.yml`](../docker-compose.yml).
 
 - Active project is stored on the session row: `sessions.active_project_id`.
 - UI uses `/projects/:id/select` to set the active project.
+- Current MVP retrieval/search SQL is global and does not filter by `active_project_id`.
+- Strict per-project isolation requires adding `project_id` to ingestion/search tables and filtering queries by session project.
 
 ## Jobs execution model
 
