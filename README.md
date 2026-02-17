@@ -16,10 +16,13 @@ Worker-контур снова введен как единый scheduler/worker
 Стартовые точки:
 
 - Индекс документации: [`docs/index.md`](./docs/index.md)
+- Продуктовый обзор: [`docs/product/overview.md`](./docs/product/overview.md)
 - Архитектура: [`docs/architecture.md`](./docs/architecture.md)
+- Frontend + дизайн: [`docs/frontend-design.md`](./docs/frontend-design.md)
 - Platform layer (scope/audit/outbox/worker): [`docs/platform-architecture.md`](./docs/platform-architecture.md)
 - API reference: [`docs/api.md`](./docs/api.md)
 - Runbooks: [`docs/runbooks.md`](./docs/runbooks.md)
+- Roadmap: [`docs/mvp-vs-roadmap.md`](./docs/mvp-vs-roadmap.md)
 - Спеки: [`docs/specs/README.md`](./docs/specs/README.md)
 
 ---

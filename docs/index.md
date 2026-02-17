@@ -12,20 +12,24 @@
 
 1. Общий обзор и запуск:
    - [`README.md`](../README.md)
-2. Архитектура и техстек:
+2. Продуктовый обзор (ценность, сценарии, контуры):
+   - [`docs/product/overview.md`](./product/overview.md)
+3. Архитектура и техстек:
    - [`docs/architecture.md`](./architecture.md)
-3. Платформенные инварианты (scope / audit / evidence / deterministic):
+4. Платформенные инварианты (scope / audit / evidence / deterministic):
    - [`docs/platform-architecture.md`](./platform-architecture.md)
-4. Модель данных (основной фокус по БД):
+5. Модель данных (основной фокус по БД):
    - [`docs/data-model.md`](./data-model.md)
-5. Пайплайны и расписание автоматизаций:
+6. Frontend + дизайн (shadcn/ui, anime.js, UI-логика):
+   - [`docs/frontend-design.md`](./frontend-design.md)
+7. Пайплайны и расписание автоматизаций:
    - [`docs/pipelines.md`](./pipelines.md)
-6. API (актуальные группы эндпоинтов):
+8. API (актуальные группы эндпоинтов):
    - [`docs/api.md`](./api.md)
-7. KAG-слои:
+9. KAG-слои:
    - Базовый recommendations: [`docs/kag_recommendations.md`](./kag_recommendations.md)
    - Forecasting + recommendations v2: [`docs/kag_forecasting_recommendations.md`](./kag_forecasting_recommendations.md)
-8. Операционная эксплуатация:
+10. Операционная эксплуатация:
    - [`docs/runbooks.md`](./runbooks.md)
    - [`docs/deployment.md`](./deployment.md)
 
@@ -38,6 +42,7 @@
 
 ## Дополнительно
 
+- Product roadmap: [`docs/mvp-vs-roadmap.md`](./mvp-vs-roadmap.md)
 - Продуктовые спеки: [`docs/specs/README.md`](./specs/README.md)
 - Термины: [`docs/glossary.md`](./glossary.md)
 - Стиль документации: [`docs/style-guide.md`](./style-guide.md)
