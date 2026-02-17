@@ -139,13 +139,20 @@ export async function getLinkCounts(env, projectId) {
     `/project_links?select=external_type&project_id=eq.${encodeURIComponent(projectId)}&limit=500`
   );
   const arr = Array.isArray(data) ? data : [];
-  const count = (t) => arr.filter((x) => x.external_type === t).length;
+  const counts = new Map();
+  for (const row of arr) {
+    const key = String(row?.external_type || "");
+    counts.set(key, (counts.get(key) || 0) + 1);
+  }
+
+  const sum = (types) => types.reduce((acc, t) => acc + (counts.get(t) || 0), 0);
 
   return {
-    conversation: count("conversation"),
-    person: count("person"),
-    deal: count("deal"),
-    company: count("company") > 0,
-    linear_project: count("linear_project") > 0,
+    // Keep compatibility with legacy external_type values and namespaced v2 values.
+    conversation: sum(["conversation", "chatwoot.conversation"]),
+    person: sum(["person", "attio.person"]),
+    deal: sum(["deal", "attio.deal"]),
+    company: sum(["company", "attio.company"]) > 0,
+    linear_project: sum(["linear_project", "linear.linear_project", "linear.linear_issue"]) > 0,
   };
 }

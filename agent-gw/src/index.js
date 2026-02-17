@@ -1,7 +1,7 @@
 // @ts-nocheck
 
-import { json } from "./lib/util.js";
-import { hmacSha256Hex } from "./lib/security.js";
+import { json, escapeHtml } from "./lib/util.js";
+import { hmacSha256Hex, constantTimeEqual } from "./lib/security.js";
 import { fetchRecentChunks, upsertCommitments, listCommitments, ragSearchMvp } from "./lib/supabase.js";
 import { openaiChatJsonObject, parseItemsRobust } from "./lib/openai.js";
 import { renderCommitmentsCard, renderSearchResults } from "./lib/render.js";
@@ -33,67 +33,88 @@ export default {
 
     if (url.pathname === "/agent/run" || url.pathname === "/agent/run/") {
       if (request.method !== "POST") return json({ ok: false, error: "method_not_allowed" }, 405);
+      const ct = request.headers.get("content-type") || "";
+      if (!ct.toLowerCase().includes("application/json")) return json({ ok: false, error: "unsupported_media_type" }, 415);
 
-      const bodyText = await request.text();
-      const sig = request.headers.get("x-signature") || "";
+      let requestId = "unknown";
+      try {
+        const bodyText = await request.text();
+        if (bodyText.length > 512_000) return json({ ok: false, error: "payload_too_large" }, 413);
+        const sig = request.headers.get("x-signature") || "";
 
-      const hmacSecret = env.AGENT_GATEWAY_HMAC_SECRET || "";
-      if (!hmacSecret) return new Response("missing hmac secret", { status: 500 });
+        const hmacSecret = env.AGENT_GATEWAY_HMAC_SECRET || "";
+        if (!hmacSecret) return json({ ok: false, error: "server_misconfigured_hmac" }, 500);
 
-      const expected = await hmacSha256Hex(hmacSecret, bodyText);
-      if (!sig || sig !== expected) return new Response("bad signature", { status: 401 });
+        const expected = await hmacSha256Hex(hmacSecret, bodyText);
+        if (!sig || !constantTimeEqual(sig, expected)) return json({ ok: false, error: "bad_signature" }, 401);
 
-      const payload = JSON.parse(bodyText);
-      const projectName = payload?.context?.project?.name || "—";
-      const projectId = String(payload?.active_project_id || "").trim();
-      const userText = String(payload?.user_text || "").trim();
+        let payload = null;
+        try {
+          payload = JSON.parse(bodyText);
+        } catch {
+          return json({ ok: false, error: "invalid_json" }, 400);
+        }
 
-      if (!projectId) {
-        return json({
-          ok: true,
-          text: "Нет active_project_id — выберите проект.",
-          keyboard: [[{ text: "📁 Projects", callback_data: "NAV:PROJECTS" }], [{ text: "🏠 Home", callback_data: "NAV:HOME" }]],
-        });
-      }
+        requestId = asShortText(payload?.request_id || crypto.randomUUID(), 64);
+        const projectName = asShortText(payload?.context?.project?.name || "—", 200);
+        const projectId = asShortText(payload?.active_project_id || "", 200);
+        const userText = asShortText(payload?.user_text || "", 2000);
 
-      const intent = detectIntent(userText);
-
-      if (intent === "commitments") {
-        const chunks = await fetchRecentChunks(env, { project_id: projectId, limit: 80 });
-
-        if (!chunks.length) {
+        if (!projectId) {
           return json({
             ok: true,
-            text: `🤝 Договоренности\n\nПроект: ${projectName}\n\nНет данных (rag_chunks пуст для этого project_id).`,
-            keyboard: [[{ text: "📊 Dashboard", callback_data: "NAV:DASH" }, { text: "🏠 Home", callback_data: "NAV:HOME" }]],
+            text: "Нет active_project_id — выберите проект.",
+            keyboard: [[{ text: "📁 Projects", callback_data: "NAV:PROJECTS" }], [{ text: "🏠 Home", callback_data: "NAV:HOME" }]],
           });
         }
 
-        const extracted = await extractCommitmentsLLM(env, { projectName, projectId, chunks });
-        const upserted = await upsertCommitments(env, { project_id: projectId, items: extracted.items });
-        const top = await listCommitments(env, { project_id: projectId, limit: 10 });
+        const intent = detectIntent(userText);
 
+        if (intent === "commitments") {
+          const chunks = await fetchRecentChunks(env, { project_id: projectId, limit: 80 });
+
+          if (!chunks.length) {
+            return json({
+              ok: true,
+              text: `🤝 Договоренности\n\nПроект: ${escapeHtml(projectName)}\n\nНет данных (rag_chunks пуст для этого project_id).`,
+              keyboard: [[{ text: "📊 Dashboard", callback_data: "NAV:DASH" }, { text: "🏠 Home", callback_data: "NAV:HOME" }]],
+            });
+          }
+
+          const extracted = await extractCommitmentsLLM(env, { projectName, projectId, chunks });
+          const upserted = await upsertCommitments(env, { project_id: projectId, items: extracted.items });
+          const top = await listCommitments(env, { project_id: projectId, limit: 10 });
+
+          return json({
+            ok: true,
+            text: renderCommitmentsCard(projectName, projectId, top, upserted),
+            keyboard: [
+              [{ text: "🔄 Обновить", callback_data: "NAV:COMMIT" }, { text: "📊 Dashboard", callback_data: "NAV:DASH" }],
+              [{ text: "🏠 Home", callback_data: "NAV:HOME" }],
+            ],
+          });
+        }
+
+        const matches = await ragSearchMvp(env, { project_id: projectId, query_text: userText || " ", limit: 5 });
         return json({
           ok: true,
-          text: renderCommitmentsCard(projectName, projectId, top, upserted),
-          keyboard: [
-            [{ text: "🔄 Обновить", callback_data: "NAV:COMMIT" }, { text: "📊 Dashboard", callback_data: "NAV:DASH" }],
-            [{ text: "🏠 Home", callback_data: "NAV:HOME" }],
-          ],
+          text: renderSearchResults(projectName, userText, matches),
+          keyboard: [[{ text: "🤝 Договоренности", callback_data: "NAV:COMMIT" }, { text: "🏠 Home", callback_data: "NAV:HOME" }]],
         });
+      } catch (e) {
+        const err = (e && typeof e.message === "string") ? e.message : String(e);
+        console.error("[agent-gw] /agent/run failed", { request_id: requestId, error: err });
+        return json({ ok: false, error: "internal_error", request_id: requestId }, 500);
       }
-
-      const matches = await ragSearchMvp(env, { project_id: projectId, query_text: userText || " ", limit: 5 });
-      return json({
-        ok: true,
-        text: renderSearchResults(projectName, userText, matches),
-        keyboard: [[{ text: "🤝 Договоренности", callback_data: "NAV:COMMIT" }, { text: "🏠 Home", callback_data: "NAV:HOME" }]],
-      });
     }
 
     return new Response("Not Found", { status: 404 });
   },
 };
+
+function asShortText(value, maxLen = 200) {
+  return String(value || "").trim().slice(0, maxLen);
+}
 
 function detectIntent(userText) {
   const t = String(userText || "").toLowerCase();

@@ -1,10 +1,38 @@
 function jh(extra) {
-  return Object.assign({ "content-type": "application/json" }, extra || {});
+  return Object.assign({ "content-type": "application/json; charset=utf-8" }, extra || {});
+}
+
+function jsonResponse(obj, status = 200) {
+  return new Response(JSON.stringify(obj, null, 2), { status, headers: jh() });
+}
+
+function safeJsonParse(s) {
+  try {
+    return JSON.parse(s);
+  } catch {
+    return null;
+  }
+}
+
+function toPositiveInt(value, fallback, { min = 1, max = 1000000 } = {}) {
+  const n = Number.parseInt(String(value ?? ""), 10);
+  if (!Number.isFinite(n) || n < min) return fallback;
+  return Math.min(n, max);
+}
+
+function toISOOrNull(value) {
+  if (value == null) return null;
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return null;
+  return d.toISOString();
 }
 
 function requireBearer(request, env) {
+  const token = String(env.SYNC_TOKEN || "").trim();
+  if (!token) throw new Response("Server misconfigured: missing SYNC_TOKEN", { status: 500 });
+
   const got = request.headers.get("authorization") || "";
-  const expected = `Bearer ${env.SYNC_TOKEN}`;
+  const expected = `Bearer ${token}`;
   if (got !== expected) throw new Response("Unauthorized", { status: 401 });
 }
 
@@ -27,7 +55,10 @@ async function sb(env, method, path, body, extraHeaders) {
   });
   const text = await res.text();
   if (!res.ok) throw new Error(`Supabase ${method} ${path} failed: ${res.status} ${text}`);
-  return text ? JSON.parse(text) : null;
+  if (!text) return null;
+  const parsed = safeJsonParse(text);
+  if (parsed == null) throw new Error(`Supabase ${method} ${path} returned invalid JSON`);
+  return parsed;
 }
 
 async function cw(env, path) {
@@ -149,7 +180,7 @@ async function upsertMessage(env, conversationGlobalId, msg) {
 
 async function createPendingChunks(env, conversationGlobalId, messageGlobalId, content, sourceUpdatedAtISO) {
   const ragTable = env.RAG_TABLE || "rag_chunks";
-  const chunkChars = parseInt(env.CHUNK_CHARS || "1200", 10);
+  const chunkChars = toPositiveInt(env.CHUNK_CHARS, 1200, { min: 200, max: 4000 });
   const model = env.EMBEDDING_MODEL || "text-embedding-3-small";
   const chunks = chunkText(content, chunkChars);
   if (!chunks.length) return 0;
@@ -184,8 +215,8 @@ async function createPendingChunks(env, conversationGlobalId, messageGlobalId, c
 
 async function processPendingEmbeddings(env) {
   const ragTable = env.RAG_TABLE || "rag_chunks";
-  const batchSize = parseInt(env.EMBED_BATCH || "64", 10);
-  const maxBatches = Math.max(1, parseInt(env.EMBED_MAX_BATCHES_PER_RUN || "1", 10));
+  const batchSize = toPositiveInt(env.EMBED_BATCH, 64, { min: 1, max: 100 });
+  const maxBatches = toPositiveInt(env.EMBED_MAX_BATCHES_PER_RUN, 1, { min: 1, max: 50 });
 
   let total = 0;
   let batches = 0;
@@ -235,9 +266,9 @@ async function runSync(env) {
   const wm = await getWatermark(env);
   const since = wm && wm.last_processed_at ? String(wm.last_processed_at) : null;
 
-  const maxConvos = parseInt(env.MAX_CONVERSATIONS_PER_RUN || "50", 10);
-  const maxMsgs = parseInt(env.MAX_MESSAGES_PER_CONVERSATION || "200", 10);
-  const minLen = parseInt(env.MIN_EMBED_CHARS || "30", 10);
+  const maxConvos = toPositiveInt(env.MAX_CONVERSATIONS_PER_RUN, 50, { min: 1, max: 500 });
+  const maxMsgs = toPositiveInt(env.MAX_MESSAGES_PER_CONVERSATION, 200, { min: 1, max: 1000 });
+  const minLen = toPositiveInt(env.MIN_EMBED_CHARS, 30, { min: 1, max: 2000 });
 
   const convosResp = await cw(
     env,
@@ -255,7 +286,7 @@ async function runSync(env) {
   let pendingChunks = 0;
 
   for (const convo of picked) {
-    const lastActivityISO = convo?.last_activity_at ? new Date(convo.last_activity_at).toISOString() : null;
+    const lastActivityISO = toISOOrNull(convo?.last_activity_at);
     if (since && lastActivityISO && lastActivityISO <= since) continue;
 
     await upsertConversation(env, convo);
@@ -268,7 +299,7 @@ async function runSync(env) {
     const tail = msgs.slice(-maxMsgs);
 
     for (const msg of tail) {
-      const createdISO = msg?.created_at ? new Date(msg.created_at).toISOString() : null;
+      const createdISO = toISOOrNull(msg?.created_at);
       if (since && createdISO && createdISO <= since) continue;
 
       const messageGlobalId = await upsertMessage(env, conversationGlobalId, msg);
@@ -315,41 +346,47 @@ export default {
     try {
       const url = new URL(request.url);
 
-      if (url.pathname === "/sync" && request.method === "GET") {
+      if (url.pathname === "/sync") {
+        if (request.method !== "GET") return new Response("Method Not Allowed", { status: 405 });
         requireBearer(request, env);
         const out = await runSync(env);
-        return new Response(JSON.stringify(out, null, 2), { status: 200, headers: jh() });
+        return jsonResponse(out, 200);
       }
 
-      if (url.pathname === "/embed" && request.method === "GET") {
+      if (url.pathname === "/embed") {
+        if (request.method !== "GET") return new Response("Method Not Allowed", { status: 405 });
         requireBearer(request, env);
         const out = await processPendingEmbeddings(env);
-        return new Response(JSON.stringify(out, null, 2), { status: 200, headers: jh() });
+        return jsonResponse(out, 200);
       }
 
       if (url.pathname === "/health") {
-        return new Response(JSON.stringify({ ok: true }, null, 2), { status: 200, headers: jh() });
+        return jsonResponse({ ok: true }, 200);
       }
 
-      return new Response("OK", { status: 200 });
+      return new Response("Not Found", { status: 404 });
     } catch (e) {
-      return new Response(JSON.stringify({ error: String(e && e.message ? e.message : e) }, null, 2), {
-        status: 500,
-        headers: jh(),
-      });
+      if (e instanceof Response) return e;
+      const msg = String(e && e.message ? e.message : e);
+      return jsonResponse({ error: msg }, 500);
     }
   },
 
   async scheduled(event, env, ctx) {
     ctx.waitUntil(
       (async () => {
-        // Always embed a little every 10 minutes
-        await processPendingEmbeddings(env);
-
-        // Sync only once per day (first 10 minutes after 00:00 UTC)
-        if (shouldRunDailySyncNowUTC()) {
-          await runSync(env);
+        try {
+          // Always embed a little every 10 minutes.
           await processPendingEmbeddings(env);
+
+          // Sync only once per day (first 10 minutes after 00:00 UTC).
+          if (shouldRunDailySyncNowUTC()) {
+            await runSync(env);
+            await processPendingEmbeddings(env);
+          }
+        } catch (e) {
+          const msg = String(e && e.message ? e.message : e);
+          console.error("[cw-sync] scheduled run failed", { error: msg });
         }
       })()
     );

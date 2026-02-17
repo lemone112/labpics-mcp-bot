@@ -20,6 +20,7 @@ import { hmacSha256Hex } from "./lib/security.js";
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
+    const webhookPath = normalizeWebhookPath(env.TELEGRAM_WEBHOOK_PATH);
 
     if (url.pathname === "/__whoami") {
       return new Response("tgbot:refactor-lib-split", {
@@ -31,7 +32,7 @@ export default {
     if (url.pathname === "/__env") {
       return json({
         ENV: env.ENV || null,
-        TELEGRAM_WEBHOOK_PATH: env.TELEGRAM_WEBHOOK_PATH || null,
+        TELEGRAM_WEBHOOK_PATH: webhookPath,
         SUPABASE_URL: env.SUPABASE_URL || null,
         HAS_AGENT_GW_BINDING: Boolean(env.AGENT_GW),
         HAS_OPENAI_API_KEY: Boolean(env.OPENAI_API_KEY),
@@ -42,13 +43,24 @@ export default {
       return json({ ok: true, service: "tgbot", version: "refactor-1" });
     }
 
-    if (url.pathname === env.TELEGRAM_WEBHOOK_PATH) {
+    if (webhookPath && url.pathname === webhookPath) {
       if (request.method !== "POST") return new Response("Method Not Allowed", { status: 405 });
 
       const ct = request.headers.get("content-type") || "";
       if (!ct.toLowerCase().includes("application/json")) return new Response("Unsupported Media Type", { status: 415 });
 
-      const update = await request.json();
+      const expectedSecret = String(env.TELEGRAM_WEBHOOK_SECRET_TOKEN || "").trim();
+      if (expectedSecret) {
+        const gotSecret = request.headers.get("x-telegram-bot-api-secret-token") || "";
+        if (gotSecret !== expectedSecret) return new Response("Unauthorized", { status: 401 });
+      }
+
+      let update = null;
+      try {
+        update = await request.json();
+      } catch {
+        return new Response("Bad Request: invalid JSON", { status: 400 });
+      }
       ctx.waitUntil(handleTelegramUpdate(update, env));
       return new Response("OK");
     }
@@ -68,13 +80,52 @@ function formatError(e) {
   return { msg, stackShort };
 }
 
+function isDevEnv(env) {
+  const mode = String(env?.ENV || "").toLowerCase();
+  return mode === "dev" || mode === "development" || mode === "local";
+}
+
+function safeText(s, maxLen = 1200) {
+  const txt = String(s || "");
+  return txt.length > maxLen ? `${txt.slice(0, maxLen - 1)}…` : txt;
+}
+
+function normalizeWebhookPath(pathValue) {
+  const raw = String(pathValue || "").trim();
+  if (!raw) return null;
+  return raw.startsWith("/") ? raw : `/${raw}`;
+}
+
+function isPendingExpired(pending) {
+  if (!pending?.expires_at) return false;
+  const exp = Date.parse(String(pending.expires_at));
+  return Number.isFinite(exp) && exp <= Date.now();
+}
+
+function isValidGatewayKeyboard(kb) {
+  if (!Array.isArray(kb)) return false;
+  return kb.every(
+    (row) =>
+      Array.isArray(row) &&
+      row.every((x) => x && typeof x.text === "string" && typeof x.callback_data === "string")
+  );
+}
+
 async function sendErrorToChat(env, chatId, id, where, e) {
   const { msg, stackShort } = formatError(e);
-  const text =
-    `<b>❌ Ошибка</b> <code>${escapeHtml(where)}</code>\n` +
-    `id: <code>${escapeHtml(id)}</code>\n\n` +
-    `<b>message</b>\n<code>${escapeHtml(msg)}</code>\n` +
-    (stackShort ? `\n<b>stack</b>\n<code>${escapeHtml(stackShort)}</code>\n` : "");
+  const debug = isDevEnv(env);
+
+  let text =
+    `<b>❌ Ошибка</b>\n` +
+    `Не удалось обработать запрос.\n` +
+    `id: <code>${escapeHtml(id)}</code>\n`;
+
+  if (debug) {
+    text +=
+      `\n<b>where</b>\n<code>${escapeHtml(safeText(where, 200))}</code>\n` +
+      `<b>message</b>\n<code>${escapeHtml(safeText(msg, 600))}</code>\n` +
+      (stackShort ? `\n<b>stack</b>\n<code>${escapeHtml(safeText(stackShort, 1200))}</code>\n` : "");
+  }
 
   return tgSendMessage(env, chatId, text, {
     reply_markup: toReplyMarkup([[btn("🏠 Home", "NAV:HOME"), btn("📁 Projects", "NAV:PROJECTS")]]),
@@ -87,6 +138,7 @@ async function handleTelegramUpdate(update, env) {
     if (update.message) return await onMessage(update.message, env, id);
     if (update.callback_query) return await onCallbackQuery(update.callback_query, env, id);
   } catch (e) {
+    console.error("[tgbot] handleTelegramUpdate failed", { id, error: formatError(e) });
     const chatId = update?.message?.chat?.id || update?.callback_query?.message?.chat?.id;
     if (chatId) return await sendErrorToChat(env, chatId, id, "handleTelegramUpdate", e);
   }
@@ -105,7 +157,11 @@ async function onMessage(message, env, id) {
   if (text === "/projects") return renderProjectsList(env, chatId, uid);
   if (text === "/help") return tgSendMessage(env, chatId, helpText(), { reply_markup: toReplyMarkup([[btn("🏠 Home", "NAV:HOME")]]) });
 
-  const pending = await getUserPendingInput(env, uid);
+  let pending = await getUserPendingInput(env, uid);
+  if (pending && isPendingExpired(pending)) {
+    await clearUserPendingInput(env, uid);
+    pending = null;
+  }
 
   if (pending?.kind === "new_project_name") {
     if (text.length < 2 || text.length > 80) return tgSendMessage(env, chatId, "Введите имя проекта (2–80 символов):", {});
@@ -167,6 +223,12 @@ async function onCallbackQuery(cq, env, id) {
 
     if (data.startsWith("PRJ:SET:")) {
       const pid = data.slice("PRJ:SET:".length);
+      const project = await getProject(env, pid);
+      if (!project) {
+        return tgSendMessage(env, chatId, "Проект не найден.", {
+          reply_markup: toReplyMarkup([[btn("📁 Projects", "NAV:PROJECTS"), btn("🏠 Home", "NAV:HOME")]]),
+        });
+      }
       await setActiveProject(env, uid, pid);
       return renderDashboard(env, chatId, uid, pid);
     }
@@ -210,7 +272,7 @@ async function renderProjectsList(env, chatId, uid) {
     for (const p of projects) {
       const mark = active === p.project_id ? " <b>(active)</b>" : "";
       lines.push(`\n• ${escapeHtml(p.name)}${mark}\n<code>${escapeHtml(shortId(p.project_id))}</code>`);
-      kb.push([btn(`Открыть: ${p.name}`, `PRJ:SET:${p.project_id}`)]);
+      kb.push([btn(`Открыть: ${safeText(p.name, 40)}`, `PRJ:SET:${p.project_id}`)]);
     }
   }
 
@@ -253,6 +315,15 @@ async function runViaGateway(env, chatId, uid, query, id) {
   }
 
   if (!env.AGENT_GW) throw new Error("Missing service binding AGENT_GW");
+  const hmacSecret = String(env.AGENT_GATEWAY_HMAC_SECRET || "").trim();
+  if (!hmacSecret) throw new Error("Missing AGENT_GATEWAY_HMAC_SECRET");
+
+  const userText = String(query || "").trim().slice(0, 2000);
+  if (!userText) {
+    return tgSendMessage(env, chatId, "Введите запрос текстом.", {
+      reply_markup: toReplyMarkup([[btn("🏠 Home", "NAV:HOME")]]),
+    });
+  }
 
   const context = await loadProjectContext(env, pid);
   const body = JSON.stringify({
@@ -260,11 +331,11 @@ async function runViaGateway(env, chatId, uid, query, id) {
     telegram_user_id: uid,
     chat_id: String(chatId),
     active_project_id: pid,
-    user_text: query,
+    user_text: userText,
     context,
   });
 
-  const sig = await hmacSha256Hex(env.AGENT_GATEWAY_HMAC_SECRET || "", body);
+  const sig = await hmacSha256Hex(hmacSecret, body);
 
   const res = await env.AGENT_GW.fetch("https://service/agent/run", {
     method: "POST",
@@ -276,7 +347,9 @@ async function runViaGateway(env, chatId, uid, query, id) {
   if (!res.ok) throw new Error(`Gateway ${res.status}: ${txt || "(empty body)"}`);
 
   const data = safeJson(txt);
-  if (!data?.text || !Array.isArray(data?.keyboard)) throw new Error(`Gateway bad response: ${txt}`);
+  if (typeof data?.text !== "string" || !data.text.trim() || !isValidGatewayKeyboard(data?.keyboard)) {
+    throw new Error(`Gateway bad response: ${txt}`);
+  }
 
   return tgSendMessage(env, chatId, data.text, { reply_markup: JSON.stringify({ inline_keyboard: data.keyboard }) });
 }
