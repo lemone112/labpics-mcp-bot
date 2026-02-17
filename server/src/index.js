@@ -40,6 +40,15 @@ function toLimit(value, fallback = 100, max = 500) {
   return Math.max(1, Math.min(parsed, max));
 }
 
+function requireActiveProject(request, reply) {
+  const projectId = String(request.auth?.active_project_id || "").trim();
+  if (!projectId) {
+    reply.code(400).send({ ok: false, error: "active_project_required", request_id: request.requestId });
+    return null;
+  }
+  return projectId;
+}
+
 async function main() {
   const databaseUrl = requiredEnv("DATABASE_URL");
   const auth = getAuthConfig();
@@ -211,10 +220,14 @@ async function main() {
     return { ok: true, active_project_id: projectId, project: project.rows[0], request_id: request.requestId };
   });
 
-  app.get("/contacts", async (request) => {
+  app.get("/contacts", async (request, reply) => {
+    const projectId = requireActiveProject(request, reply);
+    if (!projectId) return;
+
     const limit = toLimit(request.query?.limit, 100, 500);
     const q = String(request.query?.q || "").trim();
     const hasFilter = q.length > 0;
+    const escapedFilter = `%${q.replace(/[%_]/g, "\\$&")}%`;
 
     const { rows } = hasFilter
       ? await pool.query(
@@ -223,29 +236,48 @@ async function main() {
               id, account_id, contact_id, name, email, phone_number, identifier, updated_at
             FROM cw_contacts
             WHERE
-              name ILIKE $1
-              OR email ILIKE $1
-              OR phone_number ILIKE $1
+              (
+                name ILIKE $2
+                OR email ILIKE $2
+                OR phone_number ILIKE $2
+              )
+              AND EXISTS (
+                SELECT 1
+                FROM cw_messages AS m
+                JOIN rag_chunks AS rc ON rc.message_global_id = m.id
+                WHERE m.contact_global_id = cw_contacts.id
+                  AND rc.project_id = $1::uuid
+              )
             ORDER BY updated_at DESC NULLS LAST
-            LIMIT $2
+            LIMIT $3
           `,
-          [`%${q.replace(/[%_]/g, "\\$&")}%`, limit]
+          [projectId, escapedFilter, limit]
         )
       : await pool.query(
           `
             SELECT
               id, account_id, contact_id, name, email, phone_number, identifier, updated_at
             FROM cw_contacts
+            WHERE EXISTS (
+              SELECT 1
+              FROM cw_messages AS m
+              JOIN rag_chunks AS rc ON rc.message_global_id = m.id
+              WHERE m.contact_global_id = cw_contacts.id
+                AND rc.project_id = $1::uuid
+            )
             ORDER BY updated_at DESC NULLS LAST
-            LIMIT $1
+            LIMIT $2
           `,
-          [limit]
+          [projectId, limit]
         );
 
     return { ok: true, contacts: rows, request_id: request.requestId };
   });
 
-  app.get("/conversations", async (request) => {
+  app.get("/conversations", async (request, reply) => {
+    const projectId = requireActiveProject(request, reply);
+    if (!projectId) return;
+
     const limit = toLimit(request.query?.limit, 100, 500);
     const { rows } = await pool.query(
       `
@@ -260,15 +292,24 @@ async function main() {
           updated_at,
           created_at
         FROM cw_conversations
+        WHERE EXISTS (
+          SELECT 1
+          FROM rag_chunks AS rc
+          WHERE rc.conversation_global_id = cw_conversations.id
+            AND rc.project_id = $1::uuid
+        )
         ORDER BY COALESCE(updated_at, created_at) DESC
-        LIMIT $1
+        LIMIT $2
       `,
-      [limit]
+      [projectId, limit]
     );
     return { ok: true, conversations: rows, request_id: request.requestId };
   });
 
-  app.get("/messages", async (request) => {
+  app.get("/messages", async (request, reply) => {
+    const projectId = requireActiveProject(request, reply);
+    if (!projectId) return;
+
     const limit = toLimit(request.query?.limit, 100, 500);
     const conversationGlobalId = String(request.query?.conversation_global_id || "").trim();
 
@@ -285,11 +326,17 @@ async function main() {
               created_at,
               updated_at
             FROM cw_messages
-            WHERE conversation_global_id = $1
+            WHERE conversation_global_id = $2
+              AND EXISTS (
+                SELECT 1
+                FROM rag_chunks AS rc
+                WHERE rc.message_global_id = cw_messages.id
+                  AND rc.project_id = $1::uuid
+              )
             ORDER BY created_at DESC NULLS LAST
-            LIMIT $2
+            LIMIT $3
           `,
-          [conversationGlobalId, limit]
+          [projectId, conversationGlobalId, limit]
         )
       : await pool.query(
           `
@@ -303,19 +350,28 @@ async function main() {
               created_at,
               updated_at
             FROM cw_messages
+            WHERE EXISTS (
+              SELECT 1
+              FROM rag_chunks AS rc
+              WHERE rc.message_global_id = cw_messages.id
+                AND rc.project_id = $1::uuid
+            )
             ORDER BY created_at DESC NULLS LAST
-            LIMIT $1
+            LIMIT $2
           `,
-          [limit]
+          [projectId, limit]
         );
 
     return { ok: true, messages: rows, request_id: request.requestId };
   });
 
   app.post("/jobs/chatwoot/sync", async (request, reply) => {
-    const job = await startJob(pool, "chatwoot_sync");
+    const projectId = requireActiveProject(request, reply);
+    if (!projectId) return;
+
+    const job = await startJob(pool, "chatwoot_sync", projectId);
     try {
-      const result = await runChatwootSync(pool, request.log);
+      const result = await runChatwootSync(pool, projectId, request.log);
       await finishJob(pool, job.id, {
         status: "ok",
         processedCount: result.processed_messages,
@@ -331,9 +387,12 @@ async function main() {
   });
 
   app.post("/jobs/embeddings/run", async (request, reply) => {
-    const job = await startJob(pool, "embeddings_run");
+    const projectId = requireActiveProject(request, reply);
+    if (!projectId) return;
+
+    const job = await startJob(pool, "embeddings_run", projectId);
     try {
-      const result = await runEmbeddings(pool, request.log);
+      const result = await runEmbeddings(pool, projectId, request.log);
       await finishJob(pool, job.id, {
         status: "ok",
         processedCount: result.processed,
@@ -348,12 +407,18 @@ async function main() {
     }
   });
 
-  app.get("/jobs/status", async (request) => {
-    const status = await getJobsStatus(pool);
+  app.get("/jobs/status", async (request, reply) => {
+    const projectId = requireActiveProject(request, reply);
+    if (!projectId) return;
+
+    const status = await getJobsStatus(pool, projectId);
     return { ok: true, ...status, request_id: request.requestId };
   });
 
   app.post("/search", async (request, reply) => {
+    const projectId = requireActiveProject(request, reply);
+    if (!projectId) return;
+
     const body = request.body && typeof request.body === "object" ? request.body : {};
     const query = String(body?.query || "").trim();
     const topK = toTopK(body?.topK, 10);
@@ -362,7 +427,7 @@ async function main() {
       return reply.code(400).send({ ok: false, error: "query_required", request_id: request.requestId });
     }
 
-    const result = await searchChunks(pool, query, topK, request.log);
+    const result = await searchChunks(pool, query, topK, projectId, request.log);
     return { ok: true, ...result, request_id: request.requestId };
   });
 

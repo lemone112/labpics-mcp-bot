@@ -15,15 +15,16 @@ async function safeSetLocal(client, key, value, logger = console) {
   }
 }
 
-async function claimPendingChunks(pool, batchSize) {
+async function claimPendingChunks(pool, projectId, batchSize) {
   const { rows } = await pool.query(
     `
       WITH picked AS (
         SELECT id, text
         FROM rag_chunks
         WHERE embedding_status = 'pending'
+          AND project_id = $1
         ORDER BY created_at ASC
-        LIMIT $1
+        LIMIT $2
         FOR UPDATE SKIP LOCKED
       )
       UPDATE rag_chunks AS r
@@ -35,12 +36,12 @@ async function claimPendingChunks(pool, batchSize) {
       WHERE r.id = picked.id
       RETURNING r.id, picked.text
     `,
-    [batchSize]
+    [projectId, batchSize]
   );
   return rows;
 }
 
-async function recoverStaleProcessingRows(pool, staleMinutes = 30) {
+async function recoverStaleProcessingRows(pool, projectId, staleMinutes = 30) {
   const safeMinutes = Math.max(1, Math.min(24 * 60, staleMinutes));
   await pool.query(
     `
@@ -51,9 +52,10 @@ async function recoverStaleProcessingRows(pool, staleMinutes = 30) {
         updated_at = now()
       WHERE
         embedding_status = 'processing'
+        AND project_id = $2
         AND updated_at < (now() - ($1::text || ' minutes')::interval)
     `,
-    [safeMinutes]
+    [safeMinutes, projectId]
   );
 }
 
@@ -113,12 +115,17 @@ async function markReadyRows(pool, rows, model) {
   );
 }
 
-export async function runEmbeddings(pool, logger = console) {
+export async function runEmbeddings(pool, projectId, logger = console) {
+  const scopedProjectId = String(projectId || "").trim();
+  if (!scopedProjectId) {
+    throw new Error("active_project_required");
+  }
+
   const batchSize = toPositiveInt(process.env.EMBED_BATCH_SIZE, 100, 1, 100);
   const staleMinutes = toPositiveInt(process.env.EMBED_STALE_RECOVERY_MINUTES, 30, 1, 24 * 60);
-  await recoverStaleProcessingRows(pool, staleMinutes);
+  await recoverStaleProcessingRows(pool, scopedProjectId, staleMinutes);
 
-  const claimedRows = await claimPendingChunks(pool, batchSize);
+  const claimedRows = await claimPendingChunks(pool, scopedProjectId, batchSize);
   if (!claimedRows.length) {
     return { processed: 0, failed: 0, status: "idle" };
   }
@@ -157,7 +164,12 @@ export async function runEmbeddings(pool, logger = console) {
   }
 }
 
-export async function searchChunks(pool, query, topK, logger = console) {
+export async function searchChunks(pool, query, topK, projectId, logger = console) {
+  const scopedProjectId = String(projectId || "").trim();
+  if (!scopedProjectId) {
+    throw new Error("active_project_required");
+  }
+
   const safeTopK = toPositiveInt(topK, 10, 1, 50);
   const normalizedQuery = String(query || "").trim().slice(0, 4_000);
   if (!normalizedQuery) return { query: "", topK: safeTopK, results: [] };
@@ -188,11 +200,12 @@ export async function searchChunks(pool, query, topK, logger = console) {
           (embedding <-> $1::vector) AS distance
         FROM rag_chunks
         WHERE embedding_status = 'ready'
+          AND project_id = $2::uuid
           AND embedding IS NOT NULL
         ORDER BY embedding <-> $1::vector
-        LIMIT $2
+        LIMIT $3
       `,
-      [vectorText, safeTopK]
+      [vectorText, scopedProjectId, safeTopK]
     );
     await client.query("COMMIT");
 

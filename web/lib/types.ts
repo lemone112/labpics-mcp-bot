@@ -23,18 +23,20 @@ export interface ProjectsResponse {
 }
 
 export interface JobRun {
-  id: number;
+  id: string;
   job_name: string;
   status: "running" | "ok" | "failed" | string;
   started_at: string | null;
   finished_at: string | null;
   processed_count: number;
   error: string | null;
+  project_id?: string | null;
   meta?: Record<string, unknown>;
 }
 
 export interface JobsStatusResponse {
   ok: boolean;
+  project_id: string;
   jobs: JobRun[];
   rag_counts: {
     pending: number;
@@ -65,19 +67,19 @@ export interface JobsStatusResponse {
 }
 
 export interface Conversation {
-  id: number;
-  account_id: number | null;
-  conversation_id: number;
+  id: string;
+  account_id: string | null;
+  conversation_id: string;
   contact_global_id: string | null;
-  inbox_id: number | null;
+  inbox_id: string | null;
   status: string | null;
-  assignee_id: number | null;
+  assignee_id: string | null;
   updated_at: string | null;
   created_at: string | null;
 }
 
 export interface MessageSnippet {
-  id: number;
+  id: string;
   conversation_global_id: string;
   contact_global_id: string | null;
   sender_type: string | null;

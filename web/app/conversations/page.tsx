@@ -11,6 +11,7 @@ import { PageShell } from "@/components/page-shell";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { EmptyState } from "@/components/ui/empty-state";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Toast } from "@/components/ui/toast";
 
@@ -25,7 +26,7 @@ export default function ConversationsPage() {
     !authLoading && Boolean(session?.authenticated)
   );
   const [conversations, setConversations] = useState<Conversation[]>([]);
-  const [selectedConversationId, setSelectedConversationId] = useState<number | null>(null);
+  const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null);
   const [messages, setMessages] = useState<MessageSnippet[]>([]);
   const [busy, setBusy] = useState(false);
   const [messagesBusy, setMessagesBusy] = useState(false);
@@ -40,6 +41,13 @@ export default function ConversationsPage() {
   );
 
   async function loadConversations() {
+    if (!activeProject?.id) {
+      setConversations([]);
+      setSelectedConversationId(null);
+      setMessages([]);
+      return;
+    }
+
     setBusy(true);
     try {
       const data = await getConversations(60);
@@ -56,7 +64,7 @@ export default function ConversationsPage() {
   }
 
   async function loadMessages(conversation: Conversation | null) {
-    if (!conversation) return;
+    if (!conversation || !activeProject?.id) return;
     setMessagesBusy(true);
     try {
       const globalId = buildConversationGlobalId(conversation);
@@ -75,10 +83,15 @@ export default function ConversationsPage() {
   }
 
   useEffect(() => {
-    if (!authLoading && session?.authenticated) {
+    if (!authLoading && session?.authenticated && activeProject?.id) {
       void loadConversations();
+      return;
     }
-  }, [authLoading, session?.authenticated]);
+
+    setConversations([]);
+    setSelectedConversationId(null);
+    setMessages([]);
+  }, [authLoading, session?.authenticated, activeProject?.id]);
 
   useEffect(() => {
     if (selectedConversation) {
@@ -100,12 +113,20 @@ export default function ConversationsPage() {
       actions={
         <>
           <Badge variant="warning">PII-safe: snippets only in list view</Badge>
-          <Button variant="outline" onClick={() => void loadConversations()} disabled={busy}>
+          <Button variant="outline" onClick={() => void loadConversations()} disabled={busy || !activeProject?.id}>
             {busy ? "Refreshing..." : "Refresh"}
           </Button>
         </>
       }
     >
+      {!activeProject ? (
+        <EmptyState
+          title="Select active project"
+          description="Conversation reader is project-scoped and requires active selection."
+          actionHref="/projects"
+          actionLabel="Open Projects"
+        />
+      ) : (
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1.2fr_1fr]">
         <Card>
           <CardHeader>
@@ -185,6 +206,7 @@ export default function ConversationsPage() {
       <div className="mt-6">
         <Toast type={toast.type} message={toast.message} />
       </div>
+      )}
     </PageShell>
   );
 }

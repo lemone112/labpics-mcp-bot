@@ -396,6 +396,7 @@ async function insertChunkRows(pool, chunkRows) {
   if (!chunkRows.length) return { inserted: 0, reset_pending: 0 };
 
   const payload = chunkRows.map((row) => ({
+    project_id: row.project_id,
     conversation_global_id: row.conversation_global_id,
     message_global_id: row.message_global_id,
     chunk_index: row.chunk_index,
@@ -408,6 +409,7 @@ async function insertChunkRows(pool, chunkRows) {
   const inserted = await pool.query(
     `
       INSERT INTO rag_chunks(
+        project_id,
         conversation_global_id,
         message_global_id,
         chunk_index,
@@ -419,6 +421,7 @@ async function insertChunkRows(pool, chunkRows) {
         updated_at
       )
       SELECT
+        x.project_id,
         x.conversation_global_id,
         x.message_global_id,
         x.chunk_index,
@@ -429,6 +432,7 @@ async function insertChunkRows(pool, chunkRows) {
         x.embedding_model,
         now()
       FROM jsonb_to_recordset($1::jsonb) AS x(
+        project_id uuid,
         conversation_global_id text,
         message_global_id text,
         chunk_index int,
@@ -437,7 +441,7 @@ async function insertChunkRows(pool, chunkRows) {
         content_tokens int,
         embedding_model text
       )
-      ON CONFLICT (message_global_id, chunk_index)
+      ON CONFLICT (project_id, message_global_id, chunk_index)
       DO NOTHING
     `,
     [JSON.stringify(payload)]
@@ -457,6 +461,7 @@ async function insertChunkRows(pool, chunkRows) {
         embedding_error = NULL,
         updated_at = now()
       FROM jsonb_to_recordset($1::jsonb) AS x(
+        project_id uuid,
         conversation_global_id text,
         message_global_id text,
         chunk_index int,
@@ -466,6 +471,8 @@ async function insertChunkRows(pool, chunkRows) {
         embedding_model text
       )
       WHERE
+        rc.project_id IS NOT DISTINCT FROM x.project_id
+        AND
         rc.message_global_id = x.message_global_id
         AND rc.chunk_index = x.chunk_index
         AND rc.text_hash IS DISTINCT FROM x.text_hash
@@ -479,7 +486,15 @@ async function insertChunkRows(pool, chunkRows) {
   };
 }
 
-function buildChunkRows({ conversationGlobalId: cgid, messageGlobalId: mgid, content, chunkSize, embeddingModel, minChunkChars }) {
+function buildChunkRows({
+  projectId,
+  conversationGlobalId: cgid,
+  messageGlobalId: mgid,
+  content,
+  chunkSize,
+  embeddingModel,
+  minChunkChars,
+}) {
   if (String(content || "").trim().length < minChunkChars) return [];
 
   const chunks = chunkText(content, chunkSize);
@@ -489,6 +504,7 @@ function buildChunkRows({ conversationGlobalId: cgid, messageGlobalId: mgid, con
   for (let index = 0; index < chunks.length; index++) {
     const text = chunks[index];
     rows.push({
+      project_id: projectId,
       conversation_global_id: cgid,
       message_global_id: mgid,
       chunk_index: index,
@@ -536,11 +552,16 @@ async function getStorageSummary(pool, budgetGb) {
   };
 }
 
-export async function runChatwootSync(pool, logger = console) {
+export async function runChatwootSync(pool, projectId, logger = console) {
+  const scopedProjectId = String(projectId || "").trim();
+  if (!scopedProjectId) {
+    throw new Error("active_project_required");
+  }
+
   const baseUrl = requiredEnv("CHATWOOT_BASE_URL").replace(/\/+$/, "");
   const apiToken = requiredEnv("CHATWOOT_API_TOKEN");
   const accountId = String(requiredEnv("CHATWOOT_ACCOUNT_ID"));
-  const source = `chatwoot:${accountId}`;
+  const source = `chatwoot:${accountId}:${scopedProjectId}`;
 
   const maxConversations = toPositiveInt(process.env.CHATWOOT_CONVERSATIONS_LIMIT, 60, 1, 1000);
   const maxMessagesPerConversation = toPositiveInt(process.env.CHATWOOT_MESSAGES_LIMIT, 300, 1, 3000);
@@ -638,6 +659,7 @@ export async function runChatwootSync(pool, logger = console) {
       if (!message?.private) {
         pendingChunkRows.push(
           ...buildChunkRows({
+            projectId: scopedProjectId,
             conversationGlobalId: convoGlobalId,
             messageGlobalId: msgGlobalId,
             content,

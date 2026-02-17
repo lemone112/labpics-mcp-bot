@@ -42,10 +42,14 @@ export default function DashboardPage() {
   }
 
   useEffect(() => {
-    if (!authLoading && session?.authenticated) {
+    if (!authLoading && session?.authenticated && activeProject?.id) {
       void loadData();
+      return;
     }
-  }, [authLoading, session?.authenticated]);
+
+    setJobs(null);
+    setRecentConversations([]);
+  }, [authLoading, session?.authenticated, activeProject?.id]);
 
   if (authLoading || !session || projectsLoading) {
     return <div className="p-8 text-slate-300">Loading...</div>;
@@ -142,7 +146,7 @@ export default function DashboardPage() {
               <CardTitle>Recent conversation activity</CardTitle>
               <CardDescription>Source review view. Click-through details are on Conversations page.</CardDescription>
             </div>
-            <Button variant="outline" size="sm" onClick={() => void loadData()} disabled={busy}>
+            <Button variant="outline" size="sm" onClick={() => void loadData()} disabled={busy || !activeProject?.id}>
               {busy ? "Refreshing..." : "Refresh"}
             </Button>
           </CardHeader>

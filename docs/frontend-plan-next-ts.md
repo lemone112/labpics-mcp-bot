@@ -74,7 +74,7 @@ Target qualities inspired by Linear / Attio / Plane / ClickUp:
 ## Self-critical gaps and risks
 
 1. **Search scoping risk (critical):** backend `POST /search` is not project-scoped yet.
-   - Frontend must surface a warning and never pretend strict isolation if API does not enforce it.
+   - **Resolved in iteration 2:** `rag_chunks` received `project_id`, API now enforces `active_project_id` and scoped search.
 2. **Roadmap entities missing API:** commitments/risks/digest/settings links are not backed by server endpoints yet.
    - Iteration 1 should expose these sections as roadmap-ready UI, not fake completion.
 3. **Linking UX incomplete:** no full project-source linking editor in backend yet (spec 0006).

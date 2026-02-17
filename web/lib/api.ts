@@ -30,6 +30,18 @@ function buildRequestId() {
   }
 }
 
+function humanizeError(errorCode: string) {
+  const map: Record<string, string> = {
+    unauthorized: "Session expired. Please sign in again.",
+    invalid_credentials: "Invalid credentials.",
+    active_project_required: "Select an active project in Projects first.",
+    query_required: "Search query is required.",
+    invalid_name: "Project name must be 2 to 160 characters long.",
+    project_not_found: "Project not found.",
+  };
+  return map[errorCode] || errorCode;
+}
+
 function toQueryString(query?: Record<string, string | number | null | undefined>) {
   if (!query) return "";
   const params = new URLSearchParams();
@@ -76,7 +88,11 @@ export async function apiFetch<T>(path: string, options: ApiFetchOptions = {}): 
     }
 
     if (!response.ok) {
-      const message = typeof data === "object" && data && "error" in data ? String((data as { error?: string }).error) : `Request failed with status ${response.status}`;
+      const rawMessage =
+        typeof data === "object" && data && "error" in data
+          ? String((data as { error?: string }).error)
+          : `Request failed with status ${response.status}`;
+      const message = humanizeError(rawMessage);
       throw new ApiError(message, response.status, data);
     }
 

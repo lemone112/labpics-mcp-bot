@@ -20,7 +20,7 @@ export default function SearchPage() {
     !authLoading && Boolean(session?.authenticated)
   );
   const [query, setQuery] = useState("");
-  const [topK, setTopK] = useState(10);
+  const [topK, setTopK] = useState("10");
   const [busy, setBusy] = useState(false);
   const [results, setResults] = useState<SearchResultItem[]>([]);
   const [embeddingModel, setEmbeddingModel] = useState("-");
@@ -31,10 +31,16 @@ export default function SearchPage() {
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (!activeProject?.id) {
+      setToast({ type: "error", message: "Select active project first" });
+      return;
+    }
+
     setBusy(true);
     setToast({ type: "info", message: "" });
     try {
-      const payload = await searchChunks(query, Number(topK) || 10);
+      const normalizedTopK = Math.max(1, Math.min(50, Number.parseInt(topK, 10) || 10));
+      const payload = await searchChunks(query, normalizedTopK);
       setResults(payload.results || []);
       setEmbeddingModel(payload.embedding_model || "-");
       setToast({ type: "success", message: `Found ${payload.results?.length || 0} matches` });
@@ -57,7 +63,7 @@ export default function SearchPage() {
       activeProjectName={activeProject?.name || null}
       activeProjectId={activeProject?.id || null}
       projectCount={projects.length}
-      actions={<Badge variant="warning">Backend search is not project-scoped yet</Badge>}
+      actions={<Badge variant={activeProject ? "success" : "warning"}>{activeProject ? "Project-scoped search enabled" : "Select active project"}</Badge>}
     >
       <div className="space-y-6">
         <Card>
@@ -78,15 +84,15 @@ export default function SearchPage() {
                 min={1}
                 max={50}
                 value={topK}
-                onChange={(event) => setTopK(Number(event.target.value))}
+                onChange={(event) => setTopK(event.target.value)}
               />
-              <Button type="submit" disabled={busy}>
+              <Button type="submit" disabled={busy || !activeProject?.id}>
                 {busy ? "Searching..." : "Search"}
               </Button>
             </form>
             <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-slate-400">
               <span>model: {embeddingModel}</span>
-              <span>topK: {topK}</span>
+              <span>topK: {Math.max(1, Math.min(50, Number.parseInt(topK, 10) || 10))}</span>
             </div>
           </CardContent>
         </Card>

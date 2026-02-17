@@ -4,6 +4,24 @@ Base URL: `NEXT_PUBLIC_API_BASE_URL` (default `http://localhost:8080`).
 
 All responses include `request_id` (and `x-request-id` header).
 
+## Active project requirement
+
+For project-scoped endpoints, session must have `active_project_id`.
+
+If no active project is selected, API returns:
+
+- `400 { ok: false, error: "active_project_required" }`
+
+Project-scoped endpoints:
+
+- `GET /contacts`
+- `GET /conversations`
+- `GET /messages`
+- `POST /jobs/chatwoot/sync`
+- `POST /jobs/embeddings/run`
+- `GET /jobs/status`
+- `POST /search`
+
 ## Health
 
 ### `GET /health`
@@ -58,21 +76,21 @@ Auth required.
 Runs Chatwoot poll sync. Writes:
 - `cw_conversations`
 - `cw_messages`
-- creates `rag_chunks` (status `pending`)
+- creates `rag_chunks` (status `pending`) with `project_id = active_project_id`
 - updates `sync_watermarks`
 
 ### `POST /jobs/embeddings/run`
 Auth required.
 
-Embeds `rag_chunks` with `embedding_status='pending'` → `ready|failed`.
+Embeds project-scoped `rag_chunks` with `embedding_status='pending'` → `ready|failed`.
 
 ### `GET /jobs/status`
 Auth required.
 
 Returns:
-- latest `job_runs` per job
-- `rag_counts` by `embedding_status`
-- latest `sync_watermarks`
+- latest project-scoped `job_runs` per job
+- project-scoped `rag_counts` by `embedding_status`
+- latest project-scoped `sync_watermarks`
 
 ## Search
 
@@ -84,5 +102,4 @@ Body:
 - `topK` (int, 1..50, default 10)
 
 Performs cosine-distance vector search over `rag_chunks` where `embedding_status='ready'`.
-
-> Note: current MVP search is not project-scoped in SQL. If you need strict per-project isolation, add `project_id` to `rag_chunks` and filter by `sessions.active_project_id`.
+Search is project-scoped by `active_project_id`.

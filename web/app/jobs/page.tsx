@@ -11,6 +11,7 @@ import { PageShell } from "@/components/page-shell";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { EmptyState } from "@/components/ui/empty-state";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Toast } from "@/components/ui/toast";
 
@@ -27,6 +28,10 @@ export default function JobsPage() {
   });
 
   async function loadStatus() {
+    if (!activeProject?.id) {
+      setStatus(null);
+      return;
+    }
     try {
       const data = await getJobsStatus();
       setStatus(data);
@@ -37,12 +42,16 @@ export default function JobsPage() {
   }
 
   useEffect(() => {
-    if (!authLoading && session?.authenticated) {
+    if (!authLoading && session?.authenticated && activeProject?.id) {
       void loadStatus();
+      return;
     }
-  }, [authLoading, session?.authenticated]);
+
+    setStatus(null);
+  }, [authLoading, session?.authenticated, activeProject?.id]);
 
   async function onRunSync() {
+    if (!activeProject?.id) return;
     setBusyJob("sync");
     setToast({ type: "info", message: "" });
     try {
@@ -58,6 +67,7 @@ export default function JobsPage() {
   }
 
   async function onRunEmbeddings() {
+    if (!activeProject?.id) return;
     setBusyJob("embeddings");
     setToast({ type: "info", message: "" });
     try {
@@ -90,15 +100,27 @@ export default function JobsPage() {
           <Button variant="outline" onClick={() => void loadStatus()}>
             Refresh status
           </Button>
-          <Button disabled={Boolean(busyJob)} onClick={() => void onRunSync()}>
+          <Button disabled={Boolean(busyJob) || !activeProject?.id} onClick={() => void onRunSync()}>
             {busyJob === "sync" ? "Running sync..." : "Run Chatwoot sync"}
           </Button>
-          <Button variant="secondary" disabled={Boolean(busyJob)} onClick={() => void onRunEmbeddings()}>
+          <Button
+            variant="secondary"
+            disabled={Boolean(busyJob) || !activeProject?.id}
+            onClick={() => void onRunEmbeddings()}
+          >
             {busyJob === "embeddings" ? "Running embeddings..." : "Run embeddings"}
           </Button>
         </>
       }
     >
+      {!activeProject ? (
+        <EmptyState
+          title="Select active project"
+          description="Jobs are now project-scoped. Choose project before running sync or embeddings."
+          actionHref="/projects"
+          actionLabel="Open Projects"
+        />
+      ) : (
       <div className="space-y-6">
         <Card>
           <CardHeader className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
@@ -183,6 +205,7 @@ export default function JobsPage() {
 
         <Toast type={toast.type} message={toast.message} />
       </div>
+      )}
     </PageShell>
   );
 }

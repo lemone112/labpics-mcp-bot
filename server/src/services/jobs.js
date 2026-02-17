@@ -34,14 +34,17 @@ async function getStorageStats(pool) {
   };
 }
 
-export async function startJob(pool, jobName) {
+export async function startJob(pool, jobName, projectId) {
+  const scopedProjectId = String(projectId || "").trim();
+  if (!scopedProjectId) throw new Error("active_project_required");
+
   const { rows } = await pool.query(
     `
-      INSERT INTO job_runs(job_name, status, started_at)
-      VALUES ($1, 'running', now())
+      INSERT INTO job_runs(job_name, status, project_id, started_at)
+      VALUES ($1, 'running', $2::uuid, now())
       RETURNING id, started_at
     `,
-    [jobName]
+    [jobName, scopedProjectId]
   );
   return rows[0];
 }
@@ -66,39 +69,67 @@ export async function finishJob(pool, jobId, patch) {
   );
 }
 
-export async function getJobsStatus(pool) {
+export async function getJobsStatus(pool, projectId) {
+  const scopedProjectId = String(projectId || "").trim();
+  if (!scopedProjectId) throw new Error("active_project_required");
+
   const [latestRuns, chunkStatusCounts, watermarks, entityCounts, storage] = await Promise.all([
     pool.query(
       `
         SELECT DISTINCT ON (job_name)
           id, job_name, status, started_at, finished_at, processed_count, error, meta
         FROM job_runs
+        WHERE project_id = $1::uuid
         ORDER BY job_name, started_at DESC
-      `
+      `,
+      [scopedProjectId]
     ),
     pool.query(
       `
         SELECT embedding_status, count(*)::int AS count
         FROM rag_chunks
+        WHERE project_id = $1::uuid
         GROUP BY embedding_status
-      `
+      `,
+      [scopedProjectId]
     ),
     pool.query(
       `
         SELECT source, cursor_ts, cursor_id, updated_at, meta
         FROM sync_watermarks
+        WHERE source LIKE $1
         ORDER BY updated_at DESC
         LIMIT 5
-      `
+      `,
+      [`%:${scopedProjectId}`]
     ),
     pool.query(
       `
         SELECT
-          (SELECT count(*)::int FROM cw_contacts) AS contacts,
-          (SELECT count(*)::int FROM cw_conversations) AS conversations,
-          (SELECT count(*)::int FROM cw_messages) AS messages,
-          (SELECT count(*)::int FROM rag_chunks) AS rag_chunks
-      `
+          (
+            SELECT count(DISTINCT m.contact_global_id)::int
+            FROM cw_messages AS m
+            JOIN rag_chunks AS rc ON rc.message_global_id = m.id
+            WHERE rc.project_id = $1::uuid
+              AND m.contact_global_id IS NOT NULL
+          ) AS contacts,
+          (
+            SELECT count(DISTINCT rc.conversation_global_id)::int
+            FROM rag_chunks AS rc
+            WHERE rc.project_id = $1::uuid
+          ) AS conversations,
+          (
+            SELECT count(DISTINCT rc.message_global_id)::int
+            FROM rag_chunks AS rc
+            WHERE rc.project_id = $1::uuid
+          ) AS messages,
+          (
+            SELECT count(*)::int
+            FROM rag_chunks
+            WHERE project_id = $1::uuid
+          ) AS rag_chunks
+      `,
+      [scopedProjectId]
     ),
     getStorageStats(pool),
   ]);
@@ -109,6 +140,7 @@ export async function getJobsStatus(pool) {
   }
 
   return {
+    project_id: scopedProjectId,
     jobs: latestRuns.rows,
     rag_counts: ragCounts,
     entities: entityCounts.rows[0] || {
