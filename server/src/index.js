@@ -25,6 +25,7 @@ import { getPortfolioMessages, getPortfolioOverview } from "./services/portfolio
 import { syncLoopsContacts } from "./services/loops.js";
 import { listKagRecommendations, listKagScores, listKagSignals, runKagRecommendationRefresh } from "./services/kag.js";
 import { listProjectEvents } from "./services/event-log.js";
+import { buildProjectSnapshot, listPastCaseOutcomes, listProjectSnapshots } from "./services/snapshots.js";
 import {
   generateDailyDigest,
   generateWeeklyDigest,
@@ -1152,6 +1153,43 @@ async function main() {
       limit: request.query?.limit,
     });
     return sendOk(reply, request.requestId, { events: rows });
+  });
+
+  registerPost("/kag/snapshots/refresh", async (request, reply) => {
+    const scope = requireProjectScope(request);
+    const result = await buildProjectSnapshot(pool, scope, {
+      snapshot_date: request.body?.snapshot_date,
+    });
+    await writeAuditEvent(pool, {
+      projectId: scope.projectId,
+      accountScopeId: scope.accountScopeId,
+      actorUsername: request.auth?.username || null,
+      action: "kag.snapshot.refresh",
+      entityType: "project_snapshot",
+      entityId: result.snapshot_date,
+      status: "ok",
+      requestId: request.requestId,
+      payload: result,
+      evidenceRefs: [],
+    });
+    return sendOk(reply, request.requestId, { result });
+  });
+
+  registerGet("/kag/snapshots", async (request, reply) => {
+    const scope = requireProjectScope(request);
+    const snapshots = await listProjectSnapshots(pool, scope, {
+      limit: request.query?.limit,
+    });
+    return sendOk(reply, request.requestId, { snapshots });
+  });
+
+  registerGet("/kag/outcomes", async (request, reply) => {
+    const scope = requireProjectScope(request);
+    const outcomes = await listPastCaseOutcomes(pool, scope, {
+      limit: request.query?.limit,
+      outcome_type: request.query?.outcome_type,
+    });
+    return sendOk(reply, request.requestId, { outcomes });
   });
 
   registerPost("/upsell/radar/refresh", async (request, reply) => {
