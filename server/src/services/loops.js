@@ -1,13 +1,8 @@
 import { fail } from "../lib/api-contract.js";
 import { writeAuditEvent } from "./audit.js";
+import { toPositiveInt } from '../lib/utils.js';
 
 const DEFAULT_LOOPS_API_BASE = "https://app.loops.so/api/v1";
-
-function toPositiveInt(value, fallback, min = 1, max = 5000) {
-  const parsed = Number.parseInt(String(value ?? ""), 10);
-  if (!Number.isFinite(parsed)) return fallback;
-  return Math.max(min, Math.min(max, parsed));
-}
 
 function uniqueIds(input) {
   if (!Array.isArray(input)) return [];
