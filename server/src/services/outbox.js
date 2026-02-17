@@ -2,15 +2,10 @@ import crypto from "node:crypto";
 
 import { fail } from "../lib/api-contract.js";
 import { normalizeEvidenceRefs, writeAuditEvent } from "./audit.js";
+import { toPositiveInt } from '../lib/utils.js';
 
 function nowTs() {
   return new Date().toISOString();
-}
-
-function toPositiveInt(value, fallback, min = 0, max = 10_000) {
-  const parsed = Number.parseInt(String(value ?? ""), 10);
-  if (!Number.isFinite(parsed)) return fallback;
-  return Math.max(min, Math.min(max, parsed));
 }
 
 function buildDedupeKey(projectId, channel, recipientRef, payload) {

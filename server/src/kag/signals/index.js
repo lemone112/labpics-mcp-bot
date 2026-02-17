@@ -1,3 +1,5 @@
+import { clamp, toNumber, toDate, toIso } from '../../lib/utils.js';
+
 export const SIGNAL_KEYS = Object.freeze({
   WAITING_ON_CLIENT_DAYS: "waiting_on_client_days",
   RESPONSE_TIME_AVG: "response_time_avg",
@@ -63,28 +65,6 @@ const SIGNAL_DEFINITIONS = Object.freeze({
     comparator: "high",
   },
 });
-
-function clamp(value, min, max) {
-  const n = Number(value);
-  if (!Number.isFinite(n)) return min;
-  return Math.max(min, Math.min(max, n));
-}
-
-function toNumber(value, fallback = 0) {
-  const n = Number(value);
-  return Number.isFinite(n) ? n : fallback;
-}
-
-function toDate(value, fallback = null) {
-  if (!value) return fallback;
-  const d = value instanceof Date ? value : new Date(value);
-  return Number.isFinite(d.getTime()) ? d : fallback;
-}
-
-function toIso(value) {
-  const d = toDate(value);
-  return d ? d.toISOString() : null;
-}
 
 function dayKey(date) {
   const d = toDate(date, new Date());

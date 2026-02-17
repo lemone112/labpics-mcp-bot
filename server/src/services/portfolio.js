@@ -1,22 +1,5 @@
 import { fail } from "../lib/api-contract.js";
-
-function toPositiveInt(value, fallback, min = 1, max = 1000) {
-  const parsed = Number.parseInt(String(value ?? ""), 10);
-  if (!Number.isFinite(parsed)) return fallback;
-  return Math.max(min, Math.min(max, parsed));
-}
-
-function toNumber(value, fallback = 0) {
-  const parsed = Number(value);
-  if (!Number.isFinite(parsed)) return fallback;
-  return parsed;
-}
-
-function clamp(value, min = 0, max = 100) {
-  const parsed = Number(value);
-  if (!Number.isFinite(parsed)) return min;
-  return Math.max(min, Math.min(max, parsed));
-}
+import { toPositiveInt, toNumber, clamp } from '../lib/utils.js';
 
 function uniqueProjectIds(input) {
   if (!Array.isArray(input)) return [];

@@ -1,22 +1,6 @@
 import crypto from "node:crypto";
 import { failProcessRun, finishProcessRun, startProcessRun, warnProcess } from "./kag-process-log.js";
-
-function clamp(value, min, max) {
-  const n = Number(value);
-  if (!Number.isFinite(n)) return min;
-  return Math.max(min, Math.min(max, n));
-}
-
-function toDate(value, fallback = null) {
-  if (!value) return fallback;
-  const date = value instanceof Date ? value : new Date(value);
-  return Number.isFinite(date.getTime()) ? date : fallback;
-}
-
-function toIso(value, fallback = null) {
-  const date = toDate(value, fallback ? toDate(fallback) : null);
-  return date ? date.toISOString() : null;
-}
+import { clamp, toDate, toIso } from '../lib/utils.js';
 
 function featureValue(signalsJson, key) {
   const value = signalsJson?.[key]?.value;

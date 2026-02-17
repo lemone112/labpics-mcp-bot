@@ -1,14 +1,4 @@
-function toPositiveInt(value, fallback, min = 1, max = 3650) {
-  const parsed = Number.parseInt(String(value ?? ""), 10);
-  if (!Number.isFinite(parsed)) return fallback;
-  return Math.max(min, Math.min(max, parsed));
-}
-
-function toNumber(value, fallback = 0) {
-  const parsed = Number(value);
-  if (!Number.isFinite(parsed)) return fallback;
-  return parsed;
-}
+import { toPositiveInt, toNumber } from '../lib/utils.js';
 
 function clampPercent(value) {
   return Math.max(0, Math.min(100, Number(value || 0)));

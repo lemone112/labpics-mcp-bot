@@ -1,4 +1,5 @@
 import { SIGNAL_KEYS, mapSignalsByKey } from "../signals/index.js";
+import { clamp, round } from '../../lib/utils.js';
 
 const SCORE_TYPES = Object.freeze({
   PROJECT_HEALTH: "project_health",
@@ -6,18 +7,6 @@ const SCORE_TYPES = Object.freeze({
   CLIENT_VALUE: "client_value",
   UPSELL_LIKELIHOOD: "upsell_likelihood",
 });
-
-function clamp(value, min, max) {
-  const n = Number(value);
-  if (!Number.isFinite(n)) return min;
-  return Math.max(min, Math.min(max, n));
-}
-
-function round(value, digits = 2) {
-  const n = Number(value);
-  if (!Number.isFinite(n)) return 0;
-  return Number(n.toFixed(digits));
-}
 
 function countRecentTimestamps(items = [], now = new Date(), days = 7) {
   const cutoff = new Date(now.getTime() - days * 24 * 60 * 60 * 1000);

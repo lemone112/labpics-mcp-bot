@@ -11,12 +11,7 @@ import { rebuildCaseSignatures } from "./similarity.js";
 import { refreshRiskForecasts } from "./forecasting.js";
 import { refreshRecommendationsV2 } from "./recommendations-v2.js";
 import { runSyncReconciliation } from "./reconciliation.js";
-
-function toPositiveInt(value, fallback, min = 1, max = 2_592_000) {
-  const parsed = Number.parseInt(String(value ?? ""), 10);
-  if (!Number.isFinite(parsed)) return fallback;
-  return Math.max(min, Math.min(max, parsed));
-}
+import { toPositiveInt } from '../lib/utils.js';
 
 function truncateError(error, max = 1000) {
   return String(error?.message || error || "scheduler_error").slice(0, max);

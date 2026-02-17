@@ -1,241 +1,391 @@
-# Модель данных (Postgres) — актуальная продуктовая версия
+# Модель данных (Postgres) — полная спецификация (v2.0, 2026-02-17)
 
-Источник истины: PostgreSQL (`db`), схема управляется SQL-миграциями в `server/db/migrations`.
-
-Документ описывает:
-
-1. какие таблицы есть,
-2. зачем они нужны,
-3. как используются автоматизациями и аналитикой,
-4. какие quality-гейты применяются.
+> Источник истины: PostgreSQL, схема управляется SQL-миграциями в `server/db/migrations` (0001–0017).
+> Этот документ описывает каждую таблицу, её назначение, ключевые колонки, индексы и связи.
 
 ---
 
 ## 1) Базовые принципы схемы
 
-1. **Project scope first**:
-   - практически все бизнес-таблицы содержат `project_id` и `account_scope_id`.
-2. **Scope consistency**:
-   - trigger `enforce_project_scope_match` предотвращает cross-scope writes.
-3. **Идемпотентность ingest/job**:
-   - `ON CONFLICT` upsert,
-   - `dedupe_key` на события/рекомендации/исходы.
-4. **Evidence-first**:
-   - производные сущности хранят `evidence_refs`,
-   - без evidence записи не публикуются в primary feed (через `publishable`).
+| # | Принцип | Реализация |
+|---|---------|-----------|
+| 1 | **Project scope first** | Все бизнес-таблицы содержат `project_id` + `account_scope_id` |
+| 2 | **Scope consistency** | Trigger `enforce_project_scope_match` на 79 таблицах (BEFORE INSERT OR UPDATE) |
+| 3 | **Idempotent ingest** | `ON CONFLICT ... DO UPDATE`, `dedupe_key` на событиях/рекомендациях/исходах |
+| 4 | **Evidence-first** | Производные сущности хранят `evidence_refs`; без evidence = `publishable: false` |
+| 5 | **Retention-friendly** | History таблицы индексированы по `computed_at ASC` для эффективной очистки |
+
+## 2) PostgreSQL Extensions
+
+- `pgcrypto` — `gen_random_uuid()`, crypto функции
+- `vector` (pgvector) — `vector(1536)`, cosine distance, IVFFlat + HNSW индексы
 
 ---
 
-## 2) Технологические расширения
+## 3) Полная карта таблиц
 
-- `pgcrypto` — UUID/crypto функции.
-- `vector` (pgvector) — embedding-поиск по `rag_chunks.embedding`.
+### 3.1 Core Platform
+
+| Таблица | PK | Ключевые колонки | Индексы | Ограничения |
+|---------|----|-----------------|---------|-------------|
+| `account_scopes` | `id` (uuid) | `scope_key`, `name` | PK | `scope_key` UNIQUE |
+| `projects` | `id` (uuid) | `name`, `account_scope_id` | `projects_account_scope_idx` | FK → account_scopes ON DELETE RESTRICT |
+| `sessions` | `session_id` (text) | `username`, `active_project_id`, `csrf_token` | PK | FK → projects ON DELETE SET NULL |
+| `app_users` | `id` (uuid) | `username`, `password_hash` | PK | `username` UNIQUE |
+| `signup_requests` | `id` (uuid) | `username`, `pin_hash`, `expires_at`, `attempt_count` | username+created, expires | TTL-based |
+| `app_settings` | `key` (text) | `value` | PK | — |
+| `schema_migrations` | `filename` (text) | `applied_at` | PK | — |
+| `project_sources` | `id` (uuid) | `project_id`, `source_kind`, `external_id` | — | UNIQUE (source_kind, external_id), UNIQUE (project_id, source_kind) |
+
+### 3.2 Chatwoot Raw (5 таблиц)
+
+| Таблица | PK | Объём | Ключевые индексы | Особенности |
+|---------|----|-------|-----------------|-------------|
+| `cw_messages` | `id` (text) | **Очень высокий** | project, conversation, created_at, contact_global, account+created | Autovacuum tuned (0.05/0.02) |
+| `cw_conversations` | `id` (text) | Высокий | project, project+scope | Scope guard trigger |
+| `cw_contacts` | `id` (text) | Средний | account+contact UNIQUE, updated_at, project | — |
+| `cw_inboxes_raw` | `id` (text) | Низкий | project+updated | — |
+| `cw_attachments_raw` | `id` (text) | Средний | project+message | FK → cw_messages |
+
+### 3.3 Linear Raw (4 таблицы)
+
+| Таблица | PK | Ключевые колонки | Индексы |
+|---------|----|-----------------|---------|
+| `linear_issues_raw` | `id` (text) | `state`, `state_type`, `priority`, `due_date`, `blocked`, `labels[]` | project+state, project+blocked |
+| `linear_projects_raw` | `id` (text) | `name`, `state`, `lead_name` | project+updated |
+| `linear_states_raw` | `id` (text) | `name`, `type`, `position` | project+updated |
+| `linear_cycles_raw` | `id` (text) | `starts_at`, `ends_at`, `progress` | project+updated |
+
+Все: UNIQUE (project_id, external_id).
+
+### 3.4 Attio Raw (4 таблицы)
+
+| Таблица | PK | Ключевые колонки | Индексы |
+|---------|----|-----------------|---------|
+| `attio_accounts_raw` | `id` (text) | `name`, `domain`, `annual_revenue`, `stage` | project+updated |
+| `attio_opportunities_raw` | `id` (text) | `title`, `stage`, `amount`, `probability` | project+stage |
+| `attio_people_raw` | `id` (text) | `full_name`, `email`, `role` | project+updated |
+| `attio_activities_raw` | `id` (text) | `activity_type`, `note`, `occurred_at` | project+occurred |
+
+Все: UNIQUE (project_id, external_id).
+
+### 3.5 Connector Reliability
+
+| Таблица | PK | Ключевые колонки | Statuses |
+|---------|----|-----------------|----------|
+| `connector_sync_state` | Composite (project_id, connector) | `cursor_ts`, `status`, `retry_count`, `last_error` | idle, running, ok, partial, failed |
+| `connector_errors` | `id` (bigserial) | `connector`, `operation`, `error_kind`, `dedupe_key` | pending, retrying, dead_letter, resolved |
+
+### 3.6 RAG
+
+| Таблица | PK | Объём | Ключевые колонки |
+|---------|----|-------|-----------------|
+| `rag_chunks` | `id` (uuid) | **Очень высокий** (100K–1M+) | `embedding` vector(1536), `embedding_status`, `text_hash`, `content_tokens` |
+
+Индексы:
+- IVFFlat (100 lists) на `embedding`
+- HNSW на `embedding` (если доступен)
+- `(project_id, embedding_status, created_at DESC)`
+- UNIQUE `(message_global_id, chunk_index)`
+
+Autovacuum: `vacuum_scale_factor=0.02, analyze_scale_factor=0.01`.
+
+### 3.7 Intelligence Graph (tables: `kag_*`)
+
+> Prefix `kag_` в таблицах — legacy от "Knowledge-Augmented Graph". Фактически это **Project Intelligence** data model.
+
+#### kag_nodes (узлы)
+
+15 типов: `project`, `client`, `person`, `stage`, `deliverable`, `conversation`, `message`, `task`, `blocker`, `deal`, `finance_entry`, `agreement`, `decision`, `risk`, `offer`
+
+| Колонка | Тип | Описание |
+|---------|-----|---------|
+| `node_type` | text CHECK | Тип узла |
+| `node_key` | text | Уникальный ключ в рамках типа |
+| `status` | text | active, inactive, archived |
+| `title` | text | Человекочитаемое название |
+| `payload` | jsonb | Произвольные данные |
+| `numeric_fields` | jsonb | Числовые поля (суммы, проценты) |
+| `source_refs` | jsonb | Ссылки на первоисточники |
+| `rag_chunk_refs` | jsonb | Ссылки на RAG chunks |
+
+Индексы: `(project_id, node_type, node_key)` UNIQUE, `(project_id, node_type, status, updated_at DESC)`, GIN на `source_refs`.
+
+#### kag_edges (рёбра)
+
+21 тип связей: `project_has_*` (11), `conversation_has_message`, `message_authored_by_person`, `task_blocked_by_blocker`, `deliverable_depends_on_task`, `deal_for_client`, `agreement_for_deal`, `decision_about_stage`, `risk_impacts_deliverable`, `offer_targets_client`
+
+| Колонка | Тип | Описание |
+|---------|-----|---------|
+| `from_node_id` | uuid FK | Исходный узел |
+| `to_node_id` | uuid FK | Целевой узел |
+| `relation_type` | text CHECK | Тип связи |
+| `weight` | numeric(7,4) | Вес связи [0..1] |
+
+Индексы:
+- `(project_id, from_node_id, to_node_id, relation_type)` UNIQUE
+- `(project_id, relation_type, status, updated_at DESC)`
+- `(to_node_id, project_id, relation_type)` — **reverse lookup** (migration 0017)
+- `(from_node_id, project_id)` — **forward lookup** (migration 0017)
+- GIN на `source_refs`
+
+> **Архитектурное решение:** Граф используется как data model и provenance store, НЕ для graph traversal. Все вычисления идут через event stream.
+
+#### kag_events (события)
+
+15 типов: `message_sent`, `decision_made`, `agreement_created`, `approval_approved`, `stage_started`, `stage_completed`, `task_created`, `task_blocked`, `blocker_resolved`, `deal_updated`, `finance_entry_created`, `risk_detected`, `scope_change_requested`, `need_detected`, `offer_created`
+
+| Колонка | Тип | Описание |
+|---------|-----|---------|
+| `event_type` | text CHECK | Тип события |
+| `event_ts` | timestamptz | Время события |
+| `actor_node_id` | uuid FK | Кто (nullable) |
+| `subject_node_id` | uuid FK | Что (nullable) |
+| `status` | text | open, processed, ignored |
+
+Индексы:
+- `(project_id, event_type, event_ts DESC)`
+- `(project_id, status, id ASC)` — для инкрементальной обработки
+- `(project_id, id ASC) WHERE status = 'open'` — **partial queue index** (migration 0017)
+
+### 3.8 Intelligence Provenance
+
+| Таблица | Назначение | Ключевые поля |
+|---------|-----------|---------------|
+| `kag_provenance_refs` | Обратный индекс: объект → источник | `object_kind`, `object_id`, `source_kind`, `message_id`, `linear_issue_id`, `attio_record_id`, `rag_chunk_id` |
+
+CHECK constraint: хотя бы один source field должен быть NOT NULL.
+
+### 3.9 Intelligence Signals & Scores
+
+| Таблица | Назначение | Кардинальность |
+|---------|-----------|---------------|
+| `kag_signal_state` | Состояние автомата | 1 per project |
+| `kag_signals` | Текущие значения | 10 per project (UNIQUE project_id, signal_key) |
+| `kag_signal_history` | История | Растёт (retention-индекс в 0017) |
+| `kag_scores` | Текущие скоры | 4 per project (UNIQUE project_id, score_type) |
+| `kag_score_history` | История | Растёт (retention-индекс в 0017) |
+
+10 сигналов: `waiting_on_client_days`, `response_time_avg`, `blockers_age`, `stage_overdue`, `agreement_overdue_count`, `sentiment_trend`, `scope_creep_rate`, `budget_burn_rate`, `margin_risk`, `activity_drop`
+
+4 скора: `project_health`, `risk`, `client_value`, `upsell_likelihood`
+
+### 3.10 Recommendations v1
+
+| Таблица | Назначение | Статусы |
+|---------|-----------|---------|
+| `kag_recommendations` | 5 категорий рекомендаций | proposed, accepted, dismissed, done |
+| `kag_templates` | Шаблоны коммуникаций | UNIQUE (project_id, template_key, language, channel, version) |
+
+### 3.11 Intelligence v2 — Forecasts & Enhanced Recommendations
+
+| Таблица | Назначение | Ключевые поля |
+|---------|-----------|---------------|
+| `kag_event_log` | Единая temporal-модель | 16+ event_types, `dedupe_key`, source trace fields |
+| `project_snapshots` | Дневные срезы | `signals_json`, `scores_json`, `publishable` |
+| `past_case_outcomes` | Исторические исходы | `outcome_type`, `severity`, `evidence_refs` |
+| `case_signatures` | Similarity signatures | `window_days` (7/14/30), `signature_vector`, `signature_hash` |
+| `kag_risk_forecasts` | Прогнозы рисков | 4 типа risk, `probability_7d/14d/30d`, `confidence`, `publishable` |
+| `recommendations_v2` | Enhanced рекомендации | 6 категорий, `why_now`, `expected_impact`, evidence gating |
+| `recommendation_action_runs` | Исполнение действий | `action_type`, retry fields, `correlation_id` |
+| `kag_signals` / `kag_scores` | Shared | — |
+
+#### recommendations_v2 — детальная структура
+
+| Колонка | Тип | Описание |
+|---------|-----|---------|
+| `category` | text | 6 категорий (+ winback) |
+| `priority` | int 1-5 | Приоритет |
+| `due_date` | date | Дедлайн |
+| `owner_role` | text | pm, finance_lead, account_manager |
+| `status` | text | new → acknowledged → done / dismissed |
+| `why_now` | text | Объяснение на основе forecast |
+| `expected_impact` | text | Ожидаемый бизнес-эффект |
+| `evidence_count` | int | Количество evidence refs |
+| `evidence_quality_score` | numeric | Качество evidence [0..1] |
+| `evidence_gate_status` | text | visible / hidden |
+| `evidence_gate_reason` | text | Причина hidden |
+| `shown_count` | int | Сколько раз показана |
+| `helpful_feedback` | text | unknown / helpful / not_helpful |
+| `forecast_snapshot` | jsonb | Снимок прогноза |
+
+### 3.12 CRM
+
+| Таблица | PK | Ключевые поля | FK |
+|---------|----|---------------|-----|
+| `crm_accounts` | uuid | `name`, `domain`, `stage`, `source_system` | — |
+| `crm_account_contacts` | uuid | `role`, `is_primary` | FK → crm_accounts CASCADE |
+| `crm_opportunities` | uuid | `stage` (6 стадий), `amount_estimate`, `probability` | FK → crm_accounts |
+| `crm_opportunity_stage_events` | bigserial | `from_stage`, `to_stage`, `reason` | FK → crm_opportunities, audit_events |
+
+### 3.13 Offers
+
+| Таблица | Назначение | Статусы |
+|---------|-----------|---------|
+| `offers` | Коммерческие предложения | draft → approved → sent → signed / rejected |
+| `offer_items` | Позиции в предложении | package, addon, discount |
+| `offer_approvals` | Лог одобрений | approve_discount, approve_send, reject |
+
+### 3.14 Campaigns
+
+| Таблица | Назначение | Статусы |
+|---------|-----------|---------|
+| `campaigns` | Кампании рассылок | draft → approved → running → completed |
+| `campaign_segments` | Сегменты аудитории | `filter_spec` (jsonb) |
+| `campaign_members` | Участники | pending, active, completed, opted_out |
+| `campaign_events` | Журнал событий | approved, sent, failed, reply_detected, opt_out |
+
+### 3.15 Identity Resolution
+
+| Таблица | Назначение |
+|---------|-----------|
+| `identity_link_suggestions` | Автосгенерированные предложения связей (confidence + reason) |
+| `identity_links` | Подтверждённые связи (manual / suggestion) |
+
+### 3.16 Audit & Evidence
+
+| Таблица | Назначение |
+|---------|-----------|
+| `audit_events` | Полный audit trail (action, entity_type, entity_id, payload) |
+| `evidence_items` | Универсальный evidence store с tsvector search |
+| `outbound_messages` | Исходящие сообщения (state machine: draft → approved → sent) |
+| `outbound_attempts` | Попытки отправки |
+| `contact_channel_policies` | Opt-out, frequency caps, stop-on-reply |
+
+### 3.17 Analytics Snapshots
+
+| Таблица | Период | Ключевые метрики |
+|---------|--------|-----------------|
+| `analytics_revenue_snapshots` | 30/60/90 дней | pipeline, commit, won, expected, costs, margin |
+| `analytics_delivery_snapshots` | per period | open_issues, overdue, completed, lead_time, throughput |
+| `analytics_comms_snapshots` | per period | inbound/outbound messages, unique contacts, avg response |
+
+### 3.18 Health & Risk (Legacy)
+
+| Таблица | Назначение |
+|---------|-----------|
+| `health_scores` | Скоры здоровья аккаунтов |
+| `risk_radar_items` | Элементы risk radar (severity, probability, mitigation) |
+| `risk_pattern_events` | Паттерны рисков |
+| `signals` (legacy) | Устаревшие сигналы (до Intelligence Pipeline) |
+| `next_best_actions` (legacy) | Устаревшие NBA (до Intelligence Pipeline) |
+
+### 3.19 Scheduling
+
+| Таблица | Назначение |
+|---------|-----------|
+| `scheduled_jobs` | Активные job definitions (UNIQUE project_id + job_type) |
+| `worker_runs` | Лог выполнения worker |
+| `job_runs` | Лог выполнения background jobs |
+
+### 3.20 Other
+
+| Таблица | Назначение |
+|---------|-----------|
+| `case_library_entries` | Библиотека кейсов (draft → approved → archived) |
+| `case_evidence_refs` | Evidence refs для кейсов |
+| `upsell_opportunities` | Возможности upsell |
+| `continuity_actions` | Continuity actions из Attio/Chatwoot |
+| `daily_digests` | Дневные дайджесты (UNIQUE project_id + digest_date) |
+| `weekly_digests` | Недельные дайджесты (UNIQUE project_id + week_start) |
+| `sync_reconciliation_metrics` | Метрики полноты sync |
 
 ---
 
-## 3) Группы таблиц и назначение
+## 4) Diagram: основные связи между группами таблиц
 
-### 3.1 Core platform
-
-- `projects` — проекты.
-- `account_scopes` — общая зона доступа для мультипроектного портфеля.
-- `sessions` — web-сессии + active project + CSRF.
-- `app_users`, `signup_requests`, `app_settings` — учётные записи и системные настройки.
-- `project_sources` — конфигурация подключений источников по проекту.
-- `job_runs`, `scheduled_jobs`, `worker_runs` — выполнение и история фоновых задач.
-- `schema_migrations` — контроль применённых миграций.
-
-Использование: auth, scoping, API middleware.
-
-### 3.2 Ingestion raw (источники данных)
-
-### Chatwoot
-
-- `cw_contacts` — контакты.
-- `cw_conversations` — диалоги.
-- `cw_messages` — сообщения.
-- `cw_inboxes_raw` — inbox metadata.
-- `cw_attachments_raw` — metadata вложений.
-
-### Linear
-
-- `linear_projects_raw` — проекты.
-- `linear_issues_raw` — задачи + blocked flags/labels/cycle refs.
-- `linear_states_raw` — workflow states.
-- `linear_cycles_raw` — cycles/sprints.
-
-### Attio
-
-- `attio_accounts_raw` — компании/аккаунты.
-- `attio_opportunities_raw` — сделки.
-- `attio_people_raw` — люди/контакты.
-- `attio_activities_raw` — активности/notes.
-
-Использование: первичный ingest слой для построения событий, сигналов и CRM-представлений.
-
-### 3.3 Connector reliability и retry
-
-- `connector_sync_state`
-  - cursor/state/status/retry/meta по каждому connector.
-- `connector_errors`
-  - dead-letter/retry очередь с backoff.
-
-Использование: дешёвый и устойчивый инкрементальный sync.
-
-### 3.4 RAG
-
-- `rag_chunks`
-  - текстовые chunk-элементы, embedding, статусы обработки.
-- `sync_watermarks`
-  - source cursors legacy ingestion.
-
-Использование: search/evidence retrieval.
-
-### 3.5 Evidence / audit / outbound
-
-- `audit_events`
-- `evidence_items`
-- `outbound_messages`
-- `outbound_attempts`
-- `contact_channel_policies`
-
-Использование: проверяемые действия, коммуникации и compliance.
-
-### 3.6 CRM / operations / control tower
-
-- `crm_accounts`
-- `crm_account_contacts`
-- `crm_opportunities`
-- `crm_opportunity_stage_events`
-- `offers`, `offer_items`, `offer_approvals`
-- `campaigns`, `campaign_segments`, `campaign_members`, `campaign_events`
-- `identity_link_suggestions`, `identity_links`
-- `upsell_opportunities`
-- `continuity_actions`
-- `daily_digests`, `weekly_digests`
-
-Использование: коммерческий контур, pipeline-управление, growth и continuity.
-
-### 3.7 Legacy intelligence / analytics слой
-
-- `signals`
-- `next_best_actions`
-- `health_scores`
-- `risk_radar_items`
-- `case_library_entries`, `case_evidence_refs`
-- `risk_pattern_events`
-- `analytics_revenue_snapshots`
-- `analytics_delivery_snapshots`
-- `analytics_comms_snapshots`
-
-Использование: исторический intelligence-контур до расширения KAG v2; сохраняется для обратной совместимости и части UI.
-
-### 3.8 KAG v1 (graph + deterministic intelligence)
-
-- `kag_nodes`
-- `kag_edges`
-- `kag_events`
-- `kag_provenance_refs`
-- `kag_signal_state`
-- `kag_signals`
-- `kag_signal_history`
-- `kag_scores`
-- `kag_score_history`
-- `kag_recommendations`
-- `kag_templates`
-
-Использование: интерпретируемые сигналы/скоры/NBA поверх фактологических данных.
-
-### 3.9 KAG v2 (event-first, patterns, forecasts, rec lifecycle)
-
-- `kag_event_log`
-  - единая temporal-модель + process events для мониторинга.
-- `project_snapshots`
-  - дневные срезы сигналов/скоров/агрегатов,
-  - поля `evidence_refs`, `publishable`.
-- `past_case_outcomes`
-  - исторические исходы кейсов для similarity/forecast.
-- `case_signatures`
-  - сигнатуры проектов (окна 7/14/30).
-- `kag_risk_forecasts`
-  - вероятности рисков 7/14/30, drivers, similar cases, `publishable`.
-- `recommendations_v2`
-  - рекомендации с lifecycle (`new/acknowledged/done/dismissed`) и feedback,
-  - explainability/gating поля: `evidence_count`, `evidence_quality_score`, `evidence_gate_status`, `evidence_gate_reason`,
-  - product telemetry: `shown_count`, `first_shown_at`, `last_shown_at`.
-- `recommendation_action_runs`
-  - лог исполнения действий по рекомендациям,
-  - типы действий: `create_or_update_task`, `send_message`, `set_reminder`,
-  - retry-поля: `attempts`, `max_retries`, `next_retry_at`, `error_message`, `result_payload`.
+```
+account_scopes ──── projects ──── sessions
+                       │
+       ┌───────────────┼───────────────────────────────────┐
+       │               │                                   │
+   RAW LAYER      INTELLIGENCE        CRM LAYER
+   cw_messages    kag_nodes            crm_accounts
+   cw_contacts    kag_edges            crm_opportunities
+   linear_issues  kag_events           offers
+   attio_accounts kag_provenance       campaigns
+       │               │                    │
+       │               ▼                    │
+       │          SIGNALS/SCORES            │
+       │          kag_signals               │
+       │          kag_scores                │
+       │               │                    │
+       │          ┌────┴─────┐              │
+       │          ▼          ▼              │
+       │     FORECASTS   RECS v2           │
+       │     kag_risk_   recommendations   │
+       │     forecasts   _v2               │
+       │                    │              │
+       │                    ▼              │
+       │          ACTION RUNS              │
+       │          recommendation_          │
+       │          action_runs              │
+       │                                   │
+       └──── RAG ────── EVIDENCE ──────────┘
+             rag_chunks  audit_events
+                         evidence_items
+                         outbound_messages
+```
 
 ---
 
-## 4) Автоматизации и соответствующие таблицы
+## 5) Индексная стратегия (после аудита 0017)
 
-### 4.1 Каждые ~15 минут
+### Принципы:
 
-- `connectors_sync_cycle`
-  - пишет raw-слой,
-  - обновляет `connector_sync_state`,
-  - фиксирует ошибки в `connector_errors`,
-  - генерирует/обновляет `kag_event_log`.
+1. **Все business queries — project-scoped:** каждый индекс начинается с `project_id`
+2. **Graph indexes — bidirectional:** forward (from_node) + reverse (to_node) для будущих traversal
+3. **Queue indexes — partial:** `WHERE status = 'open'` для исключения обработанных записей
+4. **History indexes — retention-friendly:** `computed_at ASC` для эффективного DELETE
+5. **JSONB — GIN:** для обратного поиска по `evidence_refs` / `source_refs`
+6. **Vector — двойной:** IVFFlat (recall) + HNSW (speed) на `rag_chunks.embedding`
 
-### 4.2 Каждые ~5 минут
+### Полный реестр custom индексов (0017):
 
-- `connector_errors_retry`
-  - обрабатывает due-записи из `connector_errors`
-  - точечно ретраит connector.
-
-### 4.3 Раз в сутки
-
-- `kag_daily_pipeline`
-  - snapshot (`project_snapshots`)
-  - forecast (`kag_risk_forecasts`)
-  - recommendations (`recommendations_v2`)
-  - outcomes (`past_case_outcomes`).
-
-### 4.4 Раз в неделю
-
-- `case_signatures_refresh`
-  - обновляет `case_signatures`.
+| Индекс | Таблица | Тип | Назначение |
+|--------|---------|-----|-----------|
+| `kag_edges_to_node_project_idx` | kag_edges | B-tree | Reverse edge lookup |
+| `kag_edges_from_node_project_idx` | kag_edges | B-tree | Forward edge lookup |
+| `kag_events_open_queue_idx` | kag_events | Partial B-tree | Unprocessed event queue |
+| `kag_signal_history_retention_idx` | kag_signal_history | B-tree | Retention cleanup |
+| `kag_score_history_retention_idx` | kag_score_history | B-tree | Retention cleanup |
+| `kag_event_log_project_dedupe_idx` | kag_event_log | B-tree | Dedupe lookup |
+| `recommendations_v2_active_visible_idx` | recommendations_v2 | Partial B-tree | Dashboard display |
 
 ---
 
-## 5) Quality и explainability поля
+## 6) Autovacuum Tuning
 
-Минимальные поля для explainability:
-
-- `evidence_refs` (jsonb ссылки на message/issue/deal/doc/chunk),
-- source trace поля в `kag_event_log`,
-- `dedupe_key` для идемпотентности.
-
-Публикация:
-
-- `project_snapshots.publishable`
-- `kag_risk_forecasts.publishable`
-
-Если evidence нет:
-
-- запись сохраняется для аудита,
-- но скрывается из primary выдачи,
-- в `kag_event_log` пишется warning process event.
+| Таблица | vacuum_scale_factor | analyze_scale_factor | Причина |
+|---------|--------------------|--------------------|---------|
+| `cw_messages` | 0.05 | 0.02 | High write volume (continuous sync) |
+| `rag_chunks` | 0.02 | 0.01 | Very high write (embedding processing) |
 
 ---
 
-## 6) Индексы и оптимизация
+## 7) Scope Guard Coverage
 
-Ключевые индексы:
+Trigger `enforce_project_scope_match` установлен на **каждую** таблицу с `project_id` + `account_scope_id`:
 
-- `project_id + occurred_at` для event/time-series выборок,
-- `source_ref`, `outcome_type`, `signature_hash` для диагностики/similarity,
-- `snapshot_date` для trend-аналитики,
-- GIN по `evidence_refs`/json полям там, где нужен обратный поиск.
+- Core: projects, sessions
+- Raw: cw_*, linear_*, attio_*
+- RAG: rag_chunks
+- Intelligence v1: kag_nodes, kag_edges, kag_events, kag_provenance_refs, kag_signal_state, kag_signals, kag_signal_history, kag_scores, kag_score_history, kag_recommendations, kag_templates
+- Intelligence v2: kag_risk_forecasts, recommendations_v2, recommendation_action_runs
+- CRM: crm_accounts, crm_account_contacts, crm_opportunities, ...
+- Audit: audit_events, evidence_items
+- Outbound: outbound_messages, outbound_attempts
+- Campaigns: campaigns, campaign_segments, campaign_members, campaign_events
+- Analytics: analytics_*_snapshots
+- etc.
 
 ---
 
-## 7) Где смотреть детали
+## 8) Где смотреть детали
 
-- Миграции (фактическая схема): `server/db/migrations/*.sql`
-- KAG v1: [`docs/kag_recommendations.md`](./kag_recommendations.md)
-- KAG v2: [`docs/kag_forecasting_recommendations.md`](./kag_forecasting_recommendations.md)
-- Pipeline/расписание: [`docs/pipelines.md`](./pipelines.md)
+- **Фактическая схема (source of truth):** `server/db/migrations/*.sql`
+- **Архитектура:** [`docs/architecture.md`](./architecture.md)
+- **Intelligence v1:** [`docs/kag_recommendations.md`](./kag_recommendations.md)
+- **Intelligence v2:** [`docs/kag_forecasting_recommendations.md`](./kag_forecasting_recommendations.md)
+- **Pipelines:** [`docs/pipelines.md`](./pipelines.md)
+- **Platform invariants:** [`docs/platform-architecture.md`](./platform-architecture.md)
