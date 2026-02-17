@@ -2,6 +2,8 @@ import { applyEventsIncrementally, computeSignalsFromState, createInitialSignalS
 import { computeScores } from "../kag/scoring/index.js";
 import { generateRecommendations } from "../kag/recommendations/index.js";
 import { buildProjectSnapshot } from "./snapshots.js";
+import { refreshRiskForecasts } from "./forecasting.js";
+import { refreshRecommendationsV2 } from "./recommendations-v2.js";
 
 function envFlag(name, fallback = false) {
   const raw = String(process.env[name] ?? "").trim().toLowerCase();
@@ -436,6 +438,16 @@ export async function runKagRecommendationRefresh(pool, scope, options = {}) {
     snapshotResult = await buildProjectSnapshot(pool, scope, { snapshot_date: now });
   }
 
+  let forecastResult = null;
+  if (envFlag("KAG_FORECASTING_ENABLED", true)) {
+    forecastResult = await refreshRiskForecasts(pool, scope, { now });
+  }
+
+  let recommendationsV2Result = null;
+  if (recommendationsEnabled && envFlag("KAG_RECOMMENDATIONS_V2_ENABLED", true)) {
+    recommendationsV2Result = await refreshRecommendationsV2(pool, scope, { now });
+  }
+
   const processedEvents = await markEventsProcessed(pool, scope, events);
 
   return {
@@ -448,6 +460,8 @@ export async function runKagRecommendationRefresh(pool, scope, options = {}) {
     generated_recommendations: recommendations.length,
     last_event_id: incremental.last_event_id || lastEventId,
     snapshot: snapshotResult,
+    forecast: forecastResult,
+    recommendations_v2: recommendationsV2Result,
   };
 }
 

@@ -408,6 +408,40 @@ function similarityExplanation(tsScore, seqScore, contextScore) {
   return `time_series=${tsScore.toFixed(3)}, event_sequence=${seqScore.toFixed(3)}, context=${contextScore.toFixed(3)}`;
 }
 
+export function rankSimilarCasesFromSignatures(sourceSignature, candidates = [], topK = 3) {
+  const sourceVector = Array.isArray(sourceSignature?.signature_vector)
+    ? sourceSignature.signature_vector.map(Number)
+    : [];
+  const sourceNgrams = setFromArray(sourceSignature?.features_json?.event_ngrams || []);
+  const sourceContext = sourceSignature?.context_json || {};
+  const scored = [];
+  for (const candidate of candidates) {
+    const candidateVector = Array.isArray(candidate?.signature_vector) ? candidate.signature_vector.map(Number) : [];
+    const tsDistance = euclideanDistance(sourceVector, candidateVector);
+    const tsScore = 1 / (1 + tsDistance);
+    const candidateNgrams = setFromArray(candidate?.features_json?.event_ngrams || []);
+    const seqScore = jaccardSimilarity(sourceNgrams, candidateNgrams);
+    const ctxScore = contextSimilarity(sourceContext, candidate?.context_json || {});
+    const similarityScore = clamp(0.6 * tsScore + 0.3 * seqScore + 0.1 * ctxScore, 0, 1);
+    const sharedPatterns = selectSharedPatterns(
+      sourceSignature?.features_json?.event_ngrams || [],
+      candidate?.features_json?.event_ngrams || [],
+      5
+    );
+    scored.push({
+      case_project_id: candidate.project_id,
+      case_project_name: candidate.project_name || null,
+      similarity_score: Number(similarityScore.toFixed(4)),
+      why_similar: similarityExplanation(tsScore, seqScore, ctxScore),
+      key_shared_patterns: sharedPatterns,
+      outcomes_seen: candidate.outcomes_seen || [],
+      computed_at: candidate.computed_at || null,
+    });
+  }
+  scored.sort((a, b) => b.similarity_score - a.similarity_score);
+  return scored.slice(0, Math.max(1, Math.min(topK, 50)));
+}
+
 export async function findSimilarCases(pool, scope, options = {}) {
   const projectId = String(options.project_id || scope.projectId);
   const windowDaysRaw = Number.parseInt(String(options.window_days || "14"), 10);
@@ -425,38 +459,13 @@ export async function findSimilarCases(pool, scope, options = {}) {
   }
 
   const candidateRows = await loadCandidateSignatures(pool, scope.accountScopeId, projectId, windowDays, 300);
-  const sourceVector = Array.isArray(sourceSignature.signature_vector) ? sourceSignature.signature_vector.map(Number) : [];
-  const sourceNgrams = setFromArray(sourceSignature.features_json?.event_ngrams || []);
-  const sourceContext = sourceSignature.context_json || {};
-
-  const scored = [];
+  const candidatesWithOutcomes = [];
   for (const candidate of candidateRows) {
-    const candidateVector = Array.isArray(candidate.signature_vector) ? candidate.signature_vector.map(Number) : [];
-    const tsDistance = euclideanDistance(sourceVector, candidateVector);
-    const tsScore = 1 / (1 + tsDistance);
-    const candidateNgrams = setFromArray(candidate.features_json?.event_ngrams || []);
-    const seqScore = jaccardSimilarity(sourceNgrams, candidateNgrams);
-    const ctxScore = contextSimilarity(sourceContext, candidate.context_json || {});
-    const similarityScore = clamp(0.6 * tsScore + 0.3 * seqScore + 0.1 * ctxScore, 0, 1);
-
-    const sharedPatterns = selectSharedPatterns(
-      sourceSignature.features_json?.event_ngrams || [],
-      candidate.features_json?.event_ngrams || [],
-      5
-    );
     const outcomes = await loadProjectOutcomes(pool, candidate.project_id, scope.accountScopeId, 8);
-
-    scored.push({
-      case_project_id: candidate.project_id,
-      case_project_name: candidate.project_name,
-      similarity_score: Number(similarityScore.toFixed(4)),
-      why_similar: similarityExplanation(tsScore, seqScore, ctxScore),
-      key_shared_patterns: sharedPatterns,
+    candidatesWithOutcomes.push({
+      ...candidate,
       outcomes_seen: outcomes,
-      computed_at: candidate.computed_at,
     });
   }
-
-  scored.sort((a, b) => b.similarity_score - a.similarity_score);
-  return scored.slice(0, topK);
+  return rankSimilarCasesFromSignatures(sourceSignature, candidatesWithOutcomes, topK);
 }

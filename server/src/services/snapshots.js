@@ -360,14 +360,7 @@ async function deriveDealStageOutcomes(pool, scope, snapshotDate) {
   return outcomes;
 }
 
-export async function buildProjectSnapshot(pool, scope, options = {}) {
-  const snapshotDate = toSnapshotDate(options.snapshot_date || new Date());
-  const [signalRows, scoreRows, aggregates] = await Promise.all([
-    fetchSignalRows(pool, scope),
-    fetchScoreRows(pool, scope),
-    fetchKeyAggregates(pool, scope),
-  ]);
-
+export function composeSnapshotPayloadFromRows(signalRows = [], scoreRows = [], keyAggregates = {}) {
   const signalsObject = {};
   const normalizedSignals = {};
   for (const row of signalRows) {
@@ -378,7 +371,7 @@ export async function buildProjectSnapshot(pool, scope, options = {}) {
       threshold_critical: row.threshold_critical,
       details: row.details || {},
       evidence_refs: row.evidence_refs || [],
-      computed_at: row.computed_at,
+      computed_at: row.computed_at || null,
     };
     normalizedSignals[row.signal_key] = Number(normalizeSignalRisk(row).toFixed(4));
   }
@@ -390,11 +383,36 @@ export async function buildProjectSnapshot(pool, scope, options = {}) {
       level: row.level,
       factors: row.factors || [],
       evidence_refs: row.evidence_refs || [],
-      computed_at: row.computed_at,
+      computed_at: row.computed_at || null,
     };
   }
 
-  await upsertSnapshot(pool, scope, snapshotDate, signalsObject, normalizedSignals, scoresObject, aggregates);
+  return {
+    signals_json: signalsObject,
+    normalized_signals_json: normalizedSignals,
+    scores_json: scoresObject,
+    key_aggregates_json: keyAggregates || {},
+  };
+}
+
+export async function buildProjectSnapshot(pool, scope, options = {}) {
+  const snapshotDate = toSnapshotDate(options.snapshot_date || new Date());
+  const [signalRows, scoreRows, aggregates] = await Promise.all([
+    fetchSignalRows(pool, scope),
+    fetchScoreRows(pool, scope),
+    fetchKeyAggregates(pool, scope),
+  ]);
+
+  const snapshotPayload = composeSnapshotPayloadFromRows(signalRows, scoreRows, aggregates);
+  await upsertSnapshot(
+    pool,
+    scope,
+    snapshotDate,
+    snapshotPayload.signals_json,
+    snapshotPayload.normalized_signals_json,
+    snapshotPayload.scores_json,
+    snapshotPayload.key_aggregates_json
+  );
 
   const signalMap = signalByKey(signalRows);
   const scoreMap = scoreByType(scoreRows);

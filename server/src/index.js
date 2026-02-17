@@ -27,6 +27,13 @@ import { listKagRecommendations, listKagScores, listKagSignals, runKagRecommenda
 import { listProjectEvents } from "./services/event-log.js";
 import { buildProjectSnapshot, listPastCaseOutcomes, listProjectSnapshots } from "./services/snapshots.js";
 import { findSimilarCases, rebuildCaseSignatures } from "./services/similarity.js";
+import { listRiskForecasts, refreshRiskForecasts } from "./services/forecasting.js";
+import {
+  listRecommendationsV2,
+  refreshRecommendationsV2,
+  updateRecommendationV2Feedback,
+  updateRecommendationV2Status,
+} from "./services/recommendations-v2.js";
 import {
   generateDailyDigest,
   generateWeeklyDigest,
@@ -1223,6 +1230,110 @@ async function main() {
       top_k: request.query?.top_k,
     });
     return sendOk(reply, request.requestId, { cases: cases.slice(0, 3), all: cases });
+  });
+
+  registerPost("/kag/v2/forecast/refresh", async (request, reply) => {
+    const scope = requireProjectScope(request);
+    const body = request.body && typeof request.body === "object" ? request.body : {};
+    const result = await refreshRiskForecasts(pool, scope, {
+      project_id: body?.project_id,
+      window_days: body?.window_days,
+      top_k: body?.top_k,
+    });
+    await writeAuditEvent(pool, {
+      projectId: scope.projectId,
+      accountScopeId: scope.accountScopeId,
+      actorUsername: request.auth?.username || null,
+      action: "kag.v2.forecast.refresh",
+      entityType: "kag_risk_forecast",
+      entityId: scope.projectId,
+      status: "ok",
+      requestId: request.requestId,
+      payload: result,
+      evidenceRefs: result.forecasts.flatMap((item) => item.evidence_refs || []),
+    });
+    return sendOk(reply, request.requestId, { result });
+  });
+
+  registerGet("/kag/v2/forecast", async (request, reply) => {
+    const scope = requireProjectScope(request);
+    const forecasts = await listRiskForecasts(pool, scope);
+    const similarCases = await findSimilarCases(pool, scope, {
+      project_id: request.query?.project_id || scope.projectId,
+      window_days: request.query?.window_days,
+      top_k: request.query?.top_k || 3,
+    });
+    return sendOk(reply, request.requestId, {
+      forecasts,
+      similar_cases_top3: similarCases.slice(0, 3),
+    });
+  });
+
+  registerPost("/kag/v2/recommendations/refresh", async (request, reply) => {
+    const scope = requireProjectScope(request);
+    const result = await refreshRecommendationsV2(pool, scope, {});
+    await writeAuditEvent(pool, {
+      projectId: scope.projectId,
+      accountScopeId: scope.accountScopeId,
+      actorUsername: request.auth?.username || null,
+      action: "kag.v2.recommendations.refresh",
+      entityType: "recommendations_v2",
+      entityId: scope.projectId,
+      status: "ok",
+      requestId: request.requestId,
+      payload: { touched: result.touched, generated: result.generated },
+      evidenceRefs: result.recommendations.flatMap((item) => item.evidence_refs || []),
+    });
+    return sendOk(reply, request.requestId, { result });
+  });
+
+  registerGet("/kag/v2/recommendations", async (request, reply) => {
+    const scope = requireProjectScope(request);
+    const recommendations = await listRecommendationsV2(pool, scope, {
+      status: request.query?.status,
+      limit: request.query?.limit,
+      all_projects: request.query?.all_projects,
+    });
+    return sendOk(reply, request.requestId, { recommendations });
+  });
+
+  registerPost("/kag/v2/recommendations/:id/status", async (request, reply) => {
+    const scope = requireProjectScope(request);
+    const body = request.body && typeof request.body === "object" ? request.body : {};
+    try {
+      const recommendation = await updateRecommendationV2Status(
+        pool,
+        scope,
+        String(request.params?.id || ""),
+        String(body?.status || "")
+      );
+      if (!recommendation) {
+        return sendError(reply, request.requestId, new ApiError(404, "recommendation_not_found", "Recommendation not found"));
+      }
+      return sendOk(reply, request.requestId, { recommendation });
+    } catch (error) {
+      return sendError(reply, request.requestId, new ApiError(400, "invalid_status", String(error?.message || error)));
+    }
+  });
+
+  registerPost("/kag/v2/recommendations/:id/feedback", async (request, reply) => {
+    const scope = requireProjectScope(request);
+    const body = request.body && typeof request.body === "object" ? request.body : {};
+    try {
+      const recommendation = await updateRecommendationV2Feedback(
+        pool,
+        scope,
+        String(request.params?.id || ""),
+        String(body?.helpful || "unknown"),
+        String(body?.note || "")
+      );
+      if (!recommendation) {
+        return sendError(reply, request.requestId, new ApiError(404, "recommendation_not_found", "Recommendation not found"));
+      }
+      return sendOk(reply, request.requestId, { recommendation });
+    } catch (error) {
+      return sendError(reply, request.requestId, new ApiError(400, "invalid_feedback", String(error?.message || error)));
+    }
   });
 
   registerPost("/upsell/radar/refresh", async (request, reply) => {
