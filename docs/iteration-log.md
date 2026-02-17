@@ -57,3 +57,13 @@
 
 - PM видит baseline, drivers, confidence и top-k вклады прямо в карточке рекомендации;
 - вероятности forecast не демонстрируют резких скачков на стабильном входе (по тестам).
+
+## Iteration 2.a (mobile UX hotfix): адаптив Control Tower
+
+Цель: сделать рабочий мобильный UX без потери навигации и проектного контекста.
+
+Сделано:
+
+- project sidebar доступен на телефоне как `Sheet` через текущую burger-кнопку в header;
+- для mobile добавлен нижний tabbar из 6 бизнес-разделов (`dashboard/messages/agreements/risks/finance/offers`);
+- desktop-поведение сохранено: nav rail + collapsible project sidebar.

@@ -12,7 +12,7 @@ import { projectDotClass } from "@/lib/project-colors";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
-export function ProjectSidebar({ open = true }) {
+export function ProjectSidebarPanel({ open = true, onRequestClose = null }) {
   const router = useRouter();
   const [activatingId, setActivatingId] = useState("");
   const {
@@ -44,8 +44,18 @@ export function ProjectSidebar({ open = true }) {
       await apiFetch(`/projects/${normalized}/select`, { method: "POST" });
       selectProject(normalized);
       await refreshProjects();
+      if (typeof onRequestClose === "function") {
+        onRequestClose();
+      }
     } finally {
       setActivatingId("");
+    }
+  }
+
+  function onSelectAllProjects() {
+    selectAllProjects();
+    if (typeof onRequestClose === "function") {
+      onRequestClose();
     }
   }
 
@@ -59,13 +69,7 @@ export function ProjectSidebar({ open = true }) {
   }
 
   return (
-    <aside
-      className={cn(
-        "sticky top-0 h-svh shrink-0 overflow-hidden border-r bg-sidebar transition-[width,opacity] duration-200 ease-linear",
-        open ? "w-[18.5rem] opacity-100" : "w-0 opacity-0"
-      )}
-    >
-      <div className={cn("flex h-full flex-col p-3", !open && "pointer-events-none")}>
+    <div className={cn("flex h-full flex-col p-3", !open && "pointer-events-none")}>
         <div className="space-y-2 pb-3">
           <p className="text-sm font-semibold text-sidebar-foreground">Проекты</p>
           <p className="text-xs text-sidebar-foreground/70">Выбор: {isAllProjects ? "Все проекты" : selectedProject?.name || "-"}</p>
@@ -74,7 +78,7 @@ export function ProjectSidebar({ open = true }) {
               Обновить
             </Button>
             {inPortfolio && canSelectAll ? (
-              <Button type="button" size="sm" variant="outline" onClick={selectAllProjects} disabled={!projects.length || isAllProjects}>
+              <Button type="button" size="sm" variant="outline" onClick={onSelectAllProjects} disabled={!projects.length || isAllProjects}>
                 Все проекты
               </Button>
             ) : null}
@@ -85,7 +89,7 @@ export function ProjectSidebar({ open = true }) {
           {inPortfolio && canSelectAll ? (
             <button
               type="button"
-              onClick={selectAllProjects}
+              onClick={onSelectAllProjects}
               className={cn(
                 "w-full rounded-md border p-2 text-left transition-colors",
                 isAllProjects ? "border-sidebar-primary/60 bg-sidebar-accent/60" : "border-sidebar-border hover:bg-sidebar-accent/40"
@@ -175,7 +179,19 @@ export function ProjectSidebar({ open = true }) {
             </Button>
           </div>
         </div>
-      </div>
+    </div>
+  );
+}
+
+export function ProjectSidebar({ open = true }) {
+  return (
+    <aside
+      className={cn(
+        "sticky top-0 hidden h-svh shrink-0 overflow-hidden border-r bg-sidebar transition-[width,opacity] duration-200 ease-linear md:block",
+        open ? "w-[18.5rem] opacity-100" : "w-0 opacity-0"
+      )}
+    >
+      <ProjectSidebarPanel open={open} />
     </aside>
   );
 }
