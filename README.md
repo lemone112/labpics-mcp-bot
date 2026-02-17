@@ -130,6 +130,7 @@ docker compose up --build
 
 - `POSTGRES_PASSWORD`
 - `AUTH_PASSWORD`
+- `EDGE_BASIC_AUTH_PASSWORD_HASH` (optional, для внешнего edge-gate)
 - `OPENAI_API_KEY`
 - `CHATWOOT_API_TOKEN`
 
@@ -147,6 +148,8 @@ docker compose up --build
 - `API_UPSTREAM`
 - `WEB_UPSTREAM`
 - `ENABLE_EDGE_PROXY`
+- `EDGE_BASIC_AUTH_ENABLED` (`true/false`, optional)
+- `EDGE_BASIC_AUTH_USER` (optional)
 - `CORS_ORIGIN`
 - `AUTH_USERNAME`
 - `SESSION_COOKIE_NAME`
@@ -174,6 +177,20 @@ docker compose up --build
 
 - Для `deploy-dev` и `deploy-prod` нужен self-hosted GitHub Actions Runner на сервере деплоя.
 - Runner должен иметь Docker Engine + Docker Compose plugin и права на запуск `docker compose`.
+
+### Edge access gate (recommended)
+
+Если нужно закрыть dashboard вторым слоем (поверх app login), включи Basic Auth на Caddy edge:
+
+1. `EDGE_BASIC_AUTH_ENABLED=true` (Variable)
+2. `EDGE_BASIC_AUTH_USER=<user>` (Variable)
+3. `EDGE_BASIC_AUTH_PASSWORD_HASH=<bcrypt_hash>` (Secret)
+
+Получить bcrypt hash можно командой:
+
+```bash
+docker run --rm caddy:2.9.1-alpine caddy hash-password --plaintext "STRONG_PASSWORD"
+```
 
 ---
 

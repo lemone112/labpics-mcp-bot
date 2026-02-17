@@ -1,6 +1,11 @@
 {$DOMAIN:dashboard.lab.pics} {
   encode zstd gzip
 
+  @edge_protected expression `{env.EDGE_BASIC_AUTH_ENABLED} == "true"`
+  basic_auth @edge_protected bcrypt "Restricted" {
+    {$EDGE_BASIC_AUTH_USER:edge} {$EDGE_BASIC_AUTH_PASSWORD_HASH:$2a$14$Zkx19XLiW6VYouLHR5NmfOFU0z2GTNmpkT/5qqR7hx4IjWJPDhjvG}
+  }
+
   @api path /api/*
   handle @api {
     uri strip_prefix /api
