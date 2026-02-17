@@ -31,3 +31,13 @@
 - Failure modes
 - Операционные заметки
 - Критерии приёмки
+
+## Индекс (Roadmap CRM/PM/Sales)
+
+- [0010 — Accounts & Opportunities (CRM ядро) v1](./0010-accounts-and-opportunities-v1.md)
+- [0011 — Signals & Next Best Action (продажи + PM)](./0011-signals-and-next-best-action.md)
+- [0012 — Offers / SOW / Quote Builder](./0012-offers-sow-and-quote-builder.md)
+- [0013 — Campaigns / Sequences / Compliance](./0013-campaigns-sequences-and-compliance.md)
+- [0014 — Health Score & Risk Radar](./0014-health-score-and-risk-radar.md)
+- [0015 — Case Library & Similar Projects](./0015-case-library-and-similar-projects.md)
+- [0016 — Revenue Analytics / Margin / Forecast](./0016-revenue-analytics-margin-and-forecast.md)
