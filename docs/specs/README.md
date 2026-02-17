@@ -55,3 +55,4 @@
 - [0006 — Проекты, клиенты и связывание идентичностей](./0006-projects-clients-and-links.md)
 - [0007 — Cadence джоб и контроль стоимости](./0007-jobs-cadence-and-cost-control.md)
 - [0008 — Аудит, приватность и retention](./0008-audit-privacy-retention.md)
+- [0009 — Web IA: страницы и навигация](./0009-web-ia-pages-navigation.md)
