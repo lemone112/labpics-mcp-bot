@@ -6,6 +6,7 @@ This document prevents drift between what the system **does today** and what is 
 
 The MVP is defined by:
 
+- Login/password authentication + server sessions
 - Project selection and project-scoped data access
 - Chatwoot → DB sync
 - Chunking + embeddings stored in Postgres/pgvector
