@@ -1,154 +1,171 @@
 # Статус продукта и roadmap (Production-Ready Plan)
 
-> Обновлено: 2026-02-18 (на основе 3-циклового deep analysis)
+> Обновлено: 2026-02-18 (post Iter 0-2, recalibrated на основе верификации кодовой базы)
 > Детальный анализ: [`docs/product-structure-analysis.md`](./product-structure-analysis.md)
 
 ---
 
-## 1) Что уже в MVP
+## 1) Текущее состояние — что сделано
 
-### Платформа (зрелость: 80%)
-- Session auth + CSRF + request_id.
-- Жёсткий project/account scope.
-- Scheduler/worker и audit trail.
-- **Известные gaps:** plaintext credentials, нет API rate limiting, session UPDATE на каждый запрос.
+### Платформа (зрелость: 80% → 92%)
 
-### Интеграции (зрелость: 85%)
-- Инкрементальный sync Chatwoot/Linear/Attio.
-- Retry/DLQ через `connector_errors`.
-- Reconciliation метрики полноты.
-- **Известные gaps:** нет circuit breaker, нет alerting на completeness drop.
+**Было:** Session auth + CSRF, plaintext пароли, нет rate limiting, session UPDATE на каждый запрос.
 
-### Intelligence (зрелость: 65%)
-- LightRAG query API (`/lightrag/query`).
-- Vector retrieval + source evidence в одном ответе.
-- Query observability (`lightrag_query_runs`).
-- **Известные gaps:** fullscan ILIKE, нет кеширования, нет quality score.
+**Сделано (Iter 0 + 1 + 2):**
+- ✅ Bcrypt password hashing с автодетектом формата (`isBcryptHash()`)
+- ✅ `AUTH_CREDENTIALS` без default values — startup fail если не задано
+- ✅ API rate limiting: 200 req/min per session, 60 req/min per IP
+- ✅ Session cache в Redis (TTL 60s) + batched `last_seen_at` (раз в 30s)
+- ✅ Structured JSON logging (Pino с serializers, request_id, correlation)
+- ✅ Graceful shutdown (SIGTERM → 10s drain → close Redis → close DB pool)
 
-### Frontend (зрелость: 70%)
-- Control Tower (6 sections) + единая shadcn дизайн-система.
-- Mobile: project sheet + bottom tabbar.
-- Search страница переведена на LightRAG.
-- **Известные gaps:** 11 transforms без useMemo, 1s ticker, нет code splitting.
+**Оставшиеся gaps:**
+- Нет Zod/schema validation на POST endpoints (ручная проверка body)
+- `hydrateSessionScope()` может вызываться дважды (onRequest + preValidation)
 
-### Инфраструктура (зрелость: 40%)
-- Docker Compose + GitHub Actions CI.
-- Redis Pub/Sub + SSE для real-time.
-- **Известные gaps:** root user в Docker, открытые DB порты, нет backup, нет healthcheck.
+### Интеграции / Connectors (зрелость: 85% → 92%)
+
+**Было:** Инкрементальный sync, DLQ, reconciliation — но нет circuit breaker, нет alerting.
+
+**Сделано (Iter 2):**
+- ✅ Circuit breaker в `fetchWithRetry()` — per-host, 5 failures threshold, 30s reset
+- ✅ Completeness alerting: при `completeness_pct < threshold` → audit event + SSE
+
+**Оставшиеся gaps:**
+- Circuit breaker states не экспортируются в `/metrics` (функция `getCircuitBreakerStates()` есть, но не вызывается)
+- Нет pg_trgm индексов для ILIKE search в connectors
+
+### Intelligence / LightRAG (зрелость: 65% → 75%)
+
+**Было:** Рабочий vector search + ILIKE, но fullscan, нет кеша, нет quality score.
+
+**Сделано (Iter 1):**
+- ✅ LightRAG query cache: `lightrag:{projectId}:{hash(query,topK)}`, TTL 300s
+- ✅ Event-driven invalidation при embeddings_run и sync completion
+
+**Оставшиеся gaps:**
+- ILIKE fullscan без pg_trgm index (4 параллельных полнотабличных скана)
+- Нет quality score / feedback loop
+- Нет фильтрации по типу источника
+
+### Dashboard / Portfolio (зрелость: 50% → 70%)
+
+**Было:** 18-20 SQL запросов на каждый load без кеширования.
+
+**Сделано (Iter 1):**
+- ✅ Portfolio overview cache: `portfolio:{accountScopeId}:{hash(projectIds)}`, TTL 90s
+- ✅ Control Tower cache: `ct:{projectId}`, TTL 120s
+- ✅ Event-driven invalidation при `job_completed`
+
+**Оставшиеся gaps:**
+- 11 LATERAL subqueries по-прежнему при cache miss (cold path: 800-1500ms)
+- Нет materialized view для агрегатов
+- `computeClientValueScore()` в JS вместо SQL
+
+### Frontend (зрелость: 70% — без изменений)
+
+**Текущее состояние:** Next.js 16 + React 19 + shadcn/ui. 3 `useMemo` вызова (форматтеры), но chart transforms НЕ мемоизированы.
+
+**Верифицированные проблемы:**
+- Chart data transforms (`.map()`) в render path без `useMemo`
+- 1-секундный ticker в `useAutoRefresh` → continuous re-renders
+- Polling при SSE: снижен (×3), но не отключён
+- Нет code splitting (`next/dynamic` не используется в control-tower)
+- `use-project-portfolio.js`: 335 строк, 21 value в context
+
+### Инфраструктура (зрелость: 40% → 78%)
+
+**Было:** Root user, открытые порты, нет backup, нет healthcheck, нет logging.
+
+**Сделано (Iter 0 + 2):**
+- ✅ Non-root Docker user (app:1001) в обоих Dockerfiles
+- ✅ DB/Redis порты закрыты от хоста
+- ✅ Resource limits для всех контейнеров (Redis 256m, DB 1g, Server/Worker/Web 512m)
+- ✅ Healthchecks: server (wget /health), worker (pgrep), web (wget /)
+- ✅ PostgreSQL backup script (`scripts/backup.sh`) с retention policy
+- ✅ Structured JSON logging (Pino)
+- ✅ 3 CI workflows (ci-quality, deploy-dev, deploy-prod)
+
+**Оставшиеся gaps:**
+- Circuit breaker states не в `/metrics`
+- Нет alert rules (Prometheus/Alertmanager)
+- Нет backup verification (restore test)
+- Нет log aggregation (Loki/Grafana)
+- Нет runbooks
+
+---
+
+## 2) Сводка завершённых итераций
+
+| Iter | Название | Статус | Задач | Ключевые результаты |
+|------|----------|--------|-------|---------------------|
+| 0 | Security Hardening | ✅ Done | 7/7 | Bcrypt, non-root Docker, closed ports, rate limiting, resource limits, healthchecks |
+| 1 | Redis Caching Layer | ✅ Done | 8/8 | `lib/cache.js`, session/portfolio/lightrag/CT cache, event invalidation, metrics |
+| 2 | Backend Reliability | ✅ Done | 5/6 | Circuit breaker, graceful shutdown, Pino logging, backup script, completeness alerting. Zod validation отложена |
 
 ---
 
-## 2) Production-Ready Iteration Plan
-
-### Iter 0 — Security Hardening (GATE для production)
-
-> Без этой итерации деплой в production невозможен.
-
-| # | Задача | Файлы | Acceptance criteria |
-|---|--------|-------|---------------------|
-| 0.1 | Убрать default credentials | `docker-compose.yml` | `AUTH_CREDENTIALS` и `AUTH_PASSWORD` без default values. Startup fail если не заданы |
-| 0.2 | Bcrypt hashing для паролей | `server/src/index.js`, `server/package.json` | Login verify через `bcrypt.compare()`. Plaintext пароли не хранятся |
-| 0.3 | Non-root Docker user | `server/Dockerfile`, `web/Dockerfile` | `USER node` (или кастомный). `docker exec whoami` != root |
-| 0.4 | Закрыть DB/Redis порты | `docker-compose.yml` | Удалить `ports:` у db и redis. Доступ только из internal network |
-| 0.5 | API rate limiting | `server/src/index.js` | 100 req/min per session для GET, 30 req/min per IP для POST. 429 при превышении |
-| 0.6 | Resource limits | `docker-compose.yml` | `deploy.resources.limits` для каждого сервиса. OOM-kill при превышении |
-| 0.7 | Container healthchecks | `docker-compose.yml` | `healthcheck` для server (curl /health) и worker (process check) |
-
-**Зависимости:** нет
-**Параллелизм:** gate — мержить первым
-
----
-
-### Iter 1 — Redis Caching Layer
-
-> p95 `/portfolio/overview` с 800-1500ms до <50ms. Снижение DB load на 70-95%.
-
-| # | Задача | Файлы | Acceptance criteria |
-|---|--------|-------|---------------------|
-| 1.1 | Создать cache-модуль | `server/src/lib/cache.js` (новый) | `get(key)`, `set(key, value, ttl)`, `del(key)`, `invalidateByPrefix(prefix)`, `getStats()`. Graceful degradation при недоступности Redis |
-| 1.2 | Третье Redis-соединение для cache | `server/src/lib/redis.js` | `createRedisCacheClient()` — отдельное от pub/sub. Fallback → null |
-| 1.3 | Session cache | `server/src/index.js:498-507` | Session data кешируется на 60s. `last_seen_at` обновляется батчем раз в 30s. DB queries на session: 0 при cache hit |
-| 1.4 | Portfolio overview cache | `server/src/services/portfolio.js:67` | Cache key: `portfolio:{accountScopeId}:{hash(projectIds)}`. TTL 90s. Invalidation при `job_completed` |
-| 1.5 | LightRAG query cache | `server/src/services/lightrag.js:147` | Cache key: `lightrag:{projectId}:{hash(query,topK)}`. TTL 300s. Observability: `cached: true` в `lightrag_query_runs` |
-| 1.6 | Control Tower cache | `server/src/services/intelligence.js:573` | Cache key: `ct:{projectId}`. TTL 120s |
-| 1.7 | Event-driven invalidation | `server/src/index.js:356` | `job_completed` → invalidate `portfolio:*`, `ct:{projectId}`, `lightrag:{projectId}:*` по job_type |
-| 1.8 | Cache metrics | `server/src/index.js` `/metrics` | `cache_hits_total`, `cache_misses_total`, `cache_sets_total`, `cache_invalidations_total` в Prometheus-формате |
-
-**Зависимости:** Redis running (уже есть)
-**Параллелизм:** можно с Iter 2, 3
-**Memory budget:** ~4-5MB из 128MB доступных
-
----
-
-### Iter 2 — Backend Reliability
-
-> Внешние API падения не каскадируются. Graceful restart без потери запросов.
-
-| # | Задача | Файлы | Acceptance criteria |
-|---|--------|-------|---------------------|
-| 2.1 | Circuit breaker для HTTP calls | `server/src/lib/http.js` | State machine: closed → open (при 5 failures / 60s) → half-open (probe через 30s). При open state — instant fail без HTTP call |
-| 2.2 | Graceful shutdown | `server/src/index.js`, `worker-loop.js` | SIGTERM handler: drain in-flight requests (10s) → close SSE → close Redis → close DB pool → exit 0 |
-| 2.3 | Structured JSON logging | `server/src/index.js` | Pino logger: JSON формат, `request_id` в каждой строке, `level`/`msg`/`time`/`pid`. Configurable через `LOG_LEVEL` |
-| 2.4 | Input validation (POST endpoints) | `server/src/index.js` | Zod schemas для: `/crm/accounts`, `/crm/opportunities`, `/offers`, `/outbound/draft`. 400 при invalid body |
-| 2.5 | PostgreSQL backup | `scripts/backup.sh` (новый), `docker-compose.yml` | `pg_dump` cron (daily). Retention: 7 дней. Script: backup + upload + cleanup |
-| 2.6 | Completeness alerting | `server/src/services/reconciliation.js` | При `completeness_pct < CONNECTOR_RECONCILIATION_MIN_COMPLETENESS_PCT` → audit event `completeness_drop` + SSE alert |
-
-**Зависимости:** Iter 0 (security)
-**Параллелизм:** можно с Iter 1, 3
-
----
+## 3) Оставшиеся итерации (рекалиброваны)
 
 ### Iter 3 — Frontend Performance
 
 > Lighthouse Performance > 85. Нет jank при навигации.
 
-| # | Задача | Файлы | Acceptance criteria |
-|---|--------|-------|---------------------|
-| 3.1 | Memoize chart transforms | `web/features/control-tower/section-page.jsx:246-440` | Все 11 `.map()` обёрнуты в `useMemo()` с корректными dependencies |
-| 3.2 | Extract chart card component | `web/features/control-tower/section-page.jsx` | `<DashboardChartCard />` — отдельный компонент, обёрнут в `React.memo()` |
-| 3.3 | Fix ticker interval | `web/hooks/use-auto-refresh.js:57-62` | `secondsAgo` обновляется раз в 5s (не 1s). State updates сокращены в 5x |
-| 3.4 | Disable polling при SSE | `web/hooks/use-auto-refresh.js` | При `sseConnected === true` polling полностью отключён (не `intervalMs * 3`) |
-| 3.5 | Code splitting | `web/app/control-tower/[section]/page.jsx` | `next/dynamic` для section-page.jsx. Bundle size основной страницы < 200KB JS |
-| 3.6 | Refactor project-portfolio hook | `web/hooks/use-project-portfolio.js` | Разделить на 3 хука: `useProjectSelection`, `useProjectRefresh`, `useProjectState`. Каждый < 80 строк |
+**Приоритет: HIGH** — единственная зона без улучшений.
+
+| # | Задача | Файлы | Acceptance criteria | Статус |
+|---|--------|-------|---------------------|--------|
+| 3.1 | Memoize chart transforms | `section-page.jsx` | Все chart data `.map()` обёрнуты в `useMemo()` (сейчас 3 useMemo для форматтеров, transforms не мемоизированы) | Pending |
+| 3.2 | Extract chart card → `React.memo` | `section-page.jsx` | `<DashboardChartCard />` — отдельный компонент в `memo()` | Pending |
+| 3.3 | Ticker interval 1s → 5s | `use-auto-refresh.js` | `secondsAgo` обновляется раз в 5s. State updates ×5 меньше | Pending |
+| 3.4 | Disable polling при SSE | `use-auto-refresh.js` | При `sseConnected === true` → polling полностью отключён (сейчас `intervalMs * 3`) | Pending |
+| 3.5 | Code splitting | `[section]/page.jsx` | `next/dynamic` для `section-page.jsx`. Bundle < 200KB JS | Pending |
+| 3.6 | Refactor portfolio hook | `use-project-portfolio.js` | 335 строк → 3 хука по <80 строк. 21 context value → 3 focused contexts | Pending |
 
 **Зависимости:** нет
-**Параллелизм:** можно с Iter 1, 2
+**Effort:** Medium
 
 ---
 
 ### Iter 4 — Database Optimization
 
-> Portfolio overview < 200ms при 10 проектах (cold). LightRAG ILIKE использует index.
+> Portfolio overview < 200ms (cold, 10 проектов). LightRAG ILIKE → index scan.
 
-| # | Задача | Файлы | Acceptance criteria |
-|---|--------|-------|---------------------|
-| 4.1 | Strategic indexes | `server/db/migrations/0019_strategic_indexes.sql` | Indexes на: `crm_account_contacts(project_id, account_id)`, `crm_opportunity_stage_events(opportunity_id)`, `connector_errors(project_id, status, error_kind)`, `(account_scope_id, created_at)` на 5+ таблиц |
-| 4.2 | pg_trgm для ILIKE search | `server/db/migrations/0020_trgm_indexes.sql` | `CREATE EXTENSION IF NOT EXISTS pg_trgm`. GIN indexes: `cw_messages(body gin_trgm_ops)`, `linear_issues_raw(title gin_trgm_ops)`, `attio_opportunities_raw(name gin_trgm_ops)` |
-| 4.3 | Materialized view для portfolio | `server/db/migrations/0021_mv_portfolio.sql` | `mv_portfolio_dashboard` с REFRESH CONCURRENTLY. Refresh при `connectors_sync_cycle` completion |
-| 4.4 | Оптимизация LATERAL → batch | `server/src/services/portfolio.js:113-177` | Заменить 11 LATERAL subqueries на 4-5 отдельных batch-запросов с `WHERE project_id = ANY($1)`. Hash join вместо nested loop |
-| 4.5 | Cleanup orphaned tables | `server/db/migrations/0022_cleanup.sql` | `DROP TABLE IF EXISTS app_users, signup_requests` (после верификации что не используются) |
-| 4.6 | Partitioning audit_events | `server/db/migrations/0023_partitioning.sql` | Range partition по `created_at` (monthly). Auto-create future partitions. Drop partitions older than 6 months |
+**Приоритет: HIGH** — cold path по-прежнему 800-1500ms.
 
-**Зависимости:** Iter 1 (для A/B сравнения before/after)
-**Параллелизм:** после Iter 1
+| # | Задача | Файлы | Acceptance criteria | Статус |
+|---|--------|-------|---------------------|--------|
+| 4.1 | pg_trgm для ILIKE search | Новая миграция | `CREATE EXTENSION pg_trgm`. GIN indexes на `cw_messages(body)`, `linear_issues_raw(title)`, `attio_opportunities_raw(name)` | Pending |
+| 4.2 | Materialized view portfolio | Новая миграция | `mv_portfolio_dashboard` с REFRESH CONCURRENTLY при sync completion | Pending |
+| 4.3 | LATERAL → batch queries | `portfolio.js` | Заменить 11 LATERAL subqueries на 4-5 batch запросов с `WHERE project_id = ANY($1)` | Pending |
+| 4.4 | Strategic indexes | Новая миграция | Indexes на `connector_errors(project_id, status, error_kind)`, `crm_account_contacts(project_id, account_id)` | Pending |
+| 4.5 | Cleanup orphaned tables | Новая миграция | Drop `app_users`, `signup_requests` (после верификации) | Pending |
+| 4.6 | Partitioning audit_events | Новая миграция | Range partition по `created_at` (monthly). Auto-create future. Drop > 6 months | Pending |
+
+**Примечание:** 18 миграций и ~120 indexes уже существуют (включая production migration 0017). Задачи 4.1 и 4.4 — дополнительные к существующим.
+
+**Зависимости:** Iter 1 (для A/B сравнения with/without cache)
+**Effort:** High
 
 ---
 
 ### Iter 5 — Observability & Ops
 
-> MTTD (mean time to detect) < 5 минут для критических инцидентов.
+> MTTD < 5 минут для критических инцидентов.
 
-| # | Задача | Файлы | Acceptance criteria |
-|---|--------|-------|---------------------|
-| 5.1 | Extended Prometheus metrics | `server/src/index.js` `/metrics` | Метрики: `db_pool_total/idle/waiting`, `cache_*`, `sse_connections_total`, `connector_last_success_at`, `connector_error_rate`, `lightrag_query_duration_seconds` |
-| 5.2 | Alert rules | `infra/alerts/rules.yml` (новый) | Rules: connector_lag > 30min, error_rate > 5%, pool_usage > 80%, cache_hit_ratio < 50% |
-| 5.3 | Backup verification | `scripts/verify-backup.sh` (новый) | Weekly: restore backup в temporary DB → verify table counts → cleanup. Exit 1 при failure |
-| 5.4 | Log aggregation | `docker-compose.yml` | Loki sidecar или managed solution. Structured logs accessible через query interface |
-| 5.5 | Runbook updates | `docs/runbooks/` | Инструкции: Redis failure, DB pool exhaustion, connector timeout, OOM, disk full |
-| 5.6 | CI smoke tests | `.github/workflows/ci-quality.yml` | Post-deploy: curl /health, /auth/login, /portfolio/overview, /lightrag/status. Fail deployment при non-200 |
+**Приоритет: MEDIUM** — CI уже есть, метрики частично есть. Не блокирует production, но critical для operations.
 
-**Зависимости:** Iter 0, 2 (logging, health)
-**Параллелизм:** после Iter 2
+| # | Задача | Файлы | Acceptance criteria | Статус |
+|---|--------|-------|---------------------|--------|
+| 5.1 | Circuit breaker states в /metrics | `index.js` | Вызвать `getCircuitBreakerStates()` в metrics handler. Экспорт: host, state, failures, lastFailureAt | Pending |
+| 5.2 | Extended Prometheus metrics | `index.js` | `db_pool_total/idle/waiting`, `sse_connections_total`, `connector_last_success_at`, `lightrag_query_duration_seconds` | Pending |
+| 5.3 | Alert rules | `infra/alerts/rules.yml` (новый) | connector_lag > 30min, error_rate > 5%, pool_usage > 80%, cache_hit_ratio < 50% | Pending |
+| 5.4 | Backup verification | `scripts/verify-backup.sh` (новый) | Weekly: restore → verify table counts → cleanup. Exit 1 при failure | Pending |
+| 5.5 | Log aggregation | `docker-compose.yml` | Loki/Grafana sidecar или managed solution | Pending |
+| 5.6 | Runbooks | `docs/runbooks/` | Redis failure, DB pool exhaustion, connector timeout, OOM, disk full | Pending |
+
+**Зависимости:** Iter 0, 2 (logging, health) — выполнены
+**Effort:** Medium
 
 ---
 
@@ -156,50 +173,85 @@
 
 > LightRAG feedback собирается. Quality trend наблюдаем.
 
-| # | Задача | Файлы | Acceptance criteria |
-|---|--------|-------|---------------------|
-| 6.1 | Quality score proxy | `server/src/services/lightrag.js` | `quality_score` в response: f(evidence_count, source_diversity, chunk_relevance). Range 0-100 |
-| 6.2 | Feedback endpoint | `server/src/index.js`, новая миграция | `POST /lightrag/feedback` — `{ query_run_id, rating: "up"|"down", comment? }`. Persist в `lightrag_feedback` |
-| 6.3 | Evidence source filters | `server/src/services/lightrag.js` | Параметр `sourceFilter: ["messages", "issues", "deals"]`. Фильтрация на уровне query, не post-processing |
-| 6.4 | Auto-dedup preview | `server/src/services/identity-graph.js` | При sync completion → trigger identity suggestions preview. Результат в SSE event |
-| 6.5 | Completeness diff report | `server/src/services/reconciliation.js` | При каждом reconciliation run → сравнение с предыдущим. `completeness_delta` в audit_events |
+**Приоритет: LOW** — улучшение UX, не блокирует работоспособность.
+
+| # | Задача | Файлы | Acceptance criteria | Статус |
+|---|--------|-------|---------------------|--------|
+| 6.1 | Quality score proxy | `lightrag.js` | `quality_score` в response: f(evidence_count, source_diversity). Range 0-100 | Pending |
+| 6.2 | Feedback endpoint | `index.js`, новая миграция | `POST /lightrag/feedback` — `{ query_run_id, rating, comment? }` | Pending |
+| 6.3 | Evidence source filters | `lightrag.js` | Параметр `sourceFilter: ["messages", "issues", "deals"]` | Pending |
+| 6.4 | Auto-dedup preview | `identity-graph.js` | При sync completion → identity suggestions preview в SSE | Pending |
+| 6.5 | Completeness diff report | `reconciliation.js` | Delta между sync-циклами в audit_events | Pending |
 
 **Зависимости:** Iter 1 (cache), Iter 4 (indexes)
-**Параллелизм:** последняя итерация
+**Effort:** Medium
 
 ---
 
-## 3) Execution Order
+### Iter 7 — Input Validation & API Hardening (новая)
 
-```
-Iter 0 (security) ─────────────────────────┐
-                                            ├── GATE: merge to production branch
-Iter 1 (Redis cache) + Iter 3 (frontend) ──┤  (параллельно)
-                                            │
-Iter 2 (reliability) ──────────────────────┤
-                                            │
-Iter 4 (DB optimization) ─────────────────┤
-                                            │
-Iter 5 (observability) ───────────────────┤
-                                            │
-Iter 6 (quality & UX) ────────────────────┘
-```
+> Все POST endpoints защищены schema validation. Нет unhandled edge cases.
 
-**Всего задач:** 43
-**Итераций:** 7 (включая Iter 0)
+**Приоритет: LOW** — текущая ручная валидация работает, но не масштабируется.
+
+| # | Задача | Файлы | Acceptance criteria | Статус |
+|---|--------|-------|---------------------|--------|
+| 7.1 | Zod schemas для CRM endpoints | `index.js` | `/crm/accounts`, `/crm/opportunities` — Zod validation, 400 при invalid | Pending |
+| 7.2 | Zod schemas для offers/outbound | `index.js` | `/offers`, `/outbound/draft` — Zod validation | Pending |
+| 7.3 | Zod schemas для auth/admin | `index.js` | `/auth/login`, `/admin/*` — Zod validation | Pending |
+| 7.4 | Error response standardization | `index.js` | Единый формат ошибок: `{ error: string, details?: ZodError[] }` | Pending |
+
+**Зависимости:** нет
+**Effort:** Low
 
 ---
 
-## 4) Явно вне текущего scope
+## 4) Рекомендуемый порядок выполнения
 
-- Любые интеграции и решения, завязанные на `/kag/*`.
+```
+✅ Iter 0 (security) ──────── DONE
+✅ Iter 1 (Redis cache) ───── DONE
+✅ Iter 2 (reliability) ───── DONE (5/6, zod → Iter 7)
+                                │
+    Iter 3 (frontend) ─────────┤  ← NEXT (HIGH priority, единственная нетронутая зона)
+                                │
+    Iter 4 (DB optimization) ──┤  ← HIGH priority (cold path ещё 800-1500ms)
+                                │
+    Iter 5 (observability) ────┤  ← MEDIUM (operations readiness)
+                                │
+    Iter 6 (quality & UX) ────┤  ← LOW (feature enhancement)
+                                │
+    Iter 7 (validation) ──────┘  ← LOW (tech debt)
+```
+
+**Итого:** 3 итерации завершены (20/21 задач). Осталось 4 итерации (26 задач).
+
+---
+
+## 5) Матрица зрелости
+
+| Зона | До (Iter 0) | После (Iter 0-2) | Target (все итерации) |
+|------|-------------|-------------------|----------------------|
+| Платформа | 80% | **92%** | 98% |
+| Connectors | 85% | **92%** | 97% |
+| Intelligence | 65% | **75%** | 92% |
+| Dashboard | 50% | **70%** | 90% |
+| Frontend | 70% | **70%** | 90% |
+| Инфраструктура | 40% | **78%** | 95% |
+| **Среднее** | **65%** | **80%** | **94%** |
+
+---
+
+## 6) Явно вне scope
+
+- Интеграции и решения на `/kag/*` (legacy, paused).
 - Black-box рекомендационные агенты без evidence.
-- RBAC / multi-user auth (осознанное решение — single-user auth + scope достаточен для MVP).
+- RBAC / multi-user auth (single-user auth + scope достаточен для MVP).
 - Дорогие LLM-решения в критических операционных циклах.
 
 ---
 
-## 5) Связанные документы
+## 7) Связанные документы
 
 - Детальный анализ: [`docs/product-structure-analysis.md`](./product-structure-analysis.md)
 - Iteration log: [`docs/iteration-log.md`](./iteration-log.md)
