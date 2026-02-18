@@ -1,52 +1,38 @@
-# Документация продукта Labpics Dashboard
+# Документация Labpics Dashboard (LightRAG-only)
 
-Эта папка — актуальная техническая документация по системе:
+Этот каталог описывает актуальную модель продукта: **только LightRAG** + интеграции + UI + эксплуатация.
 
-- RAG + KAG контур,
-- интеграции (Chatwoot / Linear / Attio),
-- автоматизации и фоновым циклам,
-- модели данных в Postgres,
-- API и эксплуатационным практикам.
+## Быстрый порядок чтения
 
-## С чего начать
-
-1. Общий обзор и запуск:
-   - [`README.md`](../README.md)
-2. Продуктовый обзор (ценность, сценарии, контуры):
+1. Продукт:
    - [`docs/product/overview.md`](./product/overview.md)
-3. Архитектура и техстек:
+2. Архитектура:
    - [`docs/architecture.md`](./architecture.md)
-4. Платформенные инварианты (scope / audit / evidence / deterministic):
    - [`docs/platform-architecture.md`](./platform-architecture.md)
-5. Модель данных (основной фокус по БД):
+   - [`docs/lightrag-contract.md`](./lightrag-contract.md)
+3. База данных:
    - [`docs/data-model.md`](./data-model.md)
-6. Frontend + дизайн (shadcn/ui, anime.js, UI-логика):
-   - [`docs/frontend-design.md`](./frontend-design.md)
-7. Пайплайны и расписание автоматизаций:
-   - [`docs/pipelines.md`](./pipelines.md)
-8. API (актуальные группы эндпоинтов):
+4. API:
    - [`docs/api.md`](./api.md)
-9. KAG-слои:
-   - Базовый recommendations: [`docs/kag_recommendations.md`](./kag_recommendations.md)
-   - Forecasting + recommendations v2: [`docs/kag_forecasting_recommendations.md`](./kag_forecasting_recommendations.md)
-10. Операционная эксплуатация:
+5. Автоматизации:
+   - [`docs/pipelines.md`](./pipelines.md)
+6. Frontend и дизайн:
+   - [`docs/frontend-design.md`](./frontend-design.md)
+7. Эксплуатация:
    - [`docs/runbooks.md`](./runbooks.md)
    - [`docs/deployment.md`](./deployment.md)
-11. Ручные e2e-сценарии:
+8. Продуктовые сценарии:
    - [`docs/scenarios.md`](./scenarios.md)
-12. Лог итераций и самоанализ:
-   - [`docs/iteration-log.md`](./iteration-log.md)
+9. План развития:
+   - [`docs/mvp-vs-roadmap.md`](./mvp-vs-roadmap.md)
+10. Спеки:
+   - [`docs/specs/README.md`](./specs/README.md)
+11. Термины:
+   - [`docs/glossary.md`](./glossary.md)
 
-## Где что используется
+## Жёсткий контракт для разработки
 
-- **RAG**: поиск по evidence и chunk-данным (`rag_chunks`, embeddings).
-- **KAG v1**: graph/signals/scores/NBA для PM.
-- **KAG v2**: event-log, snapshots, similarity, forecasting, recommendations v2 lifecycle.
-- **Connectors**: инкрементальный sync + retry/backoff + DLQ по интеграциям.
-
-## Дополнительно
-
-- Product roadmap: [`docs/mvp-vs-roadmap.md`](./mvp-vs-roadmap.md)
-- Продуктовые спеки: [`docs/specs/README.md`](./specs/README.md)
-- Термины: [`docs/glossary.md`](./glossary.md)
-- Стиль документации: [`docs/style-guide.md`](./style-guide.md)
+- По умолчанию включен режим `LIGHTRAG_ONLY=1`.
+- В разработке и продуктовых задачах используется только LightRAG API.
+- Роуты `/kag/*` считаются legacy и не входят в dev-contract (`410 kag_disabled`).
+- UI обязан опираться на LightRAG + operational charts.

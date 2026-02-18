@@ -1,18 +1,14 @@
-# API reference (актуально)
+# API reference (LightRAG-only)
 
-Базовые URL:
+Базовый backend URL: `http://localhost:8080`  
+UI обычно ходит через `NEXT_PUBLIC_API_BASE_URL` (например `/api`).
 
-- для UI: `NEXT_PUBLIC_API_BASE_URL` (обычно `/api`)
-- прямой backend: `http://localhost:8080`
+Каждый ответ содержит:
 
-Ответы содержат:
+- `request_id` в теле
+- `x-request-id` в заголовке
 
-- `request_id` в body,
-- `x-request-id` в headers.
-
----
-
-## 1) Доступ и авторизация
+## 1) Auth/session
 
 Public:
 
@@ -21,31 +17,43 @@ Public:
 - `POST /auth/login`
 - `POST /auth/logout`
 - `GET /auth/me`
-- `GET /auth/signup/status`
 
-Остальные маршруты:
+Protected routes требуют:
 
-- требуют валидную session cookie,
-- mutating-запросы требуют CSRF (`x-csrf-token`).
+- session cookie
+- CSRF header (`x-csrf-token`) для mutating методов
 
----
-
-## 2) Core endpoints
-
-### Projects
+## 2) Projects
 
 - `GET /projects`
 - `POST /projects`
 - `POST /projects/:id/select`
 
-### Search / RAG
+## 3) LightRAG
 
-- `POST /search`
-- `GET /contacts`
-- `GET /conversations`
-- `GET /messages`
+- `POST /lightrag/query`
+  - body: `{ query: string, topK?: number, sourceLimit?: number }`
+  - response: `answer`, `chunks`, `evidence`, `stats`
+- `POST /lightrag/refresh`
+  - запускает embeddings refresh + возвращает статус
+- `GET /lightrag/status`
+  - показывает состояния embeddings и объёмы source-данных
 
-### Jobs / Scheduler
+Legacy compatibility:
+
+- `POST /search` работает как alias к LightRAG query (`mode: "lightrag"` в ответе).
+
+## 4) Connectors / reliability
+
+- `GET /connectors/state`
+- `GET /connectors/errors`
+- `GET /connectors/reconciliation`
+- `POST /connectors/reconciliation/run`
+- `POST /connectors/sync`
+- `POST /connectors/:name/sync`
+- `POST /connectors/errors/retry`
+
+## 5) Jobs / scheduler
 
 - `POST /jobs/chatwoot/sync`
 - `POST /jobs/attio/sync`
@@ -55,96 +63,21 @@ Public:
 - `GET /jobs/scheduler`
 - `POST /jobs/scheduler/tick`
 
----
+## 6) Control Tower / product surfaces
 
-## 3) Connectors и reliability
-
-- `GET /connectors/state`
-- `GET /connectors/errors`
-- `POST /connectors/sync`
-- `POST /connectors/:name/sync`
-- `POST /connectors/errors/retry`
-
-Назначение:
-
-- запуск и диагностика инкрементального синка,
-- контроль retry/DLQ по ошибкам интеграций.
-
----
-
-## 4) KAG v1 (signals/scores/nba)
-
-- `POST /kag/refresh`
-- `GET /kag/signals`
-- `GET /kag/scores`
-- `GET /kag/recommendations`
-- `GET /kag/events`
-
-Также доступны legacy:
-
-- `POST /signals/extract`
-- `GET /signals`
-- `POST /signals/:id/status`
-- `GET /nba`
-- `POST /nba/:id/status`
-
----
-
-## 5) KAG v2 (snapshot/similarity/forecast/recommendations lifecycle)
-
-### Snapshots / outcomes
-
-- `POST /kag/snapshots/refresh`
-- `GET /kag/snapshots`
-- `GET /kag/outcomes`
-
-### Similarity
-
-- `POST /kag/similarity/rebuild`
-- `GET /kag/similar-cases`
-
-### Forecasting
-
-- `POST /kag/v2/forecast/refresh`
-- `GET /kag/v2/forecast`
-
-### Recommendations v2
-
-- `POST /kag/v2/recommendations/refresh`
-- `GET /kag/v2/recommendations`
-- `POST /kag/v2/recommendations/shown`
-- `POST /kag/v2/recommendations/:id/status`
-- `POST /kag/v2/recommendations/:id/feedback`
-- `GET /kag/v2/recommendations/:id/actions`
-- `POST /kag/v2/recommendations/:id/actions`
-- `POST /kag/v2/recommendations/actions/:actionId/retry`
-
-Дополнительно для explainability/action loop:
-
-- `GET /kag/v2/recommendations?include_hidden=true` — диагностика скрытых рекомендаций (evidence gating).
-- `POST /kag/v2/recommendations/shown` пишет серверный лог `recommendation_shown`.
-- `POST /kag/v2/recommendations/:id/actions` выполняет действие:
-  - `create_or_update_task`
-  - `send_message`
-  - `set_reminder`
-- Любое выполнение/ретрай action пишет серверный лог `recommendation_action_taken`.
-
----
-
-## 6) CRM / Offers / Analytics / Control Tower
-
-Примеры ключевых групп:
-
+- Portfolio: `/portfolio/overview`, `/portfolio/messages`
 - CRM: `/crm/accounts`, `/crm/opportunities`, `/crm/overview`
 - Offers: `/offers`, `/offers/:id/approve-*`
 - Digests: `/digests/daily*`, `/digests/weekly*`
-- Risk/analytics: `/risk/*`, `/analytics/*`
-- Control tower: `/control-tower`, `/portfolio/*`
+- Analytics: `/analytics/*`, `/risk/*`
 
----
+## 7) Запрещённые legacy маршруты
 
-## 7) Замечания по контракту
+- `/kag/*` не входят в текущий API-контракт для разработки.
+- В runtime они возвращают `410 kag_disabled`.
+- Любые новые интеграции должны использовать только LightRAG и operational endpoints.
 
-- API остаётся обратносовместимым для существующих контуров.
-- Feature flags могут отключать вычислительные KAG-части без падения API.
-- Для production-интеграций опирайтесь на runbooks и scheduler cadence из `docs/pipelines.md`.
+См. также:
+
+- [`docs/pipelines.md`](./pipelines.md)
+- [`docs/runbooks.md`](./runbooks.md)

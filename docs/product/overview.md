@@ -1,106 +1,77 @@
 # Обзор продукта Labpics Dashboard
 
-Labpics Dashboard — это операционная платформа для PM/Owner, которая объединяет:
+Labpics Dashboard — операционная панель для PM/Owner, где единый слой **LightRAG** связывает:
 
-1. **коммуникации** (Chatwoot),
-2. **delivery-сигналы** (Linear),
-3. **коммерческие данные** (Attio/CRM),
-4. **lightRAG интеллект** (поиск, сигналы, прогнозы, рекомендации).
+1. коммуникации (Chatwoot),
+2. delivery-данные (Linear),
+3. коммерческие данные (Attio + CRM),
+4. retrieval-контекст для принятия решений.
 
-Ключевая цель: дать PM не просто «ответ», а **объяснимое действие** с ссылками на факты.
+## 1) Кому полезен продукт
 
----
+- PM, ведущим несколько проектов.
+- Head of Delivery / Operations.
+- Owner/Founder, которому нужен общий срез по проектам и выручке.
 
-## 1) Для кого продукт
+## 2) Главное продуктовое обещание
 
-- PM студии, ведущий несколько проектов;
-- Head of Delivery / Operations;
-- Owner/Founder, которому нужен portfolio-level обзор рисков и ценности.
+Короткий цикл пользователя:
 
----
+**Логин -> выбор проекта -> обзор dashboard -> запрос в LightRAG -> действие в CRM/Jobs/Offers.**
 
-## 2) Базовая ценность (user outcome)
+Что это даёт:
 
-Ожидаемый быстрый цикл:
+- быстрый time-to-context без ручного просмотра десятков систем;
+- прозрачный источник каждого факта (messages/issues/deals/chunks);
+- устойчивую операционную работу за счёт retry/scheduler/reconciliation.
 
-**Войти -> выбрать проект/портфель -> увидеть состояние и риски -> получить next-best-action -> выполнить действие с доказательствами.**
+## 3) Как устроен продукт сейчас
 
-Что это даёт бизнесу:
+### 3.1 Интеграционный слой
 
-- раннее обнаружение рисков по срокам/финансам/клиенту,
-- прозрачная трассировка «почему система это рекомендует»,
-- снижение ручного time-to-context через единый control tower.
+- Инкрементальный sync Chatwoot / Linear / Attio.
+- Идемпотентные upsert-операции и дедупликация по `external_ref`.
+- Ошибки фиксируются в `connector_errors`, есть backoff-ретраи.
 
----
+### 3.2 LightRAG слой (единственный интеллект-контур)
 
-## 3) Продуктовые контуры
+- `rag_chunks` + embeddings (`pgvector`).
+- API: `POST /lightrag/query` (унифицированный запрос).
+- Ответ содержит:
+  - chunk-попадания,
+  - evidence из source-таблиц,
+  - краткий summary.
 
-## 3.1 Data ingestion
+### 3.3 UI-слой
 
-- Коннекторы Chatwoot / Linear / Attio работают инкрементально.
-- Есть retry/backoff + dead-letter (`connector_errors`) без падения всего пайплайна.
-- Для каждой синхронизации пишется процессный и доменный лог в `kag_event_log`.
-
-Назначение: надёжно и дёшево поддерживать актуальные данные без full-resync.
-
-## 3.2 lightRAG контур
-
-- `rag_chunks` + embeddings (pgvector),
-- проектно-ограниченный semantic search (`/search`),
-- выдача с evidence-ссылками.
-
-Назначение: быстро восстановить контекст из сообщений и документов.
-
-## 3.3 KAG контур v1/v2
-
-- KAG v1: graph/signals/scores/recommendations.
-- KAG v2: event log -> snapshots -> similarity -> forecasting -> recommendations lifecycle.
-- Жёсткое evidence gating: без доказательств нет primary-публикации.
-
-Назначение: принимать операционные решения на основе детерминированной логики и проверяемых источников.
-
-## 3.4 Control Tower и CRM surfaces
-
-- Portfolio cockpit с dual-sidebar и 6 разделами (`dashboard/messages/agreements/risks/finance/offers`),
-- CRM, Offers, Digests, Analytics, Jobs, Search.
-
-Назначение: единый рабочий интерфейс для ежедневного управления проектами и выручкой.
-
----
+- Control Tower: `dashboard/messages/agreements/risks/finance/offers`.
+- Отдельные рабочие поверхности: `projects/jobs/search/crm/offers/digests/analytics`.
+- Мобильный режим: projects-sheet + нижний tabbar на 6 business-разделов.
 
 ## 4) Ключевые пользовательские сценарии
 
-1. **Delivery risk**: рост блокеров + просрочка этапа -> риск в дашборде -> рекомендация по эскалации.
-2. **Client silence**: пауза клиента в переписке -> client risk forecast 7/14/30 -> follow-up action.
-3. **Scope creep**: повторные вне-scope запросы -> CR recommendation с шаблоном.
-4. **Finance pressure**: burn rate > план -> finance recommendation с пересчётом маржи.
-5. **Upsell signal**: выявленная потребность из коммуникаций -> upsell recommendation + коммерческий шаблон.
+1. Найти договорённости с клиентом по срокам через LightRAG.
+2. Проверить, почему в дашборде падает полнота sync (reconciliation).
+3. Перейти из контекста в действие: обновить opportunity/offer или запустить jobs.
+4. Сопоставить delivery-риски с сообщениями клиента в рамках одного project scope.
 
----
+## 5) Гарантии качества
 
-## 5) Продуктовые гарантии качества
+- Строгий scope-контур (`project_id`, `account_scope_id`) на API и БД.
+- Идемпотентные background-циклы и управляемые retries.
+- Единая трассировка `request_id` + `audit_events`.
+- LightRAG-only режим (`LIGHTRAG_ONLY=1`) для предсказуемой архитектуры.
 
-- strict scope (`project_id`, `account_scope_id`) на API и БД;
-- идемпотентные фоны/ретраи;
-- детерминированный decision engine (LLM не принимает бизнес-решение);
-- explainability через `evidence_refs` и source trace;
-- операционная наблюдаемость через `kag_event_log`, `worker_runs`, `job_runs`.
+## 6) Что не входит в текущий релиз
 
----
-
-## 6) Что НЕ является целью продукта
-
-- полностью автономный autopilot без подтверждений человека;
-- непрозрачные («black-box») рекомендации без источников;
-- cross-project доступ без scope-контроля;
-- дорогие LLM-вычисления там, где можно использовать deterministic rules.
-
----
+- Автономные action-рекомендации без подтверждения человека.
+- Любые решения и интеграции, завязанные на `/kag/*`.
+- Дорогие LLM-решения в критических операционных циклах.
 
 ## 7) Связанные документы
 
 - Архитектура: [`docs/architecture.md`](../architecture.md)
 - Модель данных: [`docs/data-model.md`](../data-model.md)
 - Frontend и дизайн: [`docs/frontend-design.md`](../frontend-design.md)
-- KAG forecasting/recommendations: [`docs/kag_forecasting_recommendations.md`](../kag_forecasting_recommendations.md)
+- API: [`docs/api.md`](../api.md)
 - Roadmap: [`docs/mvp-vs-roadmap.md`](../mvp-vs-roadmap.md)

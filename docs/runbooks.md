@@ -1,154 +1,74 @@
-# Runbooks (эксплуатация)
-
-Практические сценарии диагностики и восстановления для production/staging.
-
-Стартовая точка: [`docs/index.md`](./index.md)
-
----
+# Runbooks (эксплуатация, LightRAG-only)
 
 ## 1) Быстрый operational checklist
 
-1. `GET /health` и `GET /metrics` отвечают без ошибок.
-2. Есть валидная сессия и активный проект.
-3. `GET /jobs/scheduler` показывает актуальные due jobs.
-4. `GET /connectors/state` не содержит зависших `running` с устаревшим timestamp.
-5. `GET /kag/events` показывает process finish события за последний цикл.
-6. Для проблемных проектов есть `project_snapshots`, `kag_risk_forecasts`, `recommendations_v2`.
+1. `GET /health` и `GET /metrics` отвечают.
+2. Есть сессия и выбран активный проект.
+3. `GET /jobs/scheduler` показывает рабочие jobs.
+4. `GET /connectors/state` не содержит зависших `running`.
+5. `GET /lightrag/status` показывает `ready` embeddings > 0 (для search-сценариев).
 
----
+## 2) LightRAG возвращает пусто
 
-## 2) Search возвращает пусто
+Проверить:
 
-Проверки:
-
-- выбран активный проект;
-- в `rag_chunks` есть записи по проекту;
-- embeddings имеют `ready > 0`;
-- корректен `OPENAI_API_KEY`.
+- есть ли source-данные по проекту (`cw_messages`, `linear_issues_raw`, `attio_opportunities_raw`);
+- есть ли `rag_chunks` и `embedding_status='ready'`;
+- валиден ли `OPENAI_API_KEY`.
 
 Действия:
 
-1. `POST /jobs/chatwoot/sync`
+1. `POST /jobs/chatwoot/sync` (и/или Linear/Attio sync)
 2. `POST /jobs/embeddings/run`
-3. повторить `POST /search`
-
----
+3. `POST /lightrag/query`
 
 ## 3) Connector sync падает
 
-Проверки:
+Проверить:
 
 - `GET /connectors/errors`
 - `GET /connectors/state`
-- корректность env токенов:
-  - Chatwoot: `CHATWOOT_*`
-  - Linear: `LINEAR_*`
-  - Attio: `ATTIO_*`
+- токены `CHATWOOT_*`, `LINEAR_*`, `ATTIO_*`
 
 Действия:
 
-1. исправить env/квоты/доступы;
-2. выполнить `POST /connectors/:name/sync`;
-3. при накопленных ошибках — `POST /connectors/errors/retry`.
+1. Исправить доступ/квоты.
+2. `POST /connectors/:name/sync`.
+3. `POST /connectors/errors/retry`.
 
-Если ошибка повторяется:
+## 4) Падение полноты данных между системами
 
-- проверить backoff в `connector_errors`,
-- убедиться, что не достигнут `dead_letter`,
-- анализировать payload ошибки и `kag_event_log`.
+Симптом: в одной системе сделки есть, в dashboard нет.
 
----
+Проверить:
 
-## 4) Daily KAG pipeline не даёт результата
-
-Симптом:
-
-- нет новых snapshots/forecasts/recommendations после суточного окна.
-
-Проверки:
-
-- feature flags:
-  - `KAG_ENABLED`
-  - `KAG_SNAPSHOTS_ENABLED`
-  - `KAG_FORECASTING_ENABLED`
-  - `KAG_RECOMMENDATIONS_V2_ENABLED`
-- наличие source событий в `kag_event_log`.
+- `GET /connectors/reconciliation` (missing/duplicate/completeness).
+- в raw-таблицах есть ли записи с нужным `external_id`.
+- в CRM mirror корректно заполнены `source_system` и `external_ref`.
 
 Действия:
 
-1. `POST /kag/snapshots/refresh`
-2. `POST /kag/v2/forecast/refresh`
-3. `POST /kag/v2/recommendations/refresh`
-4. проверить `GET /kag/events` на `process_failed/process_warning`.
+1. Запустить `POST /connectors/reconciliation/run`.
+2. Сделать targeted sync нужного коннектора.
+3. Проверить dedupe конфликты (уникальные индексы по `external_ref`).
 
----
+## 5) Ошибка `kag_disabled` (legacy route)
 
-## 5) Recommendations v2 пустые или мало записей
+Это ожидаемо при `LIGHTRAG_ONLY=1`.  
+Если ошибка пришла из UI — значит в клиенте остались legacy вызовы `/kag/*` и их нужно удалить.
 
-Проверки:
+## 6) Auth/CSRF проблемы
 
-- есть ли forecast для проекта;
-- есть ли evidence refs в сигналах/прогнозах;
-- нет ли фильтрации по `publishable=false`.
+Проверить:
 
-Действия:
+- session cookie существует;
+- CSRF cookie соответствует `x-csrf-token`;
+- `CORS_ORIGIN` совпадает с доменом UI.
 
-1. диагностировать последние warnings в `kag_event_log`;
-2. проверить трассировку на message/issue/deal refs;
-3. перезапустить refresh после восстановления источников.
+## 7) Что мониторить постоянно
 
----
-
-## 6) Similarity не находит похожие кейсы
-
-Проверки:
-
-- есть ли `project_snapshots` за окно;
-- есть ли `case_signatures` по `window_days`;
-- корректные параметры `window_days/top_k`.
-
-Действия:
-
-1. `POST /kag/similarity/rebuild`
-2. `GET /kag/similar-cases?project_id=...&window_days=14&top_k=5`
-
----
-
-## 7) Auth loop / unauthorized
-
-Проверки:
-
-- session cookie создаётся и отправляется;
-- CSRF cookie + `x-csrf-token` для POST/PATCH/DELETE;
-- `CORS_ORIGIN` совпадает с UI origin.
-
-Действия:
-
-- очистить cookies и перелогиниться;
-- выровнять CORS/CSRF настройки.
-
----
-
-## 8) Что мониторить постоянно
-
-- доля `process_failed` и `process_warning` в `kag_event_log`,
-- рост `connector_errors` и dead-letter записей,
-- lag по `connector_sync_state.cursor_ts`,
-- тренд `sync_reconciliation_metrics.completeness_pct` и рост `missing_count/duplicate_count`,
-- доля `publishable=false` в snapshots/forecasts,
-- доля рекомендаций со статусом `new` без обработки.
-
----
-
-## 9) Как дебажить цепочку event → recommendation → action
-
-1. Найти событие в `audit_events` по `action IN ('recommendation_shown', 'recommendation_action_taken')`.
-2. В `payload` взять `recommendation_id` и `correlation_id`.
-3. Найти `recommendation_action_runs` по `correlation_id`.
-4. Если статус `failed`:
-   - проверить `attempts/max_retries`,
-   - проверить `next_retry_at`,
-   - сопоставить `request_id` в audit log.
-5. Если action типа `send_message`:
-   - пройти в `outbound_messages` через `idempotency_key` (`rec_action_send:*`),
-   - проверить `outbound_attempts` и provider ошибки.
+- `connector_errors` (рост, dead-letter).
+- лаг по `connector_sync_state`.
+- `sync_reconciliation_metrics` (completeness/missing/duplicates).
+- долю `rag_chunks` в `failed`/`processing`.
+- долю ошибок LightRAG query по `audit_events`.

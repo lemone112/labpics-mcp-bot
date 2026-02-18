@@ -1,309 +1,43 @@
-# Glossary
+# Glossary (LightRAG)
 
-Canonical terms used across `docs/` and `docs/specs/`.
+## Scope и безопасность
 
-This glossary is product-focused: each term explains what it means and why it exists in the system.
+**Project (`project_id`)** — базовая единица изоляции данных.  
+**Account scope (`account_scope_id`)** — портфельная граница для группы проектов.  
+**Active project** — выбранный проект в session context.  
+**CSRF token** — обязательный токен для mutating API-запросов.  
+**request_id** — идентификатор трассировки запроса.
 
----
+## Интеграции и ingest
 
-## Platform and scope
+**Connector** — адаптер к внешней системе (Chatwoot/Linear/Attio).  
+**Incremental sync** — загрузка только изменившихся данных.  
+**connector_sync_state** — текущее состояние синка и курсоры.  
+**connector_errors** — retry/DLQ очередь ошибок.  
+**Backoff** — рост интервала между ретраями.  
+**Idempotent upsert** — повторяемая запись без дубликатов.
 
-## Project
+## LightRAG
 
-Operational boundary selected per session (`active_project_id`). Most product actions are project-scoped.
+**LightRAG** — единственный интеллект-контур продукта (retrieval по сообщениям, задачам и сделкам).  
+**rag_chunks** — текстовые фрагменты с embeddings.  
+**Embedding status** — `pending|processing|ready|failed`.  
+**Evidence** — факт из source-данных, который объясняет ответ.  
+**lightrag_query_runs** — журнал LightRAG запросов (query/hits/evidence/answer).
 
-## Active project (`active_project_id`)
+## Reliability и observability
 
-Project selected in session context. Used by protected API routes to resolve scope for reads/writes.
+**sync_reconciliation_metrics** — метрики полноты и дублей между источниками.  
+**scheduled_jobs / worker_runs** — план и фактическое выполнение фоновых задач.  
+**audit_events** — журнал критичных действий и изменений.
 
-## Account scope (`account_scope_id`)
+## Frontend / Design
 
-Cross-project boundary for a single account/portfolio. Prevents cross-client data mixing.
+**Control Tower** — основной workspace с 6 бизнес-секциями.  
+**Page shell** — каркас: nav rail + project sidebar + контент.  
+**shadcn/ui tokens** — единые визуальные токены и компоненты.  
+**anime.js motion** — системные анимации с поддержкой reduced motion.
 
-## Project scope
+## Legacy термины
 
-Combined scoping rule using `project_id` (and `account_scope_id` where applicable). Mandatory for domain data access.
-
-## Scope guard trigger
-
-Database safeguard (`enforce_project_scope_match`) that blocks invalid cross-scope writes.
-
-## Session
-
-Server-side authenticated user context that stores identity and active project information.
-
-## CSRF token
-
-Cross-site request forgery protection token required for mutating requests from the web app.
-
-## Request ID (`request_id`)
-
-Trace identifier attached to API requests/responses for observability and debugging.
-
----
-
-## Evidence and trust model
-
-## Evidence
-
-Stable reference to source facts (message, issue, deal, chunk, URL). Derived outputs must link back to evidence.
-
-## Evidence refs (`evidence_refs`)
-
-Structured list of evidence links attached to snapshots/forecasts/recommendations/signals.
-
-## Evidence gating
-
-Quality rule: no valid evidence -> no primary publication for derived output.
-
-## Publishable
-
-Visibility flag (`publishable`) indicating whether derived data is eligible for primary user-facing output.
-
-## Provenance
-
-Traceability metadata showing origin of a fact (source object IDs, URL, and related chunk references).
-
-## Mutual indexing
-
-Bidirectional linking between source data and derived entities, so users can navigate source -> insight and insight -> source.
-
----
-
-## Ingestion and connectors
-
-## Connector
-
-Integration adapter for external systems (Chatwoot, Linear, Attio). Supports sync execution and error handling.
-
-## Connector mode
-
-Runtime connector transport mode (`http` or `mcp`) selected via environment flags.
-
-## Incremental sync
-
-Sync strategy that processes only new/changed source records using cursors and idempotent upserts.
-
-## Cursor
-
-Progress pointer for incremental ingest (for example `cursor_ts` in connector state).
-
-## Watermark (`sync_watermarks`)
-
-Legacy per-source progress cursor used to avoid full table rescans.
-
-## Connector sync state (`connector_sync_state`)
-
-Table storing current sync status, cursor progress, retry metadata, and runtime details per connector/project.
-
-## Connector errors (`connector_errors`)
-
-Retry queue / dead-letter table for connector failures, including attempts and next retry time.
-
-## Dead-letter queue (DLQ)
-
-Set of failed operations that exceeded retry limits and require manual review or later replay.
-
-## Backoff
-
-Retry delay strategy where retry intervals increase after consecutive failures.
-
-## Idempotent upsert
-
-Insert-or-update write pattern safe for retries and duplicate deliveries (`ON CONFLICT DO UPDATE`).
-
-## Dedupe key (`dedupe_key`)
-
-Key used to prevent duplicate records/events for logically same operation.
-
----
-
-## RAG layer
-
-## RAG
-
-Retrieval-Augmented Generation flow in this product: ingest -> chunk -> embed -> vector search -> evidence-backed retrieval.
-
-## Chunk (`rag_chunks`)
-
-Text fragment extracted from messages/documents and stored with embedding and status metadata.
-
-## Embedding
-
-Vector representation of chunk text used for semantic similarity search.
-
-## pgvector
-
-Postgres extension (`vector`) used to store and query embeddings efficiently.
-
-## Embedding status
-
-Chunk processing state (`pending`, `processing`, `ready`, `failed`) for retrieval readiness.
-
----
-
-## KAG layer and intelligence
-
-## KAG
-
-Knowledge-Augmented Generation approach combining structured knowledge/events/signals with deterministic decision logic.
-
-## KAG v1
-
-Graph + signals + scores + recommendation layer (`kag_nodes`, `kag_edges`, `kag_events`, scoring/recommendations tables).
-
-## KAG v2
-
-Event-first intelligence layer with snapshots, similarity, forecasting, and recommendation lifecycle.
-
-## KAG event log (`kag_event_log`)
-
-Unified timeline for domain and process events, used for explainability, diagnostics, and health monitoring.
-
-## Process event
-
-Operational event describing background process lifecycle (`process_started`, `process_finished`, `process_failed`, `process_warning`).
-
-## Snapshot (`project_snapshots`)
-
-Daily project state record containing aggregated signals/scores/metrics for trend analysis and forecasting inputs.
-
-## Past case outcome (`past_case_outcomes`)
-
-Historical result marker (for example risk/delay/finance events) used for similarity and forecast calibration.
-
-## Case signature (`case_signatures`)
-
-Feature representation of project behavior over a time window (signals + event patterns) for similar-case retrieval.
-
-## Similar case
-
-Historical project/time-window with behavior close to the current project by defined similarity metric.
-
-## Similarity engine
-
-Deterministic ranking component combining vector/time-series distance, event-pattern overlap, and context filters.
-
-## Signal
-
-Deterministic metric derived from source events that indicates operational state or risk pressure.
-
-## Score
-
-Weighted deterministic aggregate of multiple signals (for example health/risk/value/upsell scores).
-
-## Forecast (`kag_risk_forecasts`)
-
-Deterministic risk projection on 7/14/30 day horizons with confidence, drivers, similar cases, and evidence.
-
-## Top drivers
-
-Most influential features/signals contributing to a forecast or recommendation rationale.
-
-## Recommendation
-
-Action proposal generated from deterministic logic and evidence (legacy and v2 variants exist).
-
-## Recommendation lifecycle
-
-State progression for recommendations (`new -> acknowledged -> done/dismissed`) plus helpfulness feedback.
-
-## NBA (Next Best Action)
-
-Operationally prioritized recommendation that suggests the most useful next step for PM/operator.
-
-## All-projects mode
-
-Portfolio mode where multiple projects are viewed together for sections that support aggregated analysis.
-
----
-
-## Automation and operations
-
-## Job
-
-Repeatable automation step (sync, embeddings, snapshot, forecast, recommendations, scheduler tick).
-
-## Scheduler
-
-Cadence executor that claims due jobs from `scheduled_jobs` and records execution in `worker_runs`.
-
-## Worker run
-
-Single execution record for a scheduled job, with status, timestamps, details, and errors.
-
-## Connectors sync cycle
-
-Main periodic job (~15 min) that runs incremental sync across configured connectors.
-
-## Connector retry cycle
-
-Periodic job (~5 min) that retries due connector errors using backoff rules.
-
-## Daily KAG pipeline
-
-Daily chain: snapshot -> forecast refresh -> recommendations v2 refresh.
-
-## Case signatures refresh
-
-Low-frequency (typically weekly) rebuild of similarity signatures.
-
----
-
-## Frontend and design system
-
-## Control Tower
-
-Portfolio workspace in UI with business sections (`dashboard`, `messages`, `agreements`, `risks`, `finance`, `offers`) and recommendation workflows.
-
-## Page shell
-
-Main UI composition with left nav rail, project sidebar, and content area.
-
-## shadcn/ui
-
-Primary component system used in frontend, built on Radix primitives and semantic Tailwind tokens.
-
-## Radix UI
-
-Accessibility-focused headless UI primitives used as behavioral foundation for many components.
-
-## Theme tokens
-
-Semantic CSS variables (colors/radius/etc.) defined in `globals.css` and used consistently across components.
-
-## Motion system
-
-Standardized animation layer based on `animejs`, using shared duration/easing tokens and reduced-motion support.
-
-## Anime.js (`animejs`)
-
-Single animation engine used for reveal/loading/transition patterns in the UI.
-
-## Reduced motion
-
-Accessibility setting (`prefers-reduced-motion`) that disables or minimizes animations for affected users.
-
-## UX state pattern
-
-Consistent handling of loading/empty/error/success states across pages and reusable components.
-
-## Recommendation (v2)
-
-Next-best-action entity in `recommendations_v2` with deterministic rationale, priority, status lifecycle, and mandatory evidence links.
-
-## Evidence gating
-
-Publication rule for recommendations based on evidence sufficiency and quality (`evidence_count`, `evidence_quality_score`, `evidence_gate_status`).
-
-## Recommendation shown
-
-Server-side audit event (`recommendation_shown`) written when a recommendation was displayed in UI.
-
-## Recommendation action
-
-Explicit operator action started from a recommendation card (`create_or_update_task`, `send_message`, `set_reminder`).
-
-## Recommendation action run
-
-Execution log row in `recommendation_action_runs` with status, retries, error/result payload and timestamps.
+**/kag/* routes** — legacy маршруты, не входящие в dev-contract; в целевом режиме возвращают `410 kag_disabled`.

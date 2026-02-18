@@ -9,7 +9,7 @@
 Frontend (Next.js) решает три задачи:
 
 1. **Операционный интерфейс** для PM/Owner (control tower + рабочие модули).
-2. **Объяснимое принятие решений**: показать риски/рекомендации с evidence.
+2. **Объяснимый контекст**: показать риски и факты из LightRAG с evidence.
 3. **Безопасная оркестрация действий**: запуск jobs, смена статусов, review сигналов.
 
 ---
@@ -165,6 +165,9 @@ Frontend (Next.js) решает три задачи:
 
 - `usePortfolioOverview` -> `/portfolio/overview`
 - `usePortfolioMessages` -> `/portfolio/messages`
+- search-страница -> `/lightrag/query`
+
+Нормативно: frontend не должен вызывать `/kag/*`.
 
 Назначение: инкапсулировать загрузку/ошибки/reload-механику и держать страницы тонкими.
 

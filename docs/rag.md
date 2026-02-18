@@ -1,16 +1,20 @@
-# RAG & embeddings (MVP)
+# LightRAG и embeddings (MVP)
 
-Purpose: evidence-backed retrieval over client conversations.
+Назначение: единый retrieval слой по чатам, задачам и сделкам.
 
 ## Pipeline
 
-1. Sync source messages into Postgres (Chatwoot)
-2. Chunk messages into `rag_chunks`
-3. Generate embeddings for `rag_chunks` with `embedding_status='pending'`
-4. Search via vector similarity over `embedding_status='ready'`
+1. Source sync в raw-таблицы (`cw_*`, `linear_*`, `attio_*`).
+2. Чанкинг текста в `rag_chunks`.
+3. Embeddings job (`embedding_status: pending -> ready`).
+4. `POST /lightrag/query`:
+   - vector retrieval по `rag_chunks`,
+   - source lookup в raw-таблицах,
+   - сбор answer + evidence.
 
 ## Invariants
 
-- strictly project-scoped queries
-- idempotent chunking and embedding runs
-- show evidence references in UI
+- строго project-scoped выполнение;
+- идемпотентные chunk/embedding циклы;
+- ответы без evidence считаются неполноценными;
+- каждая query может быть трассирована через `lightrag_query_runs`.

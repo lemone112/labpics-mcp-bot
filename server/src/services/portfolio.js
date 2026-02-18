@@ -107,12 +107,7 @@ export async function getPortfolioOverview(pool, options = {}) {
     burnBudgetRows,
     upsellTrendRows,
     financeStageRows,
-    kagScoresByProjectRows,
-    kagScoreTrendRows,
-    kagForecastRows,
     reconciliationTrendRows,
-    recommendationFunnelRows,
-    recommendationSignalDriverRows,
   ] =
     await Promise.all([
       pool.query(
@@ -606,62 +601,6 @@ export async function getPortfolioOverview(pool, options = {}) {
       pool.query(
         `
           SELECT
-            p.id::text AS project_id,
-            p.name AS project_name,
-            COALESCE(max(CASE WHEN ks.score_type = 'project_health' THEN ks.score END), 0)::numeric(6,2) AS project_health,
-            COALESCE(max(CASE WHEN ks.score_type = 'risk' THEN ks.score END), 0)::numeric(6,2) AS risk,
-            COALESCE(max(CASE WHEN ks.score_type = 'client_value' THEN ks.score END), 0)::numeric(6,2) AS client_value,
-            COALESCE(max(CASE WHEN ks.score_type = 'upsell_likelihood' THEN ks.score END), 0)::numeric(6,2) AS upsell_likelihood
-          FROM projects AS p
-          LEFT JOIN kag_scores AS ks
-            ON ks.project_id = p.id
-           AND ks.account_scope_id = $1
-          WHERE p.account_scope_id = $1
-            AND p.id::text = ANY($2::text[])
-          GROUP BY p.id, p.name
-          ORDER BY p.name ASC
-        `,
-        [accountScopeId, selectedProjectIds]
-      ),
-      pool.query(
-        `
-          SELECT
-            snapshot_date::text AS point,
-            COALESCE(avg((scores_json -> 'project_health' ->> 'score')::numeric), 0)::numeric(6,2) AS project_health,
-            COALESCE(avg((scores_json -> 'risk' ->> 'score')::numeric), 0)::numeric(6,2) AS risk,
-            COALESCE(avg((scores_json -> 'client_value' ->> 'score')::numeric), 0)::numeric(6,2) AS client_value,
-            COALESCE(avg((scores_json -> 'upsell_likelihood' ->> 'score')::numeric), 0)::numeric(6,2) AS upsell_likelihood
-          FROM project_snapshots
-          WHERE account_scope_id = $1
-            AND project_id::text = ANY($2::text[])
-            AND publishable = true
-            AND snapshot_date >= current_date - interval '60 days'
-          GROUP BY snapshot_date
-          ORDER BY snapshot_date ASC
-          LIMIT 60
-        `,
-        [accountScopeId, selectedProjectIds]
-      ),
-      pool.query(
-        `
-          SELECT
-            risk_type,
-            COALESCE(avg(probability_7d), 0)::numeric(6,4) AS probability_7d,
-            COALESCE(avg(probability_14d), 0)::numeric(6,4) AS probability_14d,
-            COALESCE(avg(probability_30d), 0)::numeric(6,4) AS probability_30d,
-            COALESCE(avg(confidence), 0)::numeric(6,4) AS confidence
-          FROM kag_risk_forecasts
-          WHERE account_scope_id = $1
-            AND project_id::text = ANY($2::text[])
-            AND publishable = true
-          GROUP BY risk_type
-          ORDER BY risk_type ASC
-        `,
-        [accountScopeId, selectedProjectIds]
-      ),
-      pool.query(
-        `
-          SELECT
             date_trunc('day', captured_at)::date::text AS point,
             avg(completeness_pct)::numeric(6,2) AS completeness_pct,
             sum(missing_count)::int AS missing_count,
@@ -674,64 +613,6 @@ export async function getPortfolioOverview(pool, options = {}) {
           GROUP BY 1
           ORDER BY 1 ASC
           LIMIT 60
-        `,
-        [accountScopeId, selectedProjectIds]
-      ),
-      pool.query(
-        `
-          SELECT
-            date_trunc('week', created_at)::date::text AS point,
-            sum(
-              CASE
-                WHEN action = 'recommendation_shown'
-                THEN GREATEST(COALESCE((payload ->> 'total')::int, 1), 1)
-                ELSE 0
-              END
-            )::int AS shown,
-            sum(CASE WHEN action = 'recommendation_action_taken' THEN 1 ELSE 0 END)::int AS action_taken,
-            sum(
-              CASE
-                WHEN action = 'recommendation_feedback_updated'
-                  AND lower(COALESCE(payload ->> 'helpful_feedback', '')) IN ('yes', 'true', 'helpful')
-                THEN 1
-                ELSE 0
-              END
-            )::int AS helpful_yes,
-            sum(
-              CASE
-                WHEN action = 'recommendation_feedback_updated'
-                  AND lower(COALESCE(payload ->> 'helpful_feedback', '')) IN ('no', 'false', 'not_helpful')
-                THEN 1
-                ELSE 0
-              END
-            )::int AS helpful_no
-          FROM audit_events
-          WHERE account_scope_id = $1
-            AND project_id::text = ANY($2::text[])
-            AND action IN ('recommendation_shown', 'recommendation_action_taken', 'recommendation_feedback_updated')
-            AND created_at >= now() - interval '120 days'
-          GROUP BY 1
-          ORDER BY 1 ASC
-          LIMIT 52
-        `,
-        [accountScopeId, selectedProjectIds]
-      ),
-      pool.query(
-        `
-          SELECT
-            signal_id,
-            count(*)::int AS used_count
-          FROM (
-            SELECT
-              jsonb_object_keys(COALESCE(signal_snapshot, '{}'::jsonb)) AS signal_id
-            FROM recommendations_v2
-            WHERE account_scope_id = $1
-              AND project_id::text = ANY($2::text[])
-              AND created_at >= now() - interval '60 days'
-          ) AS extracted
-          GROUP BY signal_id
-          ORDER BY used_count DESC, signal_id ASC
-          LIMIT 12
         `,
         [accountScopeId, selectedProjectIds]
       ),
@@ -778,21 +659,6 @@ export async function getPortfolioOverview(pool, options = {}) {
       risks_open: 0,
       health_score_total: 0,
       client_value_score_total: 0,
-    }
-  );
-  const recommendationFunnelTotals = recommendationFunnelRows.rows.reduce(
-    (acc, row) => {
-      acc.shown += toNumber(row.shown, 0);
-      acc.action_taken += toNumber(row.action_taken, 0);
-      acc.helpful_yes += toNumber(row.helpful_yes, 0);
-      acc.helpful_no += toNumber(row.helpful_no, 0);
-      return acc;
-    },
-    {
-      shown: 0,
-      action_taken: 0,
-      helpful_yes: 0,
-      helpful_no: 0,
     }
   );
   const latestSyncCompletenessRow = reconciliationTrendRows.rows[reconciliationTrendRows.rows.length - 1] || null;
@@ -898,44 +764,11 @@ export async function getPortfolioOverview(pool, options = {}) {
       point: row.point,
       value: toNumber(row.value, 0),
     })),
-    kag_scores_by_project: kagScoresByProjectRows.rows.map((row) => ({
-      project_id: row.project_id,
-      project_name: row.project_name,
-      project_health: toNumber(row.project_health, 0),
-      risk: toNumber(row.risk, 0),
-      client_value: toNumber(row.client_value, 0),
-      upsell_likelihood: toNumber(row.upsell_likelihood, 0),
-    })),
-    kag_scores_trend: kagScoreTrendRows.rows.map((row) => ({
-      point: row.point,
-      project_health: toNumber(row.project_health, 0),
-      risk: toNumber(row.risk, 0),
-      client_value: toNumber(row.client_value, 0),
-      upsell_likelihood: toNumber(row.upsell_likelihood, 0),
-    })),
-    kag_risk_forecast_probabilities: kagForecastRows.rows.map((row) => ({
-      risk_type: row.risk_type,
-      probability_7d: toNumber(row.probability_7d, 0),
-      probability_14d: toNumber(row.probability_14d, 0),
-      probability_30d: toNumber(row.probability_30d, 0),
-      confidence: toNumber(row.confidence, 0),
-    })),
     sync_reconciliation_completeness: reconciliationTrendRows.rows.map((row) => ({
       point: row.point,
       completeness_pct: toNumber(row.completeness_pct, 0),
       missing_count: toNumber(row.missing_count, 0),
       duplicate_count: toNumber(row.duplicate_count, 0),
-    })),
-    recommendation_funnel: recommendationFunnelRows.rows.map((row) => ({
-      point: row.point,
-      shown: toNumber(row.shown, 0),
-      action_taken: toNumber(row.action_taken, 0),
-      helpful_yes: toNumber(row.helpful_yes, 0),
-      helpful_no: toNumber(row.helpful_no, 0),
-    })),
-    recommendation_signal_drivers: recommendationSignalDriverRows.rows.map((row) => ({
-      signal_id: row.signal_id,
-      used_count: toNumber(row.used_count, 0),
     })),
   };
 
@@ -998,19 +831,6 @@ export async function getPortfolioOverview(pool, options = {}) {
         avg_client_value_score:
           dashboardByProject.length > 0
             ? Number((dashboardTotals.client_value_score_total / dashboardByProject.length).toFixed(2))
-            : 0,
-        recommendation_shown_30d: recommendationFunnelTotals.shown,
-        recommendation_actions_30d: recommendationFunnelTotals.action_taken,
-        recommendation_helpful_yes_30d: recommendationFunnelTotals.helpful_yes,
-        recommendation_helpful_ratio_pct:
-          recommendationFunnelTotals.helpful_yes + recommendationFunnelTotals.helpful_no > 0
-            ? Number(
-                (
-                  (recommendationFunnelTotals.helpful_yes /
-                    (recommendationFunnelTotals.helpful_yes + recommendationFunnelTotals.helpful_no)) *
-                  100
-                ).toFixed(2)
-              )
             : 0,
         sync_completeness_pct: Number(latestSyncCompletenessPct.toFixed(2)),
       },
