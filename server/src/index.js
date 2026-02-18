@@ -351,6 +351,9 @@ async function main() {
   const loginRateLimitMaxAttempts = toBoundedInt(process.env.LOGIN_RATE_LIMIT_MAX_ATTEMPTS, 10, 3, 100);
   const loginRateLimitWindowMinutes = toBoundedInt(process.env.LOGIN_RATE_LIMIT_WINDOW_MINUTES, 15, 1, 1440);
 
+  const trustProxyEnv = process.env.TRUST_PROXY || "";
+  const trustProxy = trustProxyEnv === "true" ? true : trustProxyEnv === "false" || !trustProxyEnv ? false : trustProxyEnv;
+
   const app = Fastify({
     logger: {
       level: process.env.LOG_LEVEL || "info",
@@ -363,6 +366,7 @@ async function main() {
         },
       },
     },
+    trustProxy,
     bodyLimit: 64 * 1024,
     disableRequestLogging: false,
     requestIdHeader: "x-request-id",
@@ -373,6 +377,21 @@ async function main() {
   await app.register(cors, {
     origin: corsOrigin,
     credentials: true,
+  });
+
+  // Security headers
+  app.addHook("onSend", async (request, reply) => {
+    reply.header("X-Frame-Options", "DENY");
+    reply.header("X-Content-Type-Options", "nosniff");
+    reply.header("X-DNS-Prefetch-Control", "off");
+    reply.header("Referrer-Policy", "strict-origin-when-cross-origin");
+    if (isProd) {
+      reply.header("Strict-Transport-Security", "max-age=63072000; includeSubDomains");
+    }
+    reply.header(
+      "Content-Security-Policy",
+      "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'; frame-ancestors 'none'"
+    );
   });
 
   const pool = createDbPool(databaseUrl);
@@ -407,6 +426,24 @@ async function main() {
     }
   }, SESSION_TOUCH_INTERVAL_MS);
   sessionTouchTimer.unref();
+
+  // Purge sessions inactive for more than 14 days (runs every 6 hours)
+  const SESSION_EXPIRY_DAYS = 14;
+  const SESSION_CLEANUP_INTERVAL_MS = 6 * 60 * 60 * 1000;
+  const sessionCleanupTimer = setInterval(async () => {
+    try {
+      const result = await pool.query(
+        "DELETE FROM sessions WHERE last_seen_at < now() - make_interval(days => $1)",
+        [SESSION_EXPIRY_DAYS]
+      );
+      if (result.rowCount > 0) {
+        app.log.info({ purged: result.rowCount }, "expired sessions purged");
+      }
+    } catch (err) {
+      app.log.warn({ error: String(err?.message || err) }, "session cleanup failed");
+    }
+  }, SESSION_CLEANUP_INTERVAL_MS);
+  sessionCleanupTimer.unref();
 
   if (redisPubSub.enabled) {
     await redisPubSub.subscribe("job_completed", (payload) => {
@@ -443,7 +480,7 @@ async function main() {
   };
   const csrfCookieOptions = {
     path: "/",
-    httpOnly: false,
+    httpOnly: true,
     sameSite: "lax",
     secure: isProd,
     maxAge: 60 * 60 * 24 * 14,
@@ -495,6 +532,18 @@ async function main() {
   function clearLoginFailures(ip, username) {
     loginAttempts.delete(loginAttemptKey(ip, username));
   }
+
+  // Periodic cleanup of expired login attempt entries to prevent unbounded Map growth
+  const LOGIN_ATTEMPTS_CLEANUP_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
+  const loginAttemptsCleanupTimer = setInterval(() => {
+    const now = Date.now();
+    for (const [key, state] of loginAttempts) {
+      if (now - state.startedAt > loginWindowMs) {
+        loginAttempts.delete(key);
+      }
+    }
+  }, LOGIN_ATTEMPTS_CLEANUP_INTERVAL_MS);
+  loginAttemptsCleanupTimer.unref();
 
   // --- General API rate limiting (per session + per IP for unauthenticated) ---
   const apiRateBuckets = new Map();
@@ -764,13 +813,21 @@ async function main() {
 
     assertLoginRateLimit(request.ip, username);
 
+    // Dummy bcrypt hash used when username doesn't match to prevent timing-based username enumeration.
+    // bcrypt.compare() takes ~200-400ms; skipping it on wrong username leaks whether the user exists.
+    const DUMMY_BCRYPT_HASH = "$2b$10$abcdefghijklmnopqrstuuABCDEFGHIJKLMNOPQRSTUVWXYZ012345";
+
     const authUsername = normalizeAccountUsername(auth.username);
     let sessionUsername = null;
-    if (timingSafeStringEqual(username, authUsername)) {
-      const passwordMatch = auth.hashed
-        ? await bcrypt.compare(password, auth.password)
-        : timingSafeStringEqual(password, auth.password);
-      if (passwordMatch) sessionUsername = auth.username;
+    const usernameMatches = timingSafeStringEqual(username, authUsername);
+    if (auth.hashed) {
+      const hashToCompare = usernameMatches ? auth.password : DUMMY_BCRYPT_HASH;
+      const passwordMatch = await bcrypt.compare(password, hashToCompare);
+      if (usernameMatches && passwordMatch) sessionUsername = auth.username;
+    } else {
+      if (usernameMatches && timingSafeStringEqual(password, auth.password)) {
+        sessionUsername = auth.username;
+      }
     }
 
     if (!sessionUsername) {
@@ -787,6 +844,7 @@ async function main() {
       username: sessionUsername,
       active_project_id: null,
       csrf_cookie_name: csrfCookieName,
+      csrf_token: csrfToken,
     });
   });
 
@@ -842,6 +900,7 @@ async function main() {
       active_project_id: hydrated.active_project_id,
       account_scope_id: hydrated.account_scope_id,
       csrf_cookie_name: csrfCookieName,
+      csrf_token: hydrated.csrf_token,
       created_at: hydrated.created_at,
       last_seen_at: hydrated.last_seen_at,
     });
@@ -945,6 +1004,7 @@ async function main() {
     }
 
     await pool.query("UPDATE sessions SET active_project_id = $2, last_seen_at = now() WHERE session_id = $1", [sid, projectId]);
+    await cache.del(`session:${sid}`);
     await writeAuditEvent(pool, {
       projectId,
       accountScopeId: project.rows[0].account_scope_id,
@@ -2902,6 +2962,8 @@ async function main() {
 
   app.addHook("onClose", async () => {
     clearInterval(sessionTouchTimer);
+    clearInterval(sessionCleanupTimer);
+    clearInterval(loginAttemptsCleanupTimer);
     await cache.close();
     await redisPubSub.close();
     await pool.end();

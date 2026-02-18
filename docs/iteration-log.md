@@ -278,3 +278,34 @@ Circuit breaker вызвал failure в `http.unit.test.js` — global state (`c
 
 - Не все POST endpoints покрыты (jobs, kag legacy, digests, signals) — они либо internal-only, либо legacy. Достаточно для user-facing API.
 - Schemas живут в одном файле — при росте до 30+ schemas стоит разбить по domain.
+
+---
+
+## Iter 8 — Security Hardening II (закрыта — 2026-02-18)
+
+> Timing attack fix. Security headers. Session cache invalidation. CSRF hardening. trustProxy.
+
+### Что изменено
+
+| # | Задача | Файлы | Результат |
+|---|--------|-------|-----------|
+| 8.1 | Fix login timing attack | `server/src/index.js` | Dummy bcrypt hash (`DUMMY_BCRYPT_HASH`) — `bcrypt.compare()` вызывается **всегда**, даже при wrong username, предотвращая timing-based username enumeration |
+| 8.2 | Security headers | `server/src/index.js` | `onSend` hook: X-Frame-Options: DENY, X-Content-Type-Options: nosniff, X-DNS-Prefetch-Control: off, Referrer-Policy: strict-origin-when-cross-origin, CSP (frame-ancestors 'none'), HSTS (prod only) |
+| 8.3 | Session cache invalidation | `server/src/index.js` | `cache.del(\`session:${sid}\`)` после UPDATE в `/projects/:id/select` — нет 60s window с stale project scope |
+| 8.4 | loginAttempts cleanup | `server/src/index.js` | `setInterval` каждые 5 мин: iterate Map, delete entries где `now - startedAt > loginWindowMs`. Timer `.unref()` + `clearInterval` on close |
+| 8.5 | Session expiration | `server/src/index.js`, `0020_session_expiration_index.sql` | Cleanup job каждые 6h: `DELETE FROM sessions WHERE last_seen_at < now() - 14 days`. Index `idx_sessions_last_seen_at` |
+| 8.6 | CSRF cookie httpOnly=true | `server/src/index.js`, `web/lib/api.js` | CSRF cookie теперь httpOnly=true. Token доставляется через response body (`csrf_token` в login + /auth/me). Frontend хранит в memory (`csrfTokenCache`) |
+| 8.7 | trustProxy | `server/src/index.js` | `TRUST_PROXY` env var → Fastify `trustProxy` option. Поддерживает `true`, `false`, или CIDR subnet string |
+
+### Дополнительно
+
+- Migration 0020: `CREATE INDEX idx_sessions_last_seen_at ON sessions (last_seen_at)`
+- Frontend `web/lib/api.js`: CSRF token из cookie → из response body (module-level `csrfTokenCache`)
+- E2E test mock обновлён: `csrf_token` в `/auth/me` mock response
+- 24 новых unit tests в `server/test/security-hardening.unit.test.js` (379 total)
+
+### Самокритика
+
+- Dummy bcrypt hash — static string. При bcrypt cost factor change нужно обновить. Для текущего `$2b$10$` — OK.
+- CSP policy restrictive (`default-src 'self'`). При добавлении CDN/external fonts нужно расширять.
+- CSRF token в memory — при F5 refresh теряется до первого `/auth/me` call. `getCurrentSession()` вызывается при mount, так что window минимален.

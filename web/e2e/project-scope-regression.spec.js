@@ -42,6 +42,7 @@ async function installApiMocks(page) {
         active_project_id: state.activeProjectId,
         account_scope_id: PROJECT_ALPHA.account_scope_id,
         csrf_cookie_name: "csrf_token",
+        csrf_token: "mock-csrf-token-for-e2e",
       });
     }
 
