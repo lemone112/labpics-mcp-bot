@@ -63,6 +63,15 @@ Legacy compatibility:
 - `GET /jobs/scheduler`
 - `POST /jobs/scheduler/tick`
 
+### Real-time (SSE)
+
+- `GET /events/stream` — Server-Sent Events stream (требует session cookie)
+  - Event type: `connected` (при установке соединения)
+  - Event type: `job_completed` (при завершении любой scheduler задачи)
+  - Heartbeat: каждые 30 сек (`: heartbeat\n\n`)
+  - Scope: project_id из активной сессии
+  - Не требует CSRF (GET запрос)
+
 ## 6) Control Tower / product surfaces
 
 - Portfolio: `/portfolio/overview`, `/portfolio/messages`

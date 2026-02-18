@@ -3,10 +3,9 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { apiFetch } from "@/lib/api";
+import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 
-const PORTFOLIO_MESSAGES_AUTO_REFRESH_MS = 20_000;
-
-export function usePortfolioMessages({ projectId, contactGlobalId, enabled = true, limit = 250 }) {
+export function usePortfolioMessages({ projectId, contactGlobalId, enabled = true, limit = 250, sseConnected = false }) {
   const [payload, setPayload] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -50,21 +49,7 @@ export function usePortfolioMessages({ projectId, contactGlobalId, enabled = tru
     reload();
   }, [reload]);
 
-  useEffect(() => {
-    if (typeof window === "undefined") return undefined;
-    if (!enabled || !normalizedProjectId) return undefined;
-    const refreshSilently = () => {
-      if (document.visibilityState !== "visible") return;
-      reload({ silent: true }).catch(() => {});
-    };
-    const intervalId = window.setInterval(refreshSilently, PORTFOLIO_MESSAGES_AUTO_REFRESH_MS);
-    const onFocus = () => refreshSilently();
-    window.addEventListener("focus", onFocus);
-    return () => {
-      window.clearInterval(intervalId);
-      window.removeEventListener("focus", onFocus);
-    };
-  }, [enabled, normalizedProjectId, reload]);
+  const autoRefresh = useAutoRefresh(reload, 20_000, { enabled, sseConnected });
 
-  return { payload, loading, error, reload };
+  return { payload, loading, error, reload, autoRefresh };
 }

@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 
 import { apiFetch } from "@/lib/api";
 import { parsePortfolioSectionFromPath, sectionAllowsAllProjects } from "@/lib/portfolio-sections";
+import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 
 const STORAGE_SCOPE_KEY = "labpics:portfolio:selected-scope";
 const STORAGE_LAST_PROJECT_KEY = "labpics:portfolio:last-concrete-project";
@@ -271,6 +272,8 @@ export function ProjectPortfolioProvider({ children }) {
 
   const selectedProject = selectedProjects[0] || null;
 
+  const autoRefresh = useAutoRefresh(refreshProjects, 60_000, { enabled: !loadingProjects });
+
   const contextValue = useMemo(
     () => ({
       projects,
@@ -291,6 +294,7 @@ export function ProjectPortfolioProvider({ children }) {
       loadingProjects,
       error,
       refreshProjects,
+      autoRefresh,
       activateProject,
       selectAllProjects,
     }),
@@ -313,6 +317,7 @@ export function ProjectPortfolioProvider({ children }) {
       loadingProjects,
       error,
       refreshProjects,
+      autoRefresh,
       activateProject,
       selectAllProjects,
     ]

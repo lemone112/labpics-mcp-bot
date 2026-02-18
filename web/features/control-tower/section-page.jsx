@@ -17,9 +17,11 @@ import {
 import { AlertTriangle, Clock3 } from "lucide-react";
 
 import { useAuthGuard } from "@/hooks/use-auth-guard";
+import { useEventStream } from "@/hooks/use-event-stream";
 import { usePortfolioMessages } from "@/hooks/use-portfolio-messages";
 import { usePortfolioOverview } from "@/hooks/use-portfolio-overview";
 import { useProjectPortfolio } from "@/hooks/use-project-portfolio";
+import { useRealtimeRefresh } from "@/hooks/use-realtime-refresh";
 import { PageShell } from "@/components/page-shell";
 import { ProjectBadge } from "@/components/project-badge";
 import { Badge } from "@/components/ui/badge";
@@ -30,6 +32,7 @@ import { PageLoadingSkeleton } from "@/components/ui/page-loading-skeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { StatTile } from "@/components/ui/stat-tile";
 import { Toast } from "@/components/ui/toast";
+import { LastUpdatedIndicator } from "@/components/ui/last-updated-indicator";
 import { normalizePortfolioSection } from "@/lib/portfolio-sections";
 import { cn } from "@/lib/utils";
 
@@ -863,11 +866,17 @@ export default function ControlTowerSectionPage({ section }) {
   const { moneyFormatter, numberFormatter } = useFormatters();
   const [selectedPersonId, setSelectedPersonId] = useState("");
 
+  // Real-time: SSE event stream (must be above data hooks so sseConnected is available)
+  const eventStream = useEventStream({
+    enabled: !loading && !loadingProjects && selectedProjectIds.length > 0,
+  });
+
   const overview = usePortfolioOverview({
     projectIds: selectedProjectIds,
     enabled: normalizedSection !== "messages" && selectedProjectIds.length > 0,
     messageLimit: 80,
     cardLimit: 30,
+    sseConnected: eventStream.connected,
   });
 
   const messages = usePortfolioMessages({
@@ -875,7 +884,12 @@ export default function ControlTowerSectionPage({ section }) {
     contactGlobalId: selectedPersonId,
     enabled: normalizedSection === "messages" && Boolean(selectedProject?.id),
     limit: 300,
+    sseConnected: eventStream.connected,
   });
+
+  useRealtimeRefresh({ lastEvent: eventStream.lastEvent, reload: overview.reload, dataType: "portfolio" });
+  useRealtimeRefresh({ lastEvent: eventStream.lastEvent, reload: messages.reload, dataType: "messages" });
+
 
   useEffect(() => {
     if (normalizedSection !== "messages") return;
@@ -915,9 +929,24 @@ export default function ControlTowerSectionPage({ section }) {
   const agreements = Array.isArray(overviewPayload?.agreements) ? overviewPayload.agreements : [];
   const risks = Array.isArray(overviewPayload?.risks) ? overviewPayload.risks : [];
 
+  const activeAutoRefresh =
+    normalizedSection === "messages"
+      ? messages.autoRefresh
+      : overview.autoRefresh;
+
+  const activeReload =
+    normalizedSection === "messages"
+      ? messages.reload
+      : overview.reload;
+
   return (
     <PageShell title={TITLES[normalizedSection]} subtitle={SUBTITLES[normalizedSection]}>
       <div className="space-y-4">
+        <LastUpdatedIndicator
+          secondsAgo={activeAutoRefresh?.secondsAgo}
+          onRefresh={activeReload}
+          loading={overview.loading || messages.loading}
+        />
         {normalizedSection === "dashboard" ? renderDashboardCharts(overviewPayload, moneyFormatter, numberFormatter) : null}
         {normalizedSection === "messages"
           ? (

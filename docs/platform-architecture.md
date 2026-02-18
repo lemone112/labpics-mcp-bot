@@ -47,7 +47,34 @@
 - Ключевые действия логируются в `audit_events`.
 - Техническое здоровье читается через `/health`, `/metrics`, `/jobs/*`, `/connectors/*`.
 
+## 8) Real-time event streaming
+
+При завершении задач worker публикует событие в Redis канал `job_completed`:
+
+- Server подписан на канал → транслирует событие через SSE в браузеры по project_id.
+- При недоступности Redis — fallback на `pg_notify`.
+- Frontend: auto-polling (Level 1) работает всегда, SSE (Level 3) ускоряет доставку до ~1-2 сек.
+
+Детали: [`docs/redis-sse.md`](./redis-sse.md)
+
+## 9) Cascade triggers
+
+Scheduler поддерживает cascade chains — автоматический запуск downstream задач после completion upstream:
+
+```
+connectors_sync_cycle → signals_extraction, embeddings_run
+signals_extraction → health_scoring, kag_recommendations_refresh
+health_scoring → analytics_aggregates
+kag_recommendations_refresh → kag_v2_recommendations_refresh
+```
+
+Механизм: `UPDATE scheduled_jobs SET next_run_at = now()` для downstream.
+Это устраняет задержку в 15-30 минут между синхронизацией и обновлением рекомендаций.
+
+---
+
 Ссылки:
 
 - Data model: [`docs/data-model.md`](./data-model.md)
 - Pipelines: [`docs/pipelines.md`](./pipelines.md)
+- Real-time архитектура: [`docs/redis-sse.md`](./redis-sse.md)

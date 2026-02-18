@@ -7,6 +7,23 @@
 3. `GET /jobs/scheduler` показывает рабочие jobs.
 4. `GET /connectors/state` не содержит зависших `running`.
 5. `GET /lightrag/status` показывает `ready` embeddings > 0 (для search-сценариев).
+6. Redis: `redis-cli -u $REDIS_URL ping` — отвечает PONG.
+7. SSE: `GET /metrics` → `app_sse_connections_total` показывает подключённых клиентов.
+
+## 1.5) Дашборд не обновляется автоматически
+
+Проверки:
+
+- Browser DevTools → Network → фильтр EventStream → `/api/events/stream` — соединение установлено?
+- `GET /metrics` → `app_sse_connections_total > 0`?
+- Redis доступен: `redis-cli -u $REDIS_URL ping`
+
+Действия:
+
+1. Перезагрузить страницу (SSE `EventSource` переподключится автоматически).
+2. Если Redis down: `docker compose restart redis` — SSE восстановится.
+3. Если Redis полностью недоступен — frontend polling (15-60 сек) продолжает работать как fallback.
+4. Проверить Caddy config: `flush_interval -1` должен быть в блоке reverse_proxy для API.
 
 ## 2) LightRAG возвращает пусто
 

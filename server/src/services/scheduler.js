@@ -13,6 +13,88 @@ import { refreshRecommendationsV2 } from "./recommendations-v2.js";
 import { runSyncReconciliation } from "./reconciliation.js";
 import { toPositiveInt } from '../lib/utils.js';
 
+/**
+ * After a job completes successfully, downstream jobs are triggered immediately
+ * by setting their next_run_at to now(). This eliminates the 15-30 min delay
+ * between data sync and recommendation/signal updates.
+ *
+ * Chain: sync → signals + embeddings → health + kag_recs → analytics + kag_v2_recs
+ */
+const CASCADE_CHAINS = {
+  connectors_sync_cycle: ["signals_extraction", "embeddings_run"],
+  signals_extraction: ["health_scoring", "kag_recommendations_refresh"],
+  health_scoring: ["analytics_aggregates"],
+  kag_recommendations_refresh: ["kag_v2_recommendations_refresh"],
+};
+
+async function triggerCascade(pool, scope, completedJobType, logger) {
+  const downstreamJobs = CASCADE_CHAINS[completedJobType];
+  if (!downstreamJobs || !downstreamJobs.length) return;
+
+  for (const downstream of downstreamJobs) {
+    try {
+      const { rowCount } = await pool.query(
+        `
+          UPDATE scheduled_jobs
+          SET next_run_at = now(),
+              updated_at = now(),
+              payload = jsonb_set(
+                COALESCE(payload, '{}'::jsonb),
+                '{cascade_triggered_by}',
+                $4::jsonb
+              )
+          WHERE project_id = $1
+            AND account_scope_id = $2
+            AND job_type = $3
+            AND status = 'active'
+            AND next_run_at > now()
+        `,
+        [
+          scope.projectId,
+          scope.accountScopeId,
+          downstream,
+          JSON.stringify({ job_type: completedJobType, at: new Date().toISOString() }),
+        ]
+      );
+      if (rowCount > 0) {
+        logger.info(
+          { trigger: completedJobType, cascaded: downstream },
+          "cascade: moved next_run_at to now"
+        );
+      }
+    } catch (error) {
+      logger.error(
+        { trigger: completedJobType, cascaded: downstream, error: String(error?.message || error) },
+        "cascade: failed to trigger downstream job"
+      );
+    }
+  }
+}
+
+/**
+ * Publish a job completion event via Redis Pub/Sub.
+ * When Redis is unavailable (publishFn is null), this is a no-op —
+ * real-time SSE updates require Redis. Frontend polling (Level 1) still works.
+ */
+async function notifyJobCompleted(pool, scope, jobType, status, logger, publishFn) {
+  if (typeof publishFn !== "function") return;
+  const payload = {
+    job_type: jobType,
+    project_id: scope.projectId,
+    account_scope_id: scope.accountScopeId,
+    status,
+    at: new Date().toISOString(),
+  };
+  try {
+    await publishFn("job_completed", JSON.stringify(payload));
+  } catch (error) {
+    logger.warn(
+      { job_type: jobType, error: String(error?.message || error) },
+      "notifyJobCompleted failed"
+    );
+  }
+}
+
 function truncateError(error, max = 1000) {
   return String(error?.message || error || "scheduler_error").slice(0, max);
 }
@@ -247,6 +329,8 @@ export async function runSchedulerTick(pool, scope, options = {}) {
       );
       stats.ok++;
       stats.details.push({ job_type: job.job_type, status: "ok", details: details || {} });
+      await triggerCascade(pool, scope, job.job_type, logger);
+      await notifyJobCompleted(pool, scope, job.job_type, "ok", logger, options.publishFn);
     } catch (error) {
       const err = truncateError(error);
       await pool.query(
@@ -274,8 +358,11 @@ export async function runSchedulerTick(pool, scope, options = {}) {
       );
       stats.failed++;
       stats.details.push({ job_type: job.job_type, status: "failed", error: err });
+      await notifyJobCompleted(pool, scope, job.job_type, "failed", logger, options.publishFn);
     }
   }
 
   return stats;
 }
+
+export { CASCADE_CHAINS as _CASCADE_CHAINS_FOR_TESTING };
