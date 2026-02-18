@@ -2,6 +2,8 @@
 
 Этот каталог описывает актуальную модель продукта: **только LightRAG** + интеграции + UI + эксплуатация.
 
+Покрывает: RAG-контур, интеграции (Chatwoot / Linear / Attio), автоматизации и фоновые циклы, модель данных в Postgres, Redis caching и real-time event streaming (SSE), API и эксплуатационные практики.
+
 ## Быстрый порядок чтения
 
 1. Продукт:
@@ -18,16 +20,18 @@
    - [`docs/pipelines.md`](./pipelines.md)
 6. Frontend и дизайн:
    - [`docs/frontend-design.md`](./frontend-design.md)
-7. Эксплуатация:
+7. Real-time и кеширование (Redis, SSE, auto-refresh, cascade triggers):
+   - [`docs/redis-sse.md`](./redis-sse.md)
+8. Эксплуатация:
    - [`docs/runbooks.md`](./runbooks.md)
    - [`docs/deployment.md`](./deployment.md)
-8. Продуктовые сценарии:
+9. Продуктовые сценарии:
    - [`docs/scenarios.md`](./scenarios.md)
-9. План развития:
+10. План развития:
    - [`docs/mvp-vs-roadmap.md`](./mvp-vs-roadmap.md)
-10. Спеки:
+11. Спеки:
    - [`docs/specs/README.md`](./specs/README.md)
-11. Термины:
+12. Термины:
    - [`docs/glossary.md`](./glossary.md)
 
 ## Жёсткий контракт для разработки
@@ -36,3 +40,8 @@
 - В разработке и продуктовых задачах используется только LightRAG API.
 - Роуты `/kag/*` считаются legacy и не входят в dev-contract (`410 kag_disabled`).
 - UI обязан опираться на LightRAG + operational charts.
+- **Real-time**: Redis Pub/Sub для event propagation, SSE для auto-refresh в браузере, cascade triggers между задачами.
+
+## Дополнительно
+
+- Стиль документации: [`docs/style-guide.md`](./style-guide.md)

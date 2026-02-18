@@ -15,6 +15,8 @@
 - Хранилище: `PostgreSQL + pgvector`
 - Интеграции: `Chatwoot`, `Linear`, `Attio`
 - UI-система: `shadcn/ui + Radix + Tailwind tokens + anime.js`
+- Cache / Pub-Sub: `Redis 7` — Pub/Sub для real-time SSE, cascade events
+- Real-time: SSE (Server-Sent Events) — `GET /events/stream` — push обновлений в браузер
 
 ## 3) Компоненты
 
@@ -33,6 +35,57 @@
 
 - Control Tower (6 секций), Jobs, Search(LightRAG), CRM, Offers, Digests, Analytics.
 - Единая компонентная система без page-specific кастомных UI-слоёв.
+- Real-time auto-refresh через SSE (Redis Pub/Sub → `GET /events/stream`).
+
+### Архитектурная диаграмма
+
+```
+                    ┌─────────────────────────────────────────┐
+                    │              FRONTEND (Next.js)          │
+                    │  Dashboard · Portfolio · Recommendations │
+                    │  Signals · Forecasts · CRM · Settings    │
+                    └────────────────┬────────────────────────┘
+                                     │ REST API
+                    ┌────────────────▼────────────────────────┐
+                    │              BACKEND (Fastify v5)           │
+                    │                                          │
+                    │  ┌─── Routes ──┐  ┌── Middleware ─────┐  │
+                    │  │ /api/*      │  │ auth · csrf · req │  │
+                    │  │ /kag/*      │  │ scope · error     │  │  ← legacy prefix
+                    │  │ /connectors │  └───────────────────┘  │
+                    │  └─────────────┘                         │
+                    │                                          │
+                    │  ┌─── Services ──────────────────────┐   │
+                    │  │ kag · forecasting · recommendations│   │
+                    │  │ portfolio · identity · campaigns   │   │
+                    │  │ connectors · rag · offers · crm    │   │
+                    │  │ redis-pubsub · sse-broadcaster     │   │
+                    │  └───────────────────────────────────┘   │
+                    │                                          │
+                    │  ┌─── Intelligence Engine ────────────┐   │
+                    │  │ ingest · graph · signals · scoring  │   │
+                    │  │ recommendations · templates         │   │
+                    │  └────────────────────────────────────┘   │
+                    │                                          │
+                    │  ┌─── Scheduler ─────────────────────┐   │
+                    │  │ 15min sync · 5min retry · daily    │   │
+                    │  │ pipeline · weekly signatures       │   │
+                    │  │ cascade triggers · Redis PUBLISH   │   │
+                    │  └───────────────────────────────────┘   │
+                    └────────────────┬────────────────────────┘
+                                     │
+                    ┌────────────────▼────────────────────────┐
+                    │         PostgreSQL 16 + pgvector          │
+                    │  79 tables · 17 migrations · triggers    │
+                    │  IVFFlat/HNSW · GIN · scope guards       │
+                    └──────────┬──────────┬──────────┬────────┘
+                               │          │          │
+                    ┌──────────▼┐  ┌──────▼──┐  ┌───▼───────┐
+                    │  Chatwoot  │  │  Linear  │  │   Attio   │
+                    │ messages   │  │  issues  │  │   deals   │
+                    │ contacts   │  │  cycles  │  │  accounts │
+                    └────────────┘  └─────────┘  └───────────┘
+```
 
 ### База данных
 

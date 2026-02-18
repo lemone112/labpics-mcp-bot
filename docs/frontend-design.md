@@ -6,11 +6,12 @@
 
 ## 1) Роль фронтенда в продукте
 
-Frontend (Next.js) решает три задачи:
+Frontend (Next.js) решает четыре задачи:
 
 1. **Операционный интерфейс** для PM/Owner (control tower + рабочие модули).
 2. **Объяснимый контекст**: показать риски и факты из LightRAG с evidence.
 3. **Безопасная оркестрация действий**: запуск jobs, смена статусов, review сигналов.
+4. **Real-time обновления данных**: auto-refresh и SSE push для актуального состояния дашбордов.
 
 ---
 
@@ -38,6 +39,18 @@ Frontend (Next.js) решает три задачи:
 - `recharts` — графики в dashboard/finance/analytics
 
 Назначение: motion только для повышения читаемости интерфейса и обратной связи.
+
+## 2.4 Real-time и auto-refresh
+
+- `useAutoRefresh` — обёртка над `reload()` с интервальным polling (15-60 сек)
+- `useEventStream` — подписка на SSE endpoint `/events/stream` через `EventSource`
+- `useRealtimeRefresh` — маппинг SSE-событий на reload конкретных хуков
+- `LastUpdatedIndicator` — UI-компонент "Обновлено: X сек назад" + кнопка refresh
+
+Приоритет: SSE push (~1-2 сек) → fallback на polling (15-60 сек).
+Паузится при скрытой вкладке (Page Visibility API), refetch при возврате.
+
+Детали: [`docs/redis-sse.md`](../docs/redis-sse.md)
 
 ---
 

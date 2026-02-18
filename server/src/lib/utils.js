@@ -66,3 +66,11 @@ export function toBoolean(value, fallback = false) {
 }
 
 export const boolFromEnv = toBoolean;
+
+// ── Env utilities ──────────────────────────────────────────────
+
+export function requiredEnv(name) {
+  const value = process.env[name];
+  if (!value) throw new Error(`Missing required env var: ${name}`);
+  return value;
+}

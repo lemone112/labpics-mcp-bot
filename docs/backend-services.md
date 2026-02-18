@@ -14,6 +14,9 @@ server/src/
 ├── worker-loop.js              # Continuous worker loop
 ├── lib/
 │   ├── db.js                   # PostgreSQL pool + transactions
+│   ├── redis.js                # Redis client factory (ioredis)
+│   ├── redis-pubsub.js         # Redis Pub/Sub wrapper (publish + subscribe)
+│   ├── sse-broadcaster.js      # SSE client manager (per project_id)
 │   ├── http.js                 # fetchWithRetry
 │   ├── api-contract.js         # ApiError, sendOk, sendError
 │   ├── scope.js                # getRequestScope, requireProjectScope
@@ -75,9 +78,12 @@ server/src/
 2. `preValidation` — Scope hydration (resolves active project)
 3. `onResponse` — Response metrics
 
+**SSE endpoint:**
+- `GET /events/stream` — Server-Sent Events, real-time job completion push (Redis Pub/Sub → browser)
+
 **Public routes (no auth):**
 - `GET /health` — Service health check
-- `GET /metrics` — Prometheus-format metrics
+- `GET /metrics` — Prometheus-format metrics (includes SSE connection counts)
 
 ---
 

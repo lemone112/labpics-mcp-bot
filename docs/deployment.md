@@ -5,8 +5,10 @@
 Стек:
 
 - `db` (Postgres + pgvector)
-- `server` (Fastify API + scheduler/connectors/lightRAG)
-- `web` (Next.js)
+- `redis` (Redis 7) — Pub/Sub для real-time событий (SSE), cache layer
+- `server` (Fastify API + scheduler/connectors/lightRAG + SSE endpoint)
+- `worker` — фоновый scheduler loop + Redis PUBLISH после завершения задач
+- `web` (Next.js с auto-refresh и SSE-подпиской)
 
 ## 2) Ключевые env-переменные
 
@@ -29,6 +31,14 @@
 - `CONNECTOR_MAX_RETRIES`
 - `CONNECTOR_RETRY_BASE_SECONDS`
 - `CONNECTOR_RECONCILIATION_MIN_COMPLETENESS_PCT`
+
+### Redis и real-time
+
+- `REDIS_URL` — connection string (по умолчанию `redis://redis:6379`)
+- `REDIS_PORT` — порт для Docker expose (по умолчанию `6379`)
+
+Redis используется для Pub/Sub (уведомления о завершении задач → SSE push в браузер).
+При отсутствии Redis система деградирует к pg_notify + frontend polling.
 
 ### Embeddings
 
@@ -57,6 +67,9 @@
 3. `GET /connectors/state`
 4. `GET /lightrag/status`
 5. UI login + проектный выбор + `/search` (LightRAG)
+
+6. Redis: `redis-cli -u $REDIS_URL ping` — отвечает PONG.
+7. SSE: Browser DevTools → Network → EventStream → `/api/events/stream` — соединение установлено.
 
 ## 5) Примечание по legacy routes
 

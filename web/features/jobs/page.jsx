@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { PageShell } from "@/components/page-shell";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -10,8 +10,11 @@ import { StatTile } from "@/components/ui/stat-tile";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { StatusChip } from "@/components/ui/status-chip";
 import { Toast } from "@/components/ui/toast";
+import { LastUpdatedIndicator } from "@/components/ui/last-updated-indicator";
 import { apiFetch } from "@/lib/api";
 import { useAuthGuard } from "@/hooks/use-auth-guard";
+import { useAutoRefresh } from "@/hooks/use-auto-refresh";
+import { useEventStream } from "@/hooks/use-event-stream";
 import { useProjectGate } from "@/hooks/use-project-gate";
 
 export default function JobsFeaturePage() {
@@ -29,6 +32,22 @@ export default function JobsFeaturePage() {
       setToast({ type: "error", message: error?.message || "Ошибка загрузки статуса задач" });
     }
   }, []);
+
+  const autoRefresh = useAutoRefresh(loadStatus, 15_000, {
+    enabled: !loading && !loadingProjects && session?.authenticated && hasProject,
+  });
+
+  // Real-time: refresh job status when any job completes via SSE (500ms debounce)
+  const eventStream = useEventStream({
+    enabled: !loading && !loadingProjects && session?.authenticated && hasProject,
+  });
+  const sseTimerRef = useRef(null);
+  useEffect(() => {
+    if (!eventStream.lastEvent) return;
+    clearTimeout(sseTimerRef.current);
+    sseTimerRef.current = setTimeout(() => loadStatus(), 500);
+    return () => clearTimeout(sseTimerRef.current);
+  }, [eventStream.lastEvent, loadStatus]);
 
   useEffect(() => {
     if (!loading && !loadingProjects && session?.authenticated && hasProject) {
@@ -94,9 +113,11 @@ export default function JobsFeaturePage() {
             <Button variant="outline" disabled={busyJob.length > 0} onClick={() => runJob("/jobs/scheduler/tick", "scheduler_tick")}>
               {busyJob === "scheduler_tick" ? "Выполняется..." : "Тик планировщика"}
             </Button>
-            <Button variant="outline" onClick={loadStatus}>
-              Обновить статус
-            </Button>
+            <LastUpdatedIndicator
+              secondsAgo={autoRefresh.secondsAgo}
+              onRefresh={loadStatus}
+              loading={busyJob.length > 0}
+            />
           </CardContent>
         </Card>
 

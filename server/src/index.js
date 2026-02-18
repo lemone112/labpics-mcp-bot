@@ -58,12 +58,9 @@ import {
   refreshAnalytics,
   refreshRiskAndHealth,
 } from "./services/intelligence.js";
-
-function requiredEnv(name) {
-  const value = process.env[name];
-  if (!value) throw new Error(`Missing required env var: ${name}`);
-  return value;
-}
+import { createRedisPubSub } from "./lib/redis-pubsub.js";
+import { createSseBroadcaster } from "./lib/sse-broadcaster.js";
+import { requiredEnv } from "./lib/utils.js";
 
 function getAuthConfig() {
   const packed = String(process.env.AUTH_CREDENTIALS || "").trim();
@@ -351,6 +348,25 @@ async function main() {
   const migrationsDir = path.join(currentDir, "..", "db", "migrations");
   await applyMigrations(pool, migrationsDir, app.log);
 
+  // --- Redis Pub/Sub + SSE setup ---
+  const redisPubSub = createRedisPubSub({ logger: app.log });
+  const sseBroadcaster = createSseBroadcaster(app.log);
+
+  if (redisPubSub.enabled) {
+    await redisPubSub.subscribe("job_completed", (payload) => {
+      const projectId = payload?.project_id;
+      if (!projectId) return;
+      sseBroadcaster.broadcast(projectId, "job_completed", {
+        job_type: payload.job_type,
+        status: payload.status,
+        at: payload.at,
+      });
+    });
+    app.log.info("redis pub/sub → sse bridge active");
+  } else {
+    app.log.info("redis unavailable — SSE will not receive real-time events");
+  }
+
   const cookieOptions = {
     path: "/",
     httpOnly: true,
@@ -531,6 +547,7 @@ async function main() {
   });
 
   registerGet("/metrics", async (_request, reply) => {
+    const sseStats = sseBroadcaster.getStats();
     const lines = [
       "# TYPE app_requests_total counter",
       `app_requests_total ${metrics.requests_total}`,
@@ -538,12 +555,50 @@ async function main() {
       `app_responses_total ${metrics.responses_total}`,
       "# TYPE app_errors_total counter",
       `app_errors_total ${metrics.errors_total}`,
+      "# TYPE app_sse_connections_total gauge",
+      `app_sse_connections_total ${sseStats.total_connections}`,
+      "# TYPE app_sse_projects_subscribed gauge",
+      `app_sse_projects_subscribed ${sseStats.projects}`,
     ];
     for (const [statusCode, count] of Object.entries(metrics.status_counts)) {
       lines.push(`app_response_status_total{status="${statusCode}"} ${count}`);
     }
     reply.type("text/plain; version=0.0.4");
     return lines.join("\n");
+  });
+
+  // --- SSE endpoint for real-time dashboard updates ---
+  registerGet("/events/stream", async (request, reply) => {
+    const scope = requireProjectScope(request);
+
+    reply.hijack();
+    reply.raw.writeHead(200, {
+      "content-type": "text/event-stream",
+      "cache-control": "no-cache, no-transform",
+      "connection": "keep-alive",
+      "x-accel-buffering": "no",
+    });
+
+    reply.raw.write(`event: connected\ndata: ${JSON.stringify({ project_id: scope.projectId, redis: redisPubSub.enabled })}\n\n`);
+
+    const heartbeat = setInterval(() => {
+      try {
+        reply.raw.write(`: heartbeat\n\n`);
+      } catch {
+        clearInterval(heartbeat);
+      }
+    }, 30_000);
+
+    const removeClient = sseBroadcaster.addClient(
+      scope.projectId,
+      reply,
+      request.auth?.session_id || null
+    );
+
+    request.raw.on("close", () => {
+      clearInterval(heartbeat);
+      removeClient();
+    });
   });
 
   registerPost("/auth/login", async (request, reply) => {
@@ -2692,6 +2747,7 @@ async function main() {
   });
 
   app.addHook("onClose", async () => {
+    await redisPubSub.close();
     await pool.end();
   });
 

@@ -3,15 +3,10 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { apiFetch } from "@/lib/api";
+import { normalizeProjectIds } from "@/lib/utils";
+import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 
-const PORTFOLIO_OVERVIEW_AUTO_REFRESH_MS = 45_000;
-
-function normalizeProjectIds(input) {
-  if (!Array.isArray(input)) return [];
-  return input.map((item) => String(item || "").trim()).filter(Boolean);
-}
-
-export function usePortfolioOverview({ projectIds, enabled = true, messageLimit = 60, cardLimit = 24 }) {
+export function usePortfolioOverview({ projectIds, enabled = true, messageLimit = 60, cardLimit = 24, sseConnected = false }) {
   const [payload, setPayload] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -47,21 +42,7 @@ export function usePortfolioOverview({ projectIds, enabled = true, messageLimit 
     reload();
   }, [reload]);
 
-  useEffect(() => {
-    if (typeof window === "undefined") return undefined;
-    if (!enabled || !ids.length) return undefined;
-    const refreshSilently = () => {
-      if (document.visibilityState !== "visible") return;
-      reload({ silent: true }).catch(() => {});
-    };
-    const intervalId = window.setInterval(refreshSilently, PORTFOLIO_OVERVIEW_AUTO_REFRESH_MS);
-    const onFocus = () => refreshSilently();
-    window.addEventListener("focus", onFocus);
-    return () => {
-      window.clearInterval(intervalId);
-      window.removeEventListener("focus", onFocus);
-    };
-  }, [enabled, ids.length, reload]);
+  const autoRefresh = useAutoRefresh(reload, 30_000, { enabled, sseConnected });
 
-  return { payload, loading, error, reload };
+  return { payload, loading, error, reload, autoRefresh };
 }

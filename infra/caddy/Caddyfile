@@ -9,7 +9,9 @@
   @api path /api/*
   handle @api {
     uri strip_prefix /api
-    reverse_proxy {$API_UPSTREAM:server:8080}
+    reverse_proxy {$API_UPSTREAM:server:8080} {
+      flush_interval -1
+    }
   }
 
   handle {

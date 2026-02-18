@@ -1,4 +1,18 @@
 services:
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: redis-server --maxmemory 128mb --maxmemory-policy allkeys-lru
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
   db:
     image: pgvector/pgvector:pg16
     restart: unless-stopped
@@ -23,6 +37,7 @@ services:
     environment:
       NODE_ENV: ${NODE_ENV:-production}
       DATABASE_URL: postgresql://${POSTGRES_USER:-app}:${POSTGRES_PASSWORD:-app}@db:5432/${POSTGRES_DB:-labpics}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379}
       HOST: 0.0.0.0
       PORT: 8080
       AUTH_CREDENTIALS: ${AUTH_CREDENTIALS:-admin:admin}
@@ -69,6 +84,8 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      redis:
+        condition: service_healthy
 
   worker:
     build:
@@ -78,6 +95,7 @@ services:
     environment:
       NODE_ENV: ${NODE_ENV:-production}
       DATABASE_URL: postgresql://${POSTGRES_USER:-app}:${POSTGRES_PASSWORD:-app}@db:5432/${POSTGRES_DB:-labpics}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379}
       WORKER_INTERVAL_SECONDS: ${WORKER_INTERVAL_SECONDS:-60}
       WORKER_TICK_LIMIT: ${WORKER_TICK_LIMIT:-25}
       CHATWOOT_BASE_URL: ${CHATWOOT_BASE_URL:-https://app.chatwoot.com}
@@ -113,6 +131,8 @@ services:
       STORAGE_ALERT_THRESHOLD_PCT: ${STORAGE_ALERT_THRESHOLD_PCT:-85}
     depends_on:
       db:
+        condition: service_healthy
+      redis:
         condition: service_healthy
       server:
         condition: service_started
@@ -158,5 +178,6 @@ services:
 
 volumes:
   pgdata:
+  redisdata:
   caddy_data:
   caddy_config:

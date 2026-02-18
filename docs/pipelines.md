@@ -8,6 +8,14 @@
 
 Все циклы project-scoped и идемпотентны.
 
+Расширенные слои:
+
+1. **Manual jobs** (ручной запуск через API)
+2. **Scheduler jobs** (фоновый запуск по cadence)
+3. **Cascade triggers** (автоматический запуск downstream задач после completion upstream)
+4. **Retry/DLQ loops** (восстановление после ошибок интеграций)
+5. **Real-time push** (Redis Pub/Sub → SSE → frontend auto-refresh)
+
 ## 2) Базовое расписание
 
 ### Быстрый контур
@@ -45,6 +53,28 @@
 3. `POST /lightrag/query` комбинирует vector retrieval + source lookups.
 4. Запрос логируется в `lightrag_query_runs`.
 
+### 4.3 Cascade chains (автоматические)
+
+При успешном завершении upstream задачи downstream запускаются немедленно (next tick):
+
+```
+connectors_sync_cycle → signals_extraction, embeddings_run
+signals_extraction    → health_scoring, kag_recommendations_refresh
+health_scoring        → analytics_aggregates
+kag_recommendations_refresh → kag_v2_recommendations_refresh
+```
+
+Это устраняет задержку 15-30 мин между sync и обновлением рекомендаций.
+
+### 4.4 Real-time (SSE push)
+
+Frontend auto-refresh:
+- Polling: 15-60 сек на каждый хук (Level 1, работает всегда)
+- SSE: ~1-2 сек после завершения задачи через Redis Pub/Sub (Level 3)
+- При недоступности Redis — автоматический fallback на polling
+
+Детали: [`docs/redis-sse.md`](./redis-sse.md)
+
 ## 5) Legacy jobs в LightRAG-only режиме
 
 При `LIGHTRAG_ONLY=1` legacy jobs, связанные с `/kag/*` (`kag_*`, `case_signatures_refresh`, `project_snapshot_daily`), автоматически переводятся в `paused`.
@@ -64,3 +94,4 @@
 
 - [`docs/api.md`](./api.md)
 - [`docs/runbooks.md`](./runbooks.md)
+- [`docs/redis-sse.md`](./redis-sse.md)

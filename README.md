@@ -2,12 +2,15 @@
 
 Репозиторий ориентирован на **web-платформу**:
 
-- `server/` — Fastify API + platform layers (scope/audit/outbox/scheduler)
-- `web/` — Next.js UI (auth/projects/jobs/search + shell)
+- `server/` — Fastify API + platform layers (scope/audit/outbox/scheduler) + Redis Pub/Sub + SSE
+- `web/` — Next.js UI (auth/projects/jobs/search + shell) с auto-refresh и SSE
 - `docs/` — каноническая документация
-- `docker-compose.yml` — локальный и серверный запуск стека
+- `docker-compose.yml` — локальный и серверный запуск стека (Postgres, Redis, server, worker, web)
 
 Текущий релиз работает в режиме **LightRAG-only** (`LIGHTRAG_ONLY=1`).
+
+Worker-контур введен как единый scheduler/worker слой (`server/src/worker-loop.js`).
+Real-time обновления: Redis Pub/Sub → SSE endpoint → auto-refresh в браузере. См. [`docs/redis-sse.md`](./docs/redis-sse.md).
 
 ---
 
@@ -22,6 +25,7 @@
 - Frontend + дизайн: [`docs/frontend-design.md`](./docs/frontend-design.md)
 - Platform layer (scope/audit/outbox/worker): [`docs/platform-architecture.md`](./docs/platform-architecture.md)
 - API reference: [`docs/api.md`](./docs/api.md)
+- Real-time и кеширование (Redis, SSE, auto-refresh): [`docs/redis-sse.md`](./docs/redis-sse.md)
 - Runbooks: [`docs/runbooks.md`](./docs/runbooks.md)
 - Roadmap: [`docs/mvp-vs-roadmap.md`](./docs/mvp-vs-roadmap.md)
 - Спеки: [`docs/specs/README.md`](./docs/specs/README.md)
@@ -51,6 +55,10 @@
 - `GET /jobs/scheduler`
 - `POST /jobs/scheduler/tick`
 - `GET /jobs/status`
+
+### Real-time (SSE)
+
+- `GET /events/stream` — Server-Sent Events (требует session cookie)
 
 ### Search
 
