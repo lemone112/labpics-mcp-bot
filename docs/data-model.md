@@ -14,9 +14,12 @@
 ### 2.1 Platform core
 
 - `projects`, `account_scopes`
-- `sessions`
+- `users` (auth credentials, created by migration 0004)
+- `sessions` (cookie-based, project scope tracking)
+- `settings` (system-level key-value configuration)
 - `scheduled_jobs`, `worker_runs`, `job_runs`
 - `schema_migrations`
+- `sync_watermarks` (cursor tracking per source)
 
 ### 2.2 Connectors raw
 
@@ -59,9 +62,29 @@
 - `outbound_messages`, `outbound_attempts`
 - `contact_channel_policies`
 
+### 2.7 Intelligence (KAG legacy, используется scheduler pipeline)
+
+- `kag_events`, `kag_event_log` — intelligence events и process logging
+- `kag_signal_state`, `kag_signals`, `kag_signal_history` — computed signals
+- `kag_scores`, `kag_score_history` — project scores
+- `kag_recommendations`, `recommendations_v2` — generated recommendations
+- `recommendation_action_runs` — action execution tracking
+- `kag_risk_forecasts` — 7/14/30 day risk forecasts
+- `project_snapshots`, `past_case_outcomes` — daily snapshots для case-based reasoning
+- `case_signatures` — similarity vectors для case matching
+
+### 2.8 Analytics & Signals
+
+- `analytics_revenue_snapshots`, `analytics_delivery_snapshots`, `analytics_comms_snapshots` — periodic aggregates
+- `health_scores` — computed health scores
+- `risk_radar_items` — risk entries с severity/probability
+- `risk_pattern_events` — historical risk patterns с weight
+- `signals`, `next_best_actions` — extracted signals и NBA
+- `daily_digests`, `weekly_digests` — generated digests
+
 ## 3) Legacy таблицы
 
-В схеме могут присутствовать исторические таблицы, не входящие в текущий LightRAG-контракт.  
+В схеме могут присутствовать исторические таблицы, не входящие в текущий LightRAG-контракт.
 Для продуктовой разработки ориентируйтесь только на таблицы, перечисленные в этом документе как активные.
 
 ## 4) Важные индексы и производительность

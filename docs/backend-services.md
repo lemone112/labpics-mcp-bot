@@ -190,7 +190,23 @@ server/src/
 | **Tables** | project_snapshots, past_case_outcomes |
 | **Cadence** | 1/day (kag_daily_pipeline) |
 
-### 3.3 RAG
+### 3.3 RAG & LightRAG
+
+#### lightrag.js
+| | |
+|-|-|
+| **Назначение** | Основной интеллект-контур продукта: запросы, evidence, observability |
+| **Exported** | `getLightRagStatus(pool, scope)`, `refreshLightRag(pool, scope, logger)`, `queryLightRag(pool, scope, options, logger)` |
+| **Tables read** | rag_chunks, cw_messages, linear_issues_raw, attio_opportunities_raw |
+| **Tables write** | lightrag_query_runs |
+| **Зависимости** | embeddings.js (runEmbeddings, searchChunks) |
+
+**Внутренняя логика `queryLightRag`:**
+1. Токенизация: split по `[^a-zA-Zа-яА-Я0-9_]+`, фильтр длины ≥ 3, дедуп, max 6 токенов
+2. Параллельный поиск: vector similarity (pgvector) + ILIKE patterns по source-таблицам
+3. Evidence building: нормализация результатов из всех источников (source_type, source_pk, snippet, metadata)
+4. Persist: логирование запроса в `lightrag_query_runs`
+5. Limits: query max 4000 chars, answer max 10,000 chars, evidence max 50 items, topK 1-50, sourceLimit 1-25
 
 #### embeddings.js
 | | |

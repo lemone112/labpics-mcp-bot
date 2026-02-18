@@ -12,16 +12,21 @@ UI обычно ходит через `NEXT_PUBLIC_API_BASE_URL` (наприме
 
 Public:
 
-- `GET /health`
-- `GET /metrics`
-- `POST /auth/login`
+- `GET /health` — service health check
+- `GET /metrics` — Prometheus-формат метрики:
+  - `app_requests_total`, `app_responses_total`, `app_errors_total`
+  - `app_status_2xx`, `app_status_4xx`, `app_status_5xx`
+  - `app_sse_connections_total`, `app_sse_projects_subscribed`
+- `POST /auth/login` — вход (rate-limited: макс. попытки по IP + username с окном сброса)
 - `POST /auth/logout`
 - `GET /auth/me`
 
 Protected routes требуют:
 
-- session cookie
-- CSRF header (`x-csrf-token`) для mutating методов
+- session cookie (`lp_session`, httpOnly, SameSite=lax, maxAge 14 дней)
+- CSRF header (`x-csrf-token`) для mutating методов (timing-safe сравнение)
+
+Конфиг auth: `AUTH_CREDENTIALS` (user:pass) или отдельно `AUTH_USERNAME` + `AUTH_PASSWORD`.
 
 ## 2) Projects
 
@@ -33,11 +38,17 @@ Protected routes требуют:
 
 - `POST /lightrag/query`
   - body: `{ query: string, topK?: number, sourceLimit?: number }`
-  - response: `answer`, `chunks`, `evidence`, `stats`
+  - response: `answer`, `chunks`, `evidence`, `entities`, `stats`
+  - Внутренняя логика:
+    - Токенизация запроса: split по не-alphanumeric символам (включая кириллицу), фильтр по длине ≥ 3, дедуп, max 6 токенов
+    - Параллельный поиск: vector similarity по `rag_chunks` + ILIKE по `cw_messages`, `linear_issues_raw`, `attio_opportunities_raw`
+    - Evidence: до 50 элементов из всех источников, объединённых с metadata
+    - Limits: query max 4000 chars, topK 1-50 (default 10), sourceLimit 1-25 (default 8)
+    - Каждый запрос логируется в `lightrag_query_runs` (observability)
 - `POST /lightrag/refresh`
   - запускает embeddings refresh + возвращает статус
 - `GET /lightrag/status`
-  - показывает состояния embeddings и объёмы source-данных
+  - показывает состояния embeddings (`pending/processing/ready/failed` counts) и объёмы source-данных
 
 Legacy compatibility:
 
@@ -59,7 +70,12 @@ Legacy compatibility:
 - `POST /jobs/attio/sync`
 - `POST /jobs/linear/sync`
 - `POST /jobs/embeddings/run`
-- `GET /jobs/status`
+- `GET /jobs/status` — агрегированный ответ:
+  - `jobs` — последний run по каждому job_name
+  - `rag_counts` — количество chunks по статусам (pending/processing/ready/failed)
+  - `entities` — counts по contacts, conversations, messages, rag_chunks
+  - `storage` — database_bytes, scoped_logical_bytes, budget_bytes (`STORAGE_BUDGET_GB`, default 20), usage_percent
+  - `watermarks` — последние 5 sync watermarks
 - `GET /jobs/scheduler`
 - `POST /jobs/scheduler/tick`
 

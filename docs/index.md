@@ -42,6 +42,10 @@
 - UI обязан опираться на LightRAG + operational charts.
 - **Real-time**: Redis Pub/Sub для event propagation, SSE для auto-refresh в браузере, cascade triggers между задачами.
 
+## Тестирование
+
+13. Стратегия и запуск: [`docs/testing.md`](./testing.md)
+
 ## Дополнительно
 
 - Стиль документации: [`docs/style-guide.md`](./style-guide.md)
