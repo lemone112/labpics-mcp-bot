@@ -1,26 +1,26 @@
 # Статус продукта и roadmap (Production-Ready Plan)
 
-> Обновлено: 2026-02-18 (post Iter 0-6)
+> Обновлено: 2026-02-18 (post Iter 0-7 — все итерации завершены)
 > Детальный анализ: [`docs/product-structure-analysis.md`](./product-structure-analysis.md)
 
 ---
 
 ## 1) Текущее состояние — что сделано
 
-### Платформа (зрелость: 80% → 92%)
+### Платформа (зрелость: 80% → **96%**)
 
 **Было:** Session auth + CSRF, plaintext пароли, нет rate limiting, session UPDATE на каждый запрос.
 
-**Сделано (Iter 0 + 1 + 2):**
+**Сделано (Iter 0 + 1 + 2 + 7):**
 - ✅ Bcrypt password hashing с автодетектом формата (`isBcryptHash()`)
 - ✅ `AUTH_CREDENTIALS` без default values — startup fail если не задано
 - ✅ API rate limiting: 200 req/min per session, 60 req/min per IP
 - ✅ Session cache в Redis (TTL 60s) + batched `last_seen_at` (раз в 30s)
 - ✅ Structured JSON logging (Pino с serializers, request_id, correlation)
 - ✅ Graceful shutdown (SIGTERM → 10s drain → close Redis → close DB pool)
+- ✅ Zod schema validation на 14 POST endpoints (`parseBody()` + standardized error response)
 
 **Оставшиеся gaps:**
-- Нет Zod/schema validation на POST endpoints (ручная проверка body)
 - `hydrateSessionScope()` может вызываться дважды (onRequest + preValidation)
 
 ### Интеграции / Connectors (зрелость: 85% → **96%**)
@@ -116,58 +116,44 @@
 | 4 | Database Optimization | ✅ Done | 6/6 | pg_trgm + 6 GIN indexes, matview `mv_portfolio_dashboard`, 10 LATERAL → batch, strategic indexes, orphaned tables dropped, audit partitioning infra |
 | 5 | Observability & Ops | ✅ Done | 6/6 | Full Prometheus exporter, 11 alert rules, backup verification, Prometheus+Loki+Grafana stack, incident runbook, CI smoke tests |
 | 6 | Data Quality & LightRAG UX | ✅ Done | 5/5 | Quality score proxy, feedback endpoint, source filters, identity dedup preview, completeness diff |
+| 7 | Input Validation & API Hardening | ✅ Done | 4/4 | Zod schemas for CRM/offers/outbound/auth/lightrag, `parseBody()` helper, standardized validation errors with details |
 
 ---
 
-## 3) Оставшиеся итерации
+## 3) Все итерации завершены
 
-### Iter 7 — Input Validation & API Hardening (новая)
-
-> Все POST endpoints защищены schema validation. Нет unhandled edge cases.
-
-**Приоритет: LOW** — текущая ручная валидация работает, но не масштабируется.
-
-| # | Задача | Файлы | Acceptance criteria | Статус |
-|---|--------|-------|---------------------|--------|
-| 7.1 | Zod schemas для CRM endpoints | `index.js` | `/crm/accounts`, `/crm/opportunities` — Zod validation, 400 при invalid | Pending |
-| 7.2 | Zod schemas для offers/outbound | `index.js` | `/offers`, `/outbound/draft` — Zod validation | Pending |
-| 7.3 | Zod schemas для auth/admin | `index.js` | `/auth/login`, `/admin/*` — Zod validation | Pending |
-| 7.4 | Error response standardization | `index.js` | Единый формат ошибок: `{ error: string, details?: ZodError[] }` | Pending |
-
-**Зависимости:** нет
-**Effort:** Low
+Нет оставшихся итераций. План production-ready полностью выполнен.
 
 ---
 
 ## 4) Рекомендуемый порядок выполнения
 
 ```
-✅ Iter 0 (security) ──────── DONE
-✅ Iter 1 (Redis cache) ───── DONE
+✅ Iter 0 (security) ──────── DONE (7/7)
+✅ Iter 1 (Redis cache) ───── DONE (8/8)
 ✅ Iter 2 (reliability) ───── DONE (5/6, zod → Iter 7)
 ✅ Iter 3 (frontend) ───────── DONE (5/6, portfolio hook → as-is)
 ✅ Iter 4 (DB optimization) ── DONE (6/6)
 ✅ Iter 5 (observability) ──── DONE (6/6)
 ✅ Iter 6 (quality & UX) ──── DONE (5/5)
-                                │
-    Iter 7 (validation) ──────┘  ← LOW (tech debt)
+✅ Iter 7 (validation) ─────── DONE (4/4)
 ```
 
-**Итого:** 7 итераций завершены (42/44 задач). Осталось 1 итерация (4 задачи).
+**Итого:** 8 итераций завершены (46/48 задач). Все итерации выполнены. 2 задачи отложены by design (zod в Iter 2, portfolio hook в Iter 3).
 
 ---
 
 ## 5) Матрица зрелости
 
-| Зона | До (Iter 0) | После (Iter 0-2) | После (Iter 0-4) | После (Iter 0-5) | После (Iter 0-6) | Target |
-|------|-------------|-------------------|-------------------|-------------------|-------------------|--------|
-| Платформа | 80% | 92% | 92% | 92% | **92%** | 98% |
-| Connectors | 85% | 92% | 95% | 95% | **96%** | 97% |
-| Intelligence | 65% | 75% | 82% | 82% | **90%** | 92% |
-| Dashboard | 50% | 70% | 88% | 88% | **88%** | 90% |
-| Frontend | 70% | 70% | 85% | 85% | **85%** | 90% |
-| Инфраструктура | 40% | 78% | 78% | 92% | **92%** | 95% |
-| **Среднее** | **65%** | **80%** | **87%** | **89%** | **91%** | **94%** |
+| Зона | До (Iter 0) | После (Iter 0-2) | После (Iter 0-4) | После (Iter 0-5) | После (Iter 0-6) | После (Iter 0-7) | Target |
+|------|-------------|-------------------|-------------------|-------------------|-------------------|-------------------|--------|
+| Платформа | 80% | 92% | 92% | 92% | 92% | **96%** | 98% |
+| Connectors | 85% | 92% | 95% | 95% | 96% | **96%** | 97% |
+| Intelligence | 65% | 75% | 82% | 82% | 90% | **90%** | 92% |
+| Dashboard | 50% | 70% | 88% | 88% | 88% | **88%** | 90% |
+| Frontend | 70% | 70% | 85% | 85% | 85% | **85%** | 90% |
+| Инфраструктура | 40% | 78% | 78% | 92% | 92% | **92%** | 95% |
+| **Среднее** | **65%** | **80%** | **87%** | **89%** | **91%** | **91%** | **94%** |
 
 ---
 

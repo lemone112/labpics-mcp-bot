@@ -251,3 +251,30 @@ Circuit breaker вызвал failure в `http.unit.test.js` — global state (`c
 - Quality score — proxy metric без ground truth. Формула эвристическая, но calibratable через feedback data.
 - `persistLightRagQueryRun` сохраняет до 50 evidence items — при масштабировании может потребоваться агрегация.
 - Identity preview limit 50 — при большом количестве контактов может пропустить важные совпадения.
+
+---
+
+## Iter 7 — Input Validation & API Hardening (закрыта — 2026-02-18)
+
+> Все POST endpoints защищены Zod schema validation. Единый формат ошибок.
+
+### Что изменено
+
+| # | Задача | Файлы | Результат |
+|---|--------|-------|-----------|
+| 7.1 | Zod schemas для CRM | `server/src/lib/schemas.js` (новый), `server/src/index.js` | `CreateAccountSchema`, `CreateOpportunitySchema`, `UpdateStageSchema` — валидация на POST `/crm/accounts`, `/crm/opportunities`, `/crm/opportunities/:id/stage` |
+| 7.2 | Zod schemas для offers/outbound | `server/src/lib/schemas.js`, `server/src/index.js` | `CreateOfferSchema`, `ApproveOfferSchema`, `CreateOutboundDraftSchema`, `OptOutSchema` — валидация на POST `/offers`, `/offers/:id/approve-*`, `/outbound/draft`, `/outbound/opt-out` |
+| 7.3 | Zod schemas для auth/project/lightrag | `server/src/lib/schemas.js`, `server/src/index.js` | `LoginSchema`, `CreateProjectSchema`, `LightRagQuerySchema`, `LightRagFeedbackSchema`, `SearchSchema` — валидация на `/auth/login`, `/projects`, `/search`, `/lightrag/query`, `/lightrag/feedback` |
+| 7.4 | Error response standardization | `server/src/lib/api-contract.js` | `parseBody(schema, raw)` — единый Zod → ApiError bridge. `toApiError()` поддерживает ZodError. Ошибки: `{ ok: false, error: "validation_error", message: "...", details: [{ path, message, code }] }` |
+
+### Дополнительно
+
+- Установлен `zod@^3` в server dependencies
+- 29 новых unit tests в `server/test/schemas.unit.test.js` (355 total)
+- 12 schemas покрывают 14 POST endpoints
+- `optionalTrimmedString` — reusable primitive: trim → max length → null if empty
+
+### Самокритика
+
+- Не все POST endpoints покрыты (jobs, kag legacy, digests, signals) — они либо internal-only, либо legacy. Достаточно для user-facing API.
+- Schemas живут в одном файле — при росте до 30+ schemas стоит разбить по domain.

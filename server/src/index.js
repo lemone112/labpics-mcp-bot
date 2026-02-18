@@ -9,7 +9,21 @@ import cors from "@fastify/cors";
 import bcrypt from "bcrypt";
 
 import { createDbPool } from "./lib/db.js";
-import { ApiError, fail, parseLimit, sendError, sendOk, toApiError } from "./lib/api-contract.js";
+import { ApiError, fail, parseBody, parseLimit, sendError, sendOk, toApiError } from "./lib/api-contract.js";
+import {
+  LoginSchema,
+  CreateProjectSchema,
+  CreateAccountSchema,
+  CreateOpportunitySchema,
+  UpdateStageSchema,
+  CreateOfferSchema,
+  ApproveOfferSchema,
+  CreateOutboundDraftSchema,
+  OptOutSchema,
+  LightRagQuerySchema,
+  LightRagFeedbackSchema,
+  SearchSchema,
+} from "./lib/schemas.js";
 import { requireProjectScope } from "./lib/scope.js";
 import { applyMigrations } from "../db/migrate-lib.js";
 import { runEmbeddings } from "./services/embeddings.js";
@@ -741,10 +755,10 @@ async function main() {
   });
 
   registerPost("/auth/login", async (request, reply) => {
-    const body = request.body && typeof request.body === "object" ? request.body : {};
-    const username = normalizeAccountUsername(body?.username);
-    const password = String(body?.password || "");
-    if (!username || !password) {
+    const body = parseBody(LoginSchema, request.body);
+    const username = normalizeAccountUsername(body.username);
+    const password = body.password;
+    if (!username) {
       return sendError(reply, request.requestId, new ApiError(400, "missing_credentials", "Missing credentials"));
     }
 
@@ -851,17 +865,14 @@ async function main() {
   });
 
   registerPost("/projects", async (request, reply) => {
-    const body = request.body && typeof request.body === "object" ? request.body : {};
-    const name = String(body?.name || "").trim();
-    if (name.length < 2 || name.length > 160) {
-      return sendError(reply, request.requestId, new ApiError(400, "invalid_name", "Invalid project name"));
-    }
+    const body = parseBody(CreateProjectSchema, request.body);
+    const name = body.name;
     if (name.toLowerCase() === LEGACY_SCOPE_PROJECT_NAME) {
       return sendError(reply, request.requestId, new ApiError(400, "reserved_name", "Project name is reserved"));
     }
 
-    const desiredScopeKey = String(body?.account_scope_key || "").trim().toLowerCase() || null;
-    const scopeName = String(body?.account_scope_name || "").trim() || "Project account scope";
+    const desiredScopeKey = body.account_scope_key ? body.account_scope_key.toLowerCase() : null;
+    const scopeName = body.account_scope_name;
     let accountScopeId = null;
     if (desiredScopeKey) {
       const { rows: scopeRows } = await pool.query(
@@ -1409,18 +1420,11 @@ async function main() {
 
   registerPost("/search", async (request, reply) => {
     const scope = requireProjectScope(request);
-    const body = request.body && typeof request.body === "object" ? request.body : {};
-    const query = String(body?.query || "").trim();
-    const topK = toTopK(body?.topK, 10);
-
-    if (!query) {
-      return sendError(reply, request.requestId, new ApiError(400, "query_required", "Query is required"));
-    }
-
+    const body = parseBody(SearchSchema, request.body);
     const result = await queryLightRag(
       pool,
       scope,
-      { query, topK, sourceLimit: body?.sourceLimit, createdBy: request.auth?.username || null },
+      { query: body.query, topK: body.topK, sourceLimit: body.sourceLimit, createdBy: request.auth?.username || null },
       request.log
     );
     return sendOk(reply, request.requestId, {
@@ -1438,22 +1442,16 @@ async function main() {
 
   registerPost("/lightrag/query", async (request, reply) => {
     const scope = requireProjectScope(request);
-    const body = request.body && typeof request.body === "object" ? request.body : {};
-    const query = String(body?.query || "").trim();
-    if (!query) {
-      return sendError(reply, request.requestId, new ApiError(400, "query_required", "Query is required"));
-    }
-    const topK = toTopK(body?.topK, 10);
+    const body = parseBody(LightRagQuerySchema, request.body);
 
-    const sourceFilter = Array.isArray(body?.sourceFilter) ? body.sourceFilter : null;
-    const ragCacheKey = `lightrag:${scope.projectId}:${cacheKeyHash(query, String(topK), JSON.stringify(sourceFilter || []))}`;
+    const ragCacheKey = `lightrag:${scope.projectId}:${cacheKeyHash(body.query, String(body.topK), JSON.stringify(body.sourceFilter || []))}`;
     const cached = await cache.get(ragCacheKey);
     if (cached) return sendOk(reply, request.requestId, { ...cached, cached: true });
 
     const result = await queryLightRag(
       pool,
       scope,
-      { query, topK, sourceLimit: body?.sourceLimit, sourceFilter, createdBy: request.auth?.username || null },
+      { query: body.query, topK: body.topK, sourceLimit: body.sourceLimit, sourceFilter: body.sourceFilter, createdBy: request.auth?.username || null },
       request.log
     );
     await cache.set(ragCacheKey, result, 300);
@@ -1480,19 +1478,11 @@ async function main() {
 
   registerPost("/lightrag/feedback", async (request, reply) => {
     const scope = requireProjectScope(request);
-    const body = request.body && typeof request.body === "object" ? request.body : {};
-    const queryRunId = Number(body?.query_run_id);
-    if (!Number.isFinite(queryRunId) || queryRunId <= 0) {
-      return sendError(reply, request.requestId, new ApiError(400, "query_run_id_required", "Valid query_run_id is required"));
-    }
-    const rating = Number(body?.rating);
-    if (![-1, 0, 1].includes(rating)) {
-      return sendError(reply, request.requestId, new ApiError(400, "invalid_rating", "Rating must be -1, 0, or 1"));
-    }
+    const body = parseBody(LightRagFeedbackSchema, request.body);
     const result = await submitLightRagFeedback(pool, scope, {
-      queryRunId,
-      rating,
-      comment: body?.comment,
+      queryRunId: body.query_run_id,
+      rating: body.rating,
+      comment: body.comment,
       createdBy: request.auth?.username || null,
     });
     if (!result) {
@@ -2196,21 +2186,15 @@ async function main() {
 
   registerPost("/crm/accounts", async (request, reply) => {
     const scope = requireProjectScope(request);
-    const body = request.body && typeof request.body === "object" ? request.body : {};
-    const name = String(body?.name || "").trim();
-    if (name.length < 2) {
-      return sendError(reply, request.requestId, new ApiError(400, "invalid_account_name", "Account name is required"));
-    }
-    const domain = String(body?.domain || "").trim() || null;
-    const stage = String(body?.stage || "prospect").trim().toLowerCase();
-    const ownerUsername = String(body?.owner_username || request.auth?.username || "").trim() || null;
+    const body = parseBody(CreateAccountSchema, request.body);
+    const ownerUsername = body.owner_username || request.auth?.username || null;
     const { rows } = await pool.query(
       `
         INSERT INTO crm_accounts(project_id, account_scope_id, name, domain, external_ref, stage, owner_username, updated_at)
         VALUES ($1, $2, $3, $4, NULL, $5, $6, now())
         RETURNING id, name, domain, external_ref, stage, owner_username, created_at, updated_at
       `,
-      [scope.projectId, scope.accountScopeId, name.slice(0, 300), domain, stage, ownerUsername]
+      [scope.projectId, scope.accountScopeId, body.name, body.domain, body.stage, ownerUsername]
     );
     await writeAuditEvent(pool, {
       projectId: scope.projectId,
@@ -2222,7 +2206,7 @@ async function main() {
       status: "ok",
       requestId: request.requestId,
       payload: { name: rows[0].name, stage: rows[0].stage },
-      evidenceRefs: normalizeEvidenceRefs(body?.evidence_refs || []),
+      evidenceRefs: normalizeEvidenceRefs(body.evidence_refs),
     });
     return sendOk(reply, request.requestId, { account: rows[0] }, 201);
   });
@@ -2262,22 +2246,8 @@ async function main() {
 
   registerPost("/crm/opportunities", async (request, reply) => {
     const scope = requireProjectScope(request);
-    const body = request.body && typeof request.body === "object" ? request.body : {};
-    const title = String(body?.title || "").trim();
-    const accountId = String(body?.account_id || "").trim();
-    const nextStep = String(body?.next_step || "").trim();
-    if (!title) {
-      return sendError(reply, request.requestId, new ApiError(400, "invalid_opportunity_title", "Opportunity title is required"));
-    }
-    if (!accountId) {
-      return sendError(reply, request.requestId, new ApiError(400, "invalid_account_id", "account_id is required"));
-    }
-    if (!nextStep || nextStep.length < 4) {
-      return sendError(reply, request.requestId, new ApiError(400, "next_step_required", "next_step is required"));
-    }
-    const stage = String(body?.stage || "discovery").trim().toLowerCase();
-    const probability = toNumber(body?.probability, 0.1, 0, 1);
-    const amount = toNumber(body?.amount_estimate, 0, 0, 1_000_000_000);
+    const body = parseBody(CreateOpportunitySchema, request.body);
+    const ownerUsername = body.owner_username || request.auth?.username || null;
     const { rows } = await pool.query(
       `
         INSERT INTO crm_opportunities(
@@ -2300,15 +2270,15 @@ async function main() {
       [
         scope.projectId,
         scope.accountScopeId,
-        accountId,
-        title.slice(0, 500),
-        stage,
-        amount,
-        probability,
-        body?.expected_close_date || null,
-        nextStep.slice(0, 1000),
-        String(body?.owner_username || request.auth?.username || "").trim() || null,
-        JSON.stringify(normalizeEvidenceRefs(body?.evidence_refs || [])),
+        body.account_id,
+        body.title,
+        body.stage,
+        body.amount_estimate,
+        body.probability,
+        body.expected_close_date,
+        body.next_step,
+        ownerUsername,
+        JSON.stringify(normalizeEvidenceRefs(body.evidence_refs)),
       ]
     );
     await writeAuditEvent(pool, {
@@ -2333,13 +2303,10 @@ async function main() {
 
   registerPost("/crm/opportunities/:id/stage", async (request, reply) => {
     const scope = requireProjectScope(request);
-    const body = request.body && typeof request.body === "object" ? request.body : {};
-    const nextStage = String(body?.stage || "").trim().toLowerCase();
-    const reason = String(body?.reason || "").trim() || null;
-    const evidenceRefs = normalizeEvidenceRefs(body?.evidence_refs || []);
-    if (!nextStage) {
-      return sendError(reply, request.requestId, new ApiError(400, "invalid_stage", "stage is required"));
-    }
+    const body = parseBody(UpdateStageSchema, request.body);
+    const nextStage = body.stage;
+    const reason = body.reason;
+    const evidenceRefs = normalizeEvidenceRefs(body.evidence_refs);
     const current = await pool.query(
       `
         SELECT id, stage, title
@@ -2481,16 +2448,12 @@ async function main() {
 
   registerPost("/offers", async (request, reply) => {
     const scope = requireProjectScope(request);
-    const body = request.body && typeof request.body === "object" ? request.body : {};
-    const title = String(body?.title || "").trim();
-    if (!title) {
-      return sendError(reply, request.requestId, new ApiError(400, "invalid_offer_title", "Offer title is required"));
-    }
-    const subtotal = toNumber(body?.subtotal, 0, 0, 1_000_000_000);
-    const discountPct = toNumber(body?.discount_pct, 0, 0, 100);
+    const body = parseBody(CreateOfferSchema, request.body);
+    const subtotal = body.subtotal;
+    const discountPct = body.discount_pct;
     const total = Number((subtotal * (1 - discountPct / 100)).toFixed(2));
     const status = discountPct > 0 ? "draft" : "approved";
-    const evidenceRefs = normalizeEvidenceRefs(body?.evidence_refs || []);
+    const evidenceRefs = normalizeEvidenceRefs(body.evidence_refs);
     const { rows } = await pool.query(
       `
         INSERT INTO offers(
@@ -2529,10 +2492,10 @@ async function main() {
       [
         scope.projectId,
         scope.accountScopeId,
-        body?.account_id || null,
-        body?.opportunity_id || null,
-        title.slice(0, 500),
-        String(body?.currency || "USD").trim().toUpperCase().slice(0, 6),
+        body.account_id,
+        body.opportunity_id,
+        body.title,
+        body.currency,
         subtotal,
         discountPct,
         total,
@@ -2564,8 +2527,8 @@ async function main() {
   registerPost("/offers/:id/approve-discount", async (request, reply) => {
     const scope = requireProjectScope(request);
     const offerId = String(request.params?.id || "");
-    const body = request.body && typeof request.body === "object" ? request.body : {};
-    const evidenceRefs = normalizeEvidenceRefs(body?.evidence_refs || []);
+    const body = parseBody(ApproveOfferSchema, request.body);
+    const evidenceRefs = normalizeEvidenceRefs(body.evidence_refs);
     const { rows } = await pool.query(
       `
         UPDATE offers
@@ -2613,7 +2576,7 @@ async function main() {
         scope.accountScopeId,
         offer.id,
         request.auth?.username || null,
-        String(body?.comment || "").trim() || null,
+        body.comment,
         JSON.stringify(evidenceRefs),
         audit.id,
       ]
@@ -2624,8 +2587,8 @@ async function main() {
   registerPost("/offers/:id/approve-send", async (request, reply) => {
     const scope = requireProjectScope(request);
     const offerId = String(request.params?.id || "");
-    const body = request.body && typeof request.body === "object" ? request.body : {};
-    const evidenceRefs = normalizeEvidenceRefs(body?.evidence_refs || []);
+    const body = parseBody(ApproveOfferSchema, request.body);
+    const evidenceRefs = normalizeEvidenceRefs(body.evidence_refs);
     const { rows } = await pool.query(
       `
         UPDATE offers
@@ -2674,7 +2637,7 @@ async function main() {
         scope.accountScopeId,
         offer.id,
         request.auth?.username || null,
-        String(body?.comment || "").trim() || null,
+        body.comment,
         JSON.stringify(evidenceRefs),
         audit.id,
       ]
@@ -2851,7 +2814,7 @@ async function main() {
 
   registerPost("/outbound/draft", async (request, reply) => {
     const scope = requireProjectScope(request);
-    const body = request.body && typeof request.body === "object" ? request.body : {};
+    const body = parseBody(CreateOutboundDraftSchema, request.body);
     const outbound = await createOutboundDraft(pool, scope, body, request.auth?.username || null, request.requestId);
     return sendOk(reply, request.requestId, { outbound }, 201);
   });
@@ -2884,7 +2847,7 @@ async function main() {
 
   registerPost("/outbound/opt-out", async (request, reply) => {
     const scope = requireProjectScope(request);
-    const body = request.body && typeof request.body === "object" ? request.body : {};
+    const body = parseBody(OptOutSchema, request.body);
     const policy = await setOptOut(pool, scope, body, request.auth?.username || null, request.requestId);
     return sendOk(reply, request.requestId, { policy });
   });

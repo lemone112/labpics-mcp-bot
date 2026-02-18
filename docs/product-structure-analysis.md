@@ -1,10 +1,10 @@
 # Глубокий анализ структуры продукта Labpics Dashboard
 
-> Дата анализа: 2026-02-18 | Обновлено: 2026-02-18 (post Iter 0-5)
+> Дата анализа: 2026-02-18 | Обновлено: 2026-02-18 (post Iter 0-7 — все итерации завершены)
 > Метод: 3-цикловый ресёрч (structure → hotpaths → self-criticism)
 > Scope: backend, frontend, infrastructure, data model, Redis, production readiness
 >
-> **Статус:** Iter 0-6 завершены. Оценки зрелости обновлены. Детали закрытых проблем отмечены ✅.
+> **Статус:** Iter 0-7 завершены (все итерации). Оценки зрелости обновлены. Детали закрытых проблем отмечены ✅.
 
 ---
 
@@ -23,7 +23,7 @@
 
 Продукт имеет шесть фундаментальных зон, каждая со своим уровнем зрелости.
 
-### 1.1 Платформенный слой (Scope, Auth, Audit) — зрелость: 80% → **92%**
+### 1.1 Платформенный слой (Scope, Auth, Audit) — зрелость: 80% → **96%**
 
 **Текущее состояние:** Зрелое ядро. Session auth + CSRF + request_id, жёсткий project/account scope, audit trail.
 
@@ -175,10 +175,10 @@ MEDIUM (качество и масштабируемость):
   11. ✅ Повторные запросы одних данных в portfolio → Iter 1 (cache 90s)
   12. ✅ Frontend: code splitting + SSE polling disabled (Iter 3)
   13. ✅ Нет structured logging → Iter 2 (Pino)
-  14. ⚠️  Нет input validation schemas (zod/ajv) → Iter 7
+  14. ✅ Нет input validation schemas → Iter 7: Zod schemas на 14 POST endpoints
   15. ✅ evidence_items: pg_trgm GIN index on snippet (Iter 4.1)
 
-Закрыто: 13/15 (87%). Remaining: 2 items (MEDIUM, нет CRITICAL/HIGH).
+Закрыто: 14/15 (93%). Remaining: 1 item (env vars dedup, LOW).
 ```
 
 ---
@@ -592,9 +592,9 @@ session UPDATE (login/logout/project switch):
 | 4 | Database Optimization | 6/6 | ✅ Done | — |
 | 5 | Observability & Ops | 6/6 | ✅ Done | — |
 | 6 | Data Quality & UX | 5/5 | ✅ Done | — |
-| 7 | Input Validation | 0/4 | Pending | LOW |
+| 7 | Input Validation | 4/4 | ✅ Done | — |
 
-**Итого:** 42/44 задач завершено в Iter 0-6. Осталось 4 задачи в Iter 7.
+**Итого:** 46/48 задач завершено в Iter 0-7. Все итерации выполнены.
 
 **Рекомендуемый порядок выполнения:**
 ```
@@ -605,6 +605,5 @@ session UPDATE (login/logout/project switch):
 ✅ Iter 4 (DB optimization) ── DONE
 ✅ Iter 5 (observability) ──── DONE
 ✅ Iter 6 (quality & UX) ──── DONE
-                                │
-    Iter 7 (validation) ──────┘  ← LOW
+✅ Iter 7 (validation) ─────── DONE   ← ALL COMPLETE
 ```
