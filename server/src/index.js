@@ -24,14 +24,14 @@ import {
   runAllConnectorsSync,
   runConnectorSync,
 } from "./services/connector-sync.js";
-import { listSyncReconciliation, runSyncReconciliation } from "./services/reconciliation.js";
+import { getCompletenessDiff, listSyncReconciliation, runSyncReconciliation } from "./services/reconciliation.js";
 import { applyIdentitySuggestions, listIdentityLinks, listIdentitySuggestions, previewIdentitySuggestions } from "./services/identity-graph.js";
 import { extractSignalsAndNba, getTopNba, listNba, listSignals, updateNbaStatus, updateSignalStatus } from "./services/signals.js";
 import { listUpsellRadar, refreshUpsellRadar, updateUpsellStatus } from "./services/upsell.js";
 import { applyContinuityActions, buildContinuityPreview, listContinuityActions } from "./services/continuity.js";
 import { getPortfolioMessages, getPortfolioOverview } from "./services/portfolio.js";
 import { syncLoopsContacts } from "./services/loops.js";
-import { getLightRagStatus, queryLightRag, refreshLightRag } from "./services/lightrag.js";
+import { getLightRagStatus, queryLightRag, refreshLightRag, submitLightRagFeedback } from "./services/lightrag.js";
 import { listKagRecommendations, listKagScores, listKagSignals, runKagRecommendationRefresh } from "./services/kag.js";
 import { listProjectEvents } from "./services/event-log.js";
 import { buildProjectSnapshot, listPastCaseOutcomes, listProjectSnapshots } from "./services/snapshots.js";
@@ -1292,6 +1292,12 @@ async function main() {
     return sendOk(reply, request.requestId, result);
   });
 
+  registerGet("/connectors/reconciliation/diff", async (request, reply) => {
+    const scope = requireProjectScope(request);
+    const diff = await getCompletenessDiff(pool, scope);
+    return sendOk(reply, request.requestId, { diff });
+  });
+
   registerPost("/connectors/reconciliation/run", async (request, reply) => {
     const scope = requireProjectScope(request);
     const result = await runSyncReconciliation(pool, scope, {
@@ -1439,14 +1445,15 @@ async function main() {
     }
     const topK = toTopK(body?.topK, 10);
 
-    const ragCacheKey = `lightrag:${scope.projectId}:${cacheKeyHash(query, String(topK))}`;
+    const sourceFilter = Array.isArray(body?.sourceFilter) ? body.sourceFilter : null;
+    const ragCacheKey = `lightrag:${scope.projectId}:${cacheKeyHash(query, String(topK), JSON.stringify(sourceFilter || []))}`;
     const cached = await cache.get(ragCacheKey);
     if (cached) return sendOk(reply, request.requestId, { ...cached, cached: true });
 
     const result = await queryLightRag(
       pool,
       scope,
-      { query, topK, sourceLimit: body?.sourceLimit, createdBy: request.auth?.username || null },
+      { query, topK, sourceLimit: body?.sourceLimit, sourceFilter, createdBy: request.auth?.username || null },
       request.log
     );
     await cache.set(ragCacheKey, result, 300);
@@ -1469,6 +1476,29 @@ async function main() {
       evidenceRefs: [],
     });
     return sendOk(reply, request.requestId, { result });
+  });
+
+  registerPost("/lightrag/feedback", async (request, reply) => {
+    const scope = requireProjectScope(request);
+    const body = request.body && typeof request.body === "object" ? request.body : {};
+    const queryRunId = Number(body?.query_run_id);
+    if (!Number.isFinite(queryRunId) || queryRunId <= 0) {
+      return sendError(reply, request.requestId, new ApiError(400, "query_run_id_required", "Valid query_run_id is required"));
+    }
+    const rating = Number(body?.rating);
+    if (![-1, 0, 1].includes(rating)) {
+      return sendError(reply, request.requestId, new ApiError(400, "invalid_rating", "Rating must be -1, 0, or 1"));
+    }
+    const result = await submitLightRagFeedback(pool, scope, {
+      queryRunId,
+      rating,
+      comment: body?.comment,
+      createdBy: request.auth?.username || null,
+    });
+    if (!result) {
+      return sendError(reply, request.requestId, new ApiError(400, "feedback_failed", "Failed to submit feedback"));
+    }
+    return sendOk(reply, request.requestId, result);
   });
 
   registerGet("/control-tower", async (request, reply) => {

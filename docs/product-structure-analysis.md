@@ -4,7 +4,7 @@
 > Метод: 3-цикловый ресёрч (structure → hotpaths → self-criticism)
 > Scope: backend, frontend, infrastructure, data model, Redis, production readiness
 >
-> **Статус:** Iter 0-5 завершены. Оценки зрелости обновлены. Детали закрытых проблем отмечены ✅.
+> **Статус:** Iter 0-6 завершены. Оценки зрелости обновлены. Детали закрытых проблем отмечены ✅.
 
 ---
 
@@ -42,7 +42,7 @@
 
 ---
 
-### 1.2 Интеграционный слой (Connectors) — зрелость: 85% → **95%**
+### 1.2 Интеграционный слой (Connectors) — зрелость: 85% → **96%**
 
 **Текущее состояние:** Хорошая архитектура. Инкрементальный sync, DLQ с backoff, reconciliation, два режима (HTTP/MCP).
 
@@ -53,15 +53,17 @@
 | Нет circuit breaker — при падении внешнего API sync зависает до timeout | `chatwoot.js`, `linear.js`, `attio.js` | HIGH | ✅ Iter 2: per-host CB |
 | `connector_errors` — нет индекса по (project_id, status, error_kind) | migrations | MEDIUM | ✅ Iter 4.4 |
 | Нет алертов на падение `completeness_pct` | — | MEDIUM | ✅ Iter 2: audit event |
+| Нет diff-report полноты между циклами | `reconciliation.js` | MEDIUM | ✅ Iter 6.5: completeness diff |
+| Нет auto identity dedup preview | `connector-sync.js` | MEDIUM | ✅ Iter 6.4: preview at sync |
 | 80+ env vars дублируются между server и worker в docker-compose | `docker-compose.yml` | LOW | Open |
 
-**Вердикт:** ~~Нужен circuit breaker и мониторинг SLA.~~ Circuit breaker, alerting и strategic indexes реализованы. Remaining: CB states в `/metrics`.
+**Вердикт:** ~~Нужен circuit breaker и мониторинг SLA.~~ Circuit breaker, alerting, strategic indexes, completeness diff и identity preview реализованы. CB states в `/metrics` (Iter 5).
 
 ---
 
-### 1.3 Intelligence слой (LightRAG) — зрелость: 65% → **82%**
+### 1.3 Intelligence слой (LightRAG) — зрелость: 65% → **90%**
 
-**Текущее состояние:** Рабочий MVP. Vector search + ILIKE, evidence building, query observability.
+**Текущее состояние:** Production-ready. Vector search + ILIKE + caching + quality score + feedback loop.
 
 **Проблемы:**
 
@@ -70,10 +72,11 @@
 | 4 параллельных полнотабличных сканирования при каждом запросе | `lightrag.js` | 174-251 | HIGH | ✅ Iter 4.1: pg_trgm GIN |
 | ILIKE ANY() — sequential scan без index | `lightrag.js` | 176-224 | HIGH | ✅ Iter 4.1: pg_trgm GIN |
 | Нет кеширования повторных запросов (один и тот же вопрос = полный цикл) | `lightrag.js` | — | HIGH | ✅ Iter 1: TTL 300s |
-| Нет quality score / feedback loop (запланировано, не реализовано) | — | MEDIUM | Open → Iter 6 |
-| Vector index tuning (IVFFlat probes / HNSW ef_search) только через env vars | — | LOW | Open |
+| Нет quality score / feedback loop | — | — | MEDIUM | ✅ Iter 6.1+6.2: quality score + feedback endpoint |
+| Нет фильтрации по типу источника | `lightrag.js` | — | MEDIUM | ✅ Iter 6.3: sourceFilter parameter |
+| Vector index tuning (IVFFlat probes / HNSW ef_search) только через env vars | — | — | LOW | Open |
 
-**Вердикт:** ~~Под нагрузкой будет деградировать.~~ Кеширование реализовано (TTL 300s). pg_trgm GIN indexes добавлены (Iter 4.1). Remaining: quality score, source filters.
+**Вердикт:** ~~Под нагрузкой будет деградировать.~~ Кеширование (TTL 300s), pg_trgm GIN indexes, quality score, feedback loop и source filters реализованы. Remaining: vector index tuning (LOW).
 
 ---
 
@@ -588,10 +591,10 @@ session UPDATE (login/logout/project switch):
 | 3 | Frontend Performance | 5/6 | ✅ Done (portfolio hook → as-is) | — |
 | 4 | Database Optimization | 6/6 | ✅ Done | — |
 | 5 | Observability & Ops | 6/6 | ✅ Done | — |
-| 6 | Data Quality & UX | 0/5 | Pending | LOW |
+| 6 | Data Quality & UX | 5/5 | ✅ Done | — |
 | 7 | Input Validation | 0/4 | Pending | LOW |
 
-**Итого:** 37/39 задач завершено в Iter 0-5. Осталось 9 задач в Iter 6-7.
+**Итого:** 42/44 задач завершено в Iter 0-6. Осталось 4 задачи в Iter 7.
 
 **Рекомендуемый порядок выполнения:**
 ```
@@ -601,7 +604,7 @@ session UPDATE (login/logout/project switch):
 ✅ Iter 3 (frontend) ───────── DONE
 ✅ Iter 4 (DB optimization) ── DONE
 ✅ Iter 5 (observability) ──── DONE
+✅ Iter 6 (quality & UX) ──── DONE
                                 │
-    Iter 6 (quality & UX) ────┤  ← NEXT (LOW)
     Iter 7 (validation) ──────┘  ← LOW
 ```
