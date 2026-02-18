@@ -1,19 +1,20 @@
 # Спека 0018 — LightRAG-only режим и API-контракт
 
-Статус: **implemented (MVP)**
+Статус: **implemented (MVP, mandatory)**
 
 ## Цель
 
-Зафиксировать, что продукт работает в едином контуре LightRAG без активного KAG API.
+Зафиксировать, что продукт работает в едином контуре LightRAG без активных `/kag/*` API.
 
 ## Инварианты
 
-1. При `LIGHTRAG_ONLY=1` маршруты `/kag/*` недоступны (`410 kag_disabled`).
-2. Frontend не должен использовать `/kag/*`.
-3. Поисковая поверхность работает через:
+1. Маршруты `/kag/*` не входят в контракт разработки.
+2. При `LIGHTRAG_ONLY=1` они недоступны (`410 kag_disabled`).
+3. Frontend не должен использовать `/kag/*`.
+4. Поисковая поверхность работает через:
    - `POST /lightrag/query`
    - alias `POST /search` (совместимость).
-4. Scheduler не выполняет KAG-heavy jobs в LightRAG-only режиме.
+5. Scheduler не выполняет legacy jobs, связанные с `/kag/*`, в LightRAG-only режиме.
 
 ## API-контракт LightRAG query
 
@@ -49,4 +50,4 @@
 
 - Search page возвращает answer + chunks + evidence.
 - После запроса создаётся запись в `lightrag_query_runs`.
-- UI не показывает ошибок `kag_disabled`.
+- UI не показывает ошибок `kag_disabled` в штатных пользовательских сценариях.

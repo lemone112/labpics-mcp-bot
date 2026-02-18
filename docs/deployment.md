@@ -58,9 +58,9 @@
 4. `GET /lightrag/status`
 5. UI login + проектный выбор + `/search` (LightRAG)
 
-## 5) Примечание по KAG
+## 5) Примечание по legacy routes
 
 В production режиме `LIGHTRAG_ONLY=1`:
 
 - `/kag/*` отключены;
-- KAG-heavy scheduler jobs ставятся в `paused`.
+- legacy scheduler jobs, связанные с `/kag/*`, ставятся в `paused`.

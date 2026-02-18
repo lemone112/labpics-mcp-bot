@@ -71,10 +71,11 @@ Legacy compatibility:
 - Digests: `/digests/daily*`, `/digests/weekly*`
 - Analytics: `/analytics/*`, `/risk/*`
 
-## 7) LightRAG-only behavior
+## 7) Запрещённые legacy маршруты
 
-- При `LIGHTRAG_ONLY=1` маршруты `/kag/*` отключены и возвращают `410 kag_disabled`.
-- Клиентские страницы не должны зависеть от `/kag/*`.
+- `/kag/*` не входят в текущий API-контракт для разработки.
+- В runtime они возвращают `410 kag_disabled`.
+- Любые новые интеграции должны использовать только LightRAG и operational endpoints.
 
 См. также:
 

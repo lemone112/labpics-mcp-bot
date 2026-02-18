@@ -12,9 +12,9 @@
 ## 2) LightRAG-only режим
 
 - Флаг `LIGHTRAG_ONLY=1` считается целевым режимом.
-- `/kag/*` в этом режиме недоступны.
-- Scheduler не выполняет KAG-heavy jobs (ставит их в `paused`).
-- Frontend не вызывает KAG endpoints.
+- `/kag/*` в этом режиме недоступны и не входят в контракт разработки.
+- Scheduler не выполняет legacy jobs, связанные с `/kag/*` (ставит их в `paused`).
+- Frontend не вызывает `/kag/*`.
 
 ## 3) Evidence-first
 

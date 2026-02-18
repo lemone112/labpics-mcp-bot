@@ -19,7 +19,7 @@
 
 ## LightRAG
 
-**LightRAG** — единый retrieval-контур продукта (без активного KAG-контура).  
+**LightRAG** — единственный интеллект-контур продукта (retrieval по сообщениям, задачам и сделкам).  
 **rag_chunks** — текстовые фрагменты с embeddings.  
 **Embedding status** — `pending|processing|ready|failed`.  
 **Evidence** — факт из source-данных, который объясняет ответ.  
@@ -40,5 +40,4 @@
 
 ## Legacy термины
 
-**KAG** — legacy-контур в кодовой базе; в `LIGHTRAG_ONLY=1` не используется в активном продукте.  
-**/kag/* routes** — возвращают `410 kag_disabled` в целевом режиме.
+**/kag/* routes** — legacy маршруты, не входящие в dev-contract; в целевом режиме возвращают `410 kag_disabled`.

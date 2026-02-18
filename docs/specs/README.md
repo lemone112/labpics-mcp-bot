@@ -5,6 +5,7 @@
 - Канонические термины: [`docs/glossary.md`](../glossary.md)
 - Правила оформления: [`docs/style-guide.md`](../style-guide.md)
 - Границы MVP vs Roadmap: [`docs/mvp-vs-roadmap.md`](../mvp-vs-roadmap.md)
+- Нормативный контракт: [`docs/lightrag-contract.md`](../lightrag-contract.md)
 
 ## Индекс (MVP — сейчас, LightRAG-only)
 
@@ -16,7 +17,7 @@
 - [0017 — Auth v1: логин/пароль, сессии](./0017-auth-login-password-sessions.md)
 - [0018 — LightRAG-only режим и API-контракт](./0018-lightrag-only-mode.md)
 
-## Legacy / roadmap (неактивно в текущем релизе)
+## Legacy / roadmap (архив, не использовать для текущей реализации)
 
 - [0002 — Commitments v1](./0002-commitments-v1.md)
 - [0003 — Risks v1](./0003-risks-v1.md)
@@ -36,4 +37,4 @@ UI shell для MVP фиксирован: **shadcn/ui sidebar-04** (`npx shadcn@
 ## Важное правило релиза
 
 Текущий целевой режим: `LIGHTRAG_ONLY=1`.  
-Все изменения, которые требуют включения `/kag/*`, считаются отдельным RFC и не входят в базовый MVP.
+Любые изменения с зависимостью от `/kag/*` запрещены в рамках текущего dev-contract и не входят в базовый MVP.

@@ -16,6 +16,7 @@
 Стартовые точки:
 
 - Индекс документации: [`docs/index.md`](./docs/index.md)
+- Нормативный контракт LightRAG-only: [`docs/lightrag-contract.md`](./docs/lightrag-contract.md)
 - Продуктовый обзор: [`docs/product/overview.md`](./docs/product/overview.md)
 - Архитектура: [`docs/architecture.md`](./docs/architecture.md)
 - Frontend + дизайн: [`docs/frontend-design.md`](./docs/frontend-design.md)
@@ -28,6 +29,8 @@
 ---
 
 ## 1) API (high level)
+
+Важное правило: для разработки используется только LightRAG API; `/kag/*` не входит в текущий контракт.
 
 ### Auth/session
 

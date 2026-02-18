@@ -1,6 +1,6 @@
 # Документация Labpics Dashboard (LightRAG-only)
 
-Этот каталог описывает актуальную модель продукта: **единый LightRAG-контур** (без активного KAG-контура) + интеграции + UI + эксплуатация.
+Этот каталог описывает актуальную модель продукта: **только LightRAG** + интеграции + UI + эксплуатация.
 
 ## Быстрый порядок чтения
 
@@ -9,6 +9,7 @@
 2. Архитектура:
    - [`docs/architecture.md`](./architecture.md)
    - [`docs/platform-architecture.md`](./platform-architecture.md)
+   - [`docs/lightrag-contract.md`](./lightrag-contract.md)
 3. База данных:
    - [`docs/data-model.md`](./data-model.md)
 4. API:
@@ -29,9 +30,9 @@
 11. Термины:
    - [`docs/glossary.md`](./glossary.md)
 
-## Принципиальные изменения
+## Жёсткий контракт для разработки
 
 - По умолчанию включен режим `LIGHTRAG_ONLY=1`.
-- Роуты `/kag/*` в этом режиме отключены (`410 kag_disabled`).
-- UI не использует KAG/recommendations-контур и опирается на LightRAG + operational charts.
-- KAG-таблицы и legacy-код сохранены только для rollback/исторической совместимости.
+- В разработке и продуктовых задачах используется только LightRAG API.
+- Роуты `/kag/*` считаются legacy и не входят в dev-contract (`410 kag_disabled`).
+- UI обязан опираться на LightRAG + operational charts.

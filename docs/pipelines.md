@@ -45,9 +45,9 @@
 3. `POST /lightrag/query` комбинирует vector retrieval + source lookups.
 4. Запрос логируется в `lightrag_query_runs`.
 
-## 5) KAG jobs в LightRAG-only режиме
+## 5) Legacy jobs в LightRAG-only режиме
 
-При `LIGHTRAG_ONLY=1` KAG-heavy jobs (`kag_*`, `case_signatures_refresh`, `project_snapshot_daily`) автоматически переводятся в `paused`.
+При `LIGHTRAG_ONLY=1` legacy jobs, связанные с `/kag/*` (`kag_*`, `case_signatures_refresh`, `project_snapshot_daily`), автоматически переводятся в `paused`.
 
 ## 6) Полезные operational endpoints
 
