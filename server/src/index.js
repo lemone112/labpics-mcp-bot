@@ -337,9 +337,21 @@ async function main() {
   const loginRateLimitWindowMinutes = toBoundedInt(process.env.LOGIN_RATE_LIMIT_WINDOW_MINUTES, 15, 1, 1440);
 
   const app = Fastify({
-    logger: { level: process.env.LOG_LEVEL || "info" },
+    logger: {
+      level: process.env.LOG_LEVEL || "info",
+      serializers: {
+        req(req) {
+          return { method: req.method, url: req.url, request_id: req.headers?.["x-request-id"] || req.id };
+        },
+        res(res) {
+          return { statusCode: res.statusCode };
+        },
+      },
+    },
     bodyLimit: 64 * 1024,
     disableRequestLogging: false,
+    requestIdHeader: "x-request-id",
+    genReqId: (req) => req.headers["x-request-id"] || crypto.randomUUID(),
   });
 
   await app.register(cookie);
@@ -2882,6 +2894,29 @@ async function main() {
 
   await app.listen({ host, port });
   app.log.info({ host, port }, "server started");
+
+  // --- Graceful shutdown ---
+  let shuttingDown = false;
+  async function gracefulShutdown(signal) {
+    if (shuttingDown) return;
+    shuttingDown = true;
+    app.log.info({ signal }, "graceful shutdown initiated");
+    const shutdownTimeout = setTimeout(() => {
+      app.log.error("shutdown timeout exceeded, forcing exit");
+      process.exit(1);
+    }, 10_000);
+    shutdownTimeout.unref();
+    try {
+      await app.close();
+      app.log.info("server closed gracefully");
+    } catch (err) {
+      app.log.error({ err: String(err?.message || err) }, "error during shutdown");
+    }
+    clearTimeout(shutdownTimeout);
+    process.exit(0);
+  }
+  process.on("SIGTERM", () => gracefulShutdown("SIGTERM"));
+  process.on("SIGINT", () => gracefulShutdown("SIGINT"));
 }
 
 main().catch((error) => {

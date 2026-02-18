@@ -1,4 +1,5 @@
 import { toPositiveInt, toNumber } from '../lib/utils.js';
+import { writeAuditEvent } from './audit.js';
 
 function clampPercent(value) {
   return Math.max(0, Math.min(100, Number(value || 0)));
@@ -283,6 +284,37 @@ export async function runSyncReconciliation(pool, scope, options = {}) {
 
   for (const metric of metrics) {
     await persistMetric(pool, scope, metric);
+  }
+
+  // --- Completeness alerting ---
+  const minCompleteness = toNumber(
+    process.env.CONNECTOR_RECONCILIATION_MIN_COMPLETENESS_PCT,
+    70, 0, 100
+  );
+  for (const metric of metrics) {
+    if (metric.completeness_pct < minCompleteness) {
+      try {
+        await writeAuditEvent(pool, {
+          projectId: scope.projectId,
+          accountScopeId: scope.accountScopeId,
+          actorUsername: "system",
+          action: "reconciliation.completeness_drop",
+          entityType: "sync_reconciliation",
+          entityId: scope.projectId,
+          status: "warning",
+          payload: {
+            connector: metric.connector,
+            completeness_pct: metric.completeness_pct,
+            threshold_pct: minCompleteness,
+            missing_count: metric.missing_count,
+            duplicate_count: metric.duplicate_count,
+          },
+          evidenceRefs: [],
+        });
+      } catch {
+        // audit write failure should not break reconciliation
+      }
+    }
   }
 
   return {

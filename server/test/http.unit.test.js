@@ -1,11 +1,15 @@
 import { describe, it, beforeEach, afterEach } from "node:test";
 import assert from "node:assert/strict";
-import { fetchWithRetry } from "../src/lib/http.js";
+import { fetchWithRetry, resetCircuitBreakers } from "../src/lib/http.js";
 
 const silentLogger = { warn: () => {}, info: () => {}, error: () => {} };
 
 describe("fetchWithRetry", () => {
   const originalFetch = globalThis.fetch;
+
+  beforeEach(() => {
+    resetCircuitBreakers();
+  });
 
   afterEach(() => {
     globalThis.fetch = originalFetch;
