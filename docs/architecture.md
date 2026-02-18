@@ -22,14 +22,17 @@
 
 ### Backend
 
-- Session/auth + scope guard.
-- Connectors sync + retry + reconciliation.
-- Embeddings/semantic retrieval (`rag_chunks`).
-- LightRAG endpoints:
-  - `POST /lightrag/query`
-  - `POST /lightrag/refresh`
-  - `GET /lightrag/status`
-- Scheduler/worker.
+- Session/auth + scope guard + login rate limiting (по IP + username с exponential backoff).
+- Connectors: два режима — **HTTP** (нативный sync) и **MCP** (Composio runner). Задаётся через `CONNECTOR_<NAME>_MODE` или `CONNECTOR_MODE`.
+- Connector reliability: sync state tracking, DLQ с exponential backoff (base 30s, cap 6h), reconciliation metrics.
+- Embeddings/semantic retrieval (`rag_chunks`) с configurable batch (`EMBED_BATCH_SIZE`), stale recovery, IVFFlat/HNSW tuning.
+- LightRAG endpoints (основной сервис — `lightrag.js`):
+  - `POST /lightrag/query` — tokenized vector + ILIKE поиск, evidence building, query observability
+  - `POST /lightrag/refresh` — embeddings + status
+  - `GET /lightrag/status` — embedding counts + source counts
+- Scheduler/worker с cascade triggers.
+- Storage budget monitoring (`STORAGE_BUDGET_GB`) в `/jobs/status`.
+- Prometheus-формат метрики: `GET /metrics`.
 
 ### Frontend
 
