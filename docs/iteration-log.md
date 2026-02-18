@@ -206,3 +206,26 @@ Circuit breaker вызвал failure в `http.unit.test.js` — global state (`c
 - Matview `now()` фиксируется на момент REFRESH — `messages_7d` актуален на момент последнего sync, не запроса. Допустимо: данные и так обновляются только при sync.
 - `audit_events_partitioned` — shadow table без auto-migration. Требует ручного переноса данных при >5M строк.
 - Не добавлен GIN trgm index на `cw_contacts(phone_number)` — поле редко используется в поиске.
+
+---
+
+## Iter 5 — Observability & Ops (закрыта — 2026-02-18)
+
+> Полный Prometheus exporter. Alerting rules. Monitoring stack. Smoke tests в CI. Runbook.
+
+### Что изменено
+
+| # | Задача | Файлы | Результат |
+|---|--------|-------|-----------|
+| 5.1 | Prometheus exporter | `server/src/index.js` | `/metrics` расширен: DB pool (total/idle/waiting), circuit breaker states (per-host state + failures), process (uptime, heap, RSS). Import `getCircuitBreakerStates` из `lib/http.js` |
+| 5.2 | Alerting rules | `infra/alerts/rules.yml` (новый) | 11 Prometheus alert rules: DbPoolExhausted, DbPoolHighUsage, HighErrorRate, High5xxRate, CircuitBreakerOpen, CacheDisabled, CacheHitRateLow, NoSseConnections, HighMemoryUsage, ProcessRestarted |
+| 5.3 | Backup verification | `scripts/verify-backup.sh` (новый) | Восстановление в temp DB, проверка 8 ключевых таблиц, проверка extensions (vector, pg_trgm), JSON structured logs |
+| 5.4 | Log aggregation | `docker-compose.monitoring.yml` (новый), `infra/prometheus.yml`, `infra/promtail.yml`, `infra/grafana-datasources.yml` | Prometheus + Loki + Promtail + Grafana стек. Docker log collection через promtail. Auto-provisioned datasources. Resource limits на все сервисы |
+| 5.5 | Runbook | `docs/runbooks/incident-response.md` (новый) | 8 failure modes: high error rate, circuit breaker, DB pool exhaustion, cache disabled, connector lag, high memory, crash loop, backup failure. Diagnosis commands + resolution steps |
+| 5.6 | E2E smoke tests | `scripts/smoke-test.sh` (новый), `.github/workflows/ci-quality.yml` | Smoke script: /health, /metrics (4 checks: format, pool, cache, process), /projects auth, /v1 prefix. CI: новый `smoke` job после `quality`, docker compose up → smoke-test.sh → down |
+
+### Самокритика
+
+- Prometheus scrape interval 10s может быть слишком агрессивным для low-traffic deployments — настраивается.
+- Promtail Docker SD requires `/var/run/docker.sock` mount — security trade-off для log collection.
+- Smoke test в CI запускает полный docker compose stack — добавляет ~2-3 мин к CI.

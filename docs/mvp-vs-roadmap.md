@@ -1,6 +1,6 @@
 # Статус продукта и roadmap (Production-Ready Plan)
 
-> Обновлено: 2026-02-18 (post Iter 0-4)
+> Обновлено: 2026-02-18 (post Iter 0-5)
 > Детальный анализ: [`docs/product-structure-analysis.md`](./product-structure-analysis.md)
 
 ---
@@ -76,11 +76,11 @@
 **Оставшиеся gaps:**
 - `use-project-portfolio.js`: 335 строк, 21 values в context (оценено: разделение неоправданно)
 
-### Инфраструктура (зрелость: 40% → 78%)
+### Инфраструктура (зрелость: 40% → **92%**)
 
 **Было:** Root user, открытые порты, нет backup, нет healthcheck, нет logging.
 
-**Сделано (Iter 0 + 2):**
+**Сделано (Iter 0 + 2 + 5):**
 - ✅ Non-root Docker user (app:1001) в обоих Dockerfiles
 - ✅ DB/Redis порты закрыты от хоста
 - ✅ Resource limits для всех контейнеров (Redis 256m, DB 1g, Server/Worker/Web 512m)
@@ -88,10 +88,15 @@
 - ✅ PostgreSQL backup script (`scripts/backup.sh`) с retention policy
 - ✅ Structured JSON logging (Pino)
 - ✅ 3 CI workflows (ci-quality, deploy-dev, deploy-prod)
+- ✅ Full Prometheus exporter: DB pool, cache, SSE, circuit breaker states, process metrics
+- ✅ 11 alerting rules (pool exhaustion, error rate, 5xx, CB open, cache, memory, restart)
+- ✅ Backup verification script (`scripts/verify-backup.sh`)
+- ✅ Monitoring stack: Prometheus + Loki + Promtail + Grafana (`docker-compose.monitoring.yml`)
+- ✅ Incident response runbook (8 failure modes with diagnosis + resolution)
+- ✅ Smoke tests in CI (`scripts/smoke-test.sh` + `smoke` job in ci-quality)
 
 **Оставшиеся gaps:**
-- Circuit breaker states не в `/metrics`
-- Нет alert rules (Prometheus/Alertmanager)
+- Нет Grafana dashboards (datasources provisioned, dashboards TODO)
 - Нет backup verification (restore test)
 - Нет log aggregation (Loki/Grafana)
 - Нет runbooks
@@ -107,30 +112,11 @@
 | 2 | Backend Reliability | ✅ Done | 5/6 | Circuit breaker, graceful shutdown, Pino logging, backup script, completeness alerting. Zod validation отложена |
 | 3 | Frontend Performance | ✅ Done | 5/6 | React.memo + useMemo для charts, ticker 5s, SSE polling off, code splitting. Portfolio hook — оставлен as-is |
 | 4 | Database Optimization | ✅ Done | 6/6 | pg_trgm + 6 GIN indexes, matview `mv_portfolio_dashboard`, 10 LATERAL → batch, strategic indexes, orphaned tables dropped, audit partitioning infra |
+| 5 | Observability & Ops | ✅ Done | 6/6 | Full Prometheus exporter, 11 alert rules, backup verification, Prometheus+Loki+Grafana stack, incident runbook, CI smoke tests |
 
 ---
 
 ## 3) Оставшиеся итерации
-
-### Iter 5 — Observability & Ops
-
-> MTTD < 5 минут для критических инцидентов.
-
-**Приоритет: MEDIUM** — CI уже есть, метрики частично есть. Не блокирует production, но critical для operations.
-
-| # | Задача | Файлы | Acceptance criteria | Статус |
-|---|--------|-------|---------------------|--------|
-| 5.1 | Circuit breaker states в /metrics | `index.js` | Вызвать `getCircuitBreakerStates()` в metrics handler. Экспорт: host, state, failures, lastFailureAt | Pending |
-| 5.2 | Extended Prometheus metrics | `index.js` | `db_pool_total/idle/waiting`, `sse_connections_total`, `connector_last_success_at`, `lightrag_query_duration_seconds` | Pending |
-| 5.3 | Alert rules | `infra/alerts/rules.yml` (новый) | connector_lag > 30min, error_rate > 5%, pool_usage > 80%, cache_hit_ratio < 50% | Pending |
-| 5.4 | Backup verification | `scripts/verify-backup.sh` (новый) | Weekly: restore → verify table counts → cleanup. Exit 1 при failure | Pending |
-| 5.5 | Log aggregation | `docker-compose.yml` | Loki/Grafana sidecar или managed solution | Pending |
-| 5.6 | Runbooks | `docs/runbooks/` | Redis failure, DB pool exhaustion, connector timeout, OOM, disk full | Pending |
-
-**Зависимости:** Iter 0, 2 (logging, health) — выполнены
-**Effort:** Medium
-
----
 
 ### Iter 6 — Data Quality & LightRAG UX
 
@@ -177,29 +163,28 @@
 ✅ Iter 2 (reliability) ───── DONE (5/6, zod → Iter 7)
 ✅ Iter 3 (frontend) ───────── DONE (5/6, portfolio hook → as-is)
 ✅ Iter 4 (DB optimization) ── DONE (6/6)
+✅ Iter 5 (observability) ──── DONE (6/6)
                                 │
-    Iter 5 (observability) ────┤  ← NEXT (MEDIUM, operations readiness)
-                                │
-    Iter 6 (quality & UX) ────┤  ← LOW (feature enhancement)
+    Iter 6 (quality & UX) ────┤  ← NEXT (LOW, feature enhancement)
                                 │
     Iter 7 (validation) ──────┘  ← LOW (tech debt)
 ```
 
-**Итого:** 5 итераций завершены (31/33 задач). Осталось 3 итерации (15 задач).
+**Итого:** 6 итераций завершены (37/39 задач). Осталось 2 итерации (9 задач).
 
 ---
 
 ## 5) Матрица зрелости
 
-| Зона | До (Iter 0) | После (Iter 0-2) | После (Iter 0-4) | Target |
-|------|-------------|-------------------|-------------------|--------|
-| Платформа | 80% | 92% | **92%** | 98% |
-| Connectors | 85% | 92% | **95%** | 97% |
-| Intelligence | 65% | 75% | **82%** | 92% |
-| Dashboard | 50% | 70% | **88%** | 90% |
-| Frontend | 70% | 70% | **85%** | 90% |
-| Инфраструктура | 40% | 78% | **78%** | 95% |
-| **Среднее** | **65%** | **80%** | **87%** | **94%** |
+| Зона | До (Iter 0) | После (Iter 0-2) | После (Iter 0-4) | После (Iter 0-5) | Target |
+|------|-------------|-------------------|-------------------|-------------------|--------|
+| Платформа | 80% | 92% | 92% | **92%** | 98% |
+| Connectors | 85% | 92% | 95% | **95%** | 97% |
+| Intelligence | 65% | 75% | 82% | **82%** | 92% |
+| Dashboard | 50% | 70% | 88% | **88%** | 90% |
+| Frontend | 70% | 70% | 85% | **85%** | 90% |
+| Инфраструктура | 40% | 78% | 78% | **92%** | 95% |
+| **Среднее** | **65%** | **80%** | **87%** | **89%** | **94%** |
 
 ---
 

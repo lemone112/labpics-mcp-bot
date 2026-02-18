@@ -62,6 +62,7 @@ import {
 import { createRedisPubSub } from "./lib/redis-pubsub.js";
 import { createSseBroadcaster } from "./lib/sse-broadcaster.js";
 import { createCacheLayer, cacheKeyHash } from "./lib/cache.js";
+import { getCircuitBreakerStates } from "./lib/http.js";
 import { requiredEnv } from "./lib/utils.js";
 
 function isBcryptHash(value) {
@@ -651,17 +652,22 @@ async function main() {
   registerGet("/metrics", async (_request, reply) => {
     const sseStats = sseBroadcaster.getStats();
     const cacheStats = cache.getStats();
+    const mem = process.memoryUsage();
+    const cbStates = getCircuitBreakerStates();
     const lines = [
+      // --- HTTP ---
       "# TYPE app_requests_total counter",
       `app_requests_total ${metrics.requests_total}`,
       "# TYPE app_responses_total counter",
       `app_responses_total ${metrics.responses_total}`,
       "# TYPE app_errors_total counter",
       `app_errors_total ${metrics.errors_total}`,
+      // --- SSE ---
       "# TYPE app_sse_connections_total gauge",
       `app_sse_connections_total ${sseStats.total_connections}`,
       "# TYPE app_sse_projects_subscribed gauge",
       `app_sse_projects_subscribed ${sseStats.projects}`,
+      // --- Cache ---
       "# TYPE app_cache_hits_total counter",
       `app_cache_hits_total ${cacheStats.hits}`,
       "# TYPE app_cache_misses_total counter",
@@ -672,9 +678,29 @@ async function main() {
       `app_cache_invalidations_total ${cacheStats.invalidations}`,
       "# TYPE app_cache_enabled gauge",
       `app_cache_enabled ${cacheStats.enabled ? 1 : 0}`,
+      // --- DB Pool ---
+      "# TYPE app_db_pool_total gauge",
+      `app_db_pool_total ${pool.totalCount}`,
+      "# TYPE app_db_pool_idle gauge",
+      `app_db_pool_idle ${pool.idleCount}`,
+      "# TYPE app_db_pool_waiting gauge",
+      `app_db_pool_waiting ${pool.waitingCount}`,
+      // --- Process ---
+      "# TYPE app_process_uptime_seconds gauge",
+      `app_process_uptime_seconds ${Math.floor(process.uptime())}`,
+      "# TYPE app_process_heap_bytes gauge",
+      `app_process_heap_bytes ${mem.heapUsed}`,
+      "# TYPE app_process_rss_bytes gauge",
+      `app_process_rss_bytes ${mem.rss}`,
     ];
+    // --- HTTP status breakdown ---
     for (const [statusCode, count] of Object.entries(metrics.status_counts)) {
       lines.push(`app_response_status_total{status="${statusCode}"} ${count}`);
+    }
+    // --- Circuit breakers ---
+    for (const cb of cbStates) {
+      lines.push(`app_circuit_breaker_state{host="${cb.name}",state="${cb.state}"} ${cb.state === "open" ? 1 : 0}`);
+      lines.push(`app_circuit_breaker_failures{host="${cb.name}"} ${cb.failureCount}`);
     }
     reply.type("text/plain; version=0.0.4");
     return lines.join("\n");

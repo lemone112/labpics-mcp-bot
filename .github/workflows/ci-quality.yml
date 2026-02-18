@@ -57,3 +57,39 @@ jobs:
         env:
           E2E_REQUIRE_DOCKER: "1"
         run: npm run test:e2e:integration
+
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: quality
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Start stack
+        run: docker compose up -d --wait --wait-timeout 120
+        env:
+          AUTH_CREDENTIALS: "smoke:$2b$10$kIxNQvIqJiGmrCxUBGh0pOQZ8mXb1Zv6oGvLnNxZv5VCuF4KEKWGK"
+          AUTH_PASSWORD: "smoke"
+          OPENAI_API_KEY: "sk-test-not-real"
+
+      - name: Wait for health
+        run: |
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:8080/health >/dev/null 2>&1; then
+              echo "Server healthy after ${i}s"
+              break
+            fi
+            sleep 1
+          done
+
+      - name: Run smoke tests
+        run: ./scripts/smoke-test.sh http://localhost:8080
+
+      - name: Collect logs on failure
+        if: failure()
+        run: docker compose logs --tail 100
+
+      - name: Stop stack
+        if: always()
+        run: docker compose down -v

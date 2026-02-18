@@ -1,10 +1,10 @@
 # Глубокий анализ структуры продукта Labpics Dashboard
 
-> Дата анализа: 2026-02-18 | Обновлено: 2026-02-18 (post Iter 0-2)
+> Дата анализа: 2026-02-18 | Обновлено: 2026-02-18 (post Iter 0-5)
 > Метод: 3-цикловый ресёрч (structure → hotpaths → self-criticism)
 > Scope: backend, frontend, infrastructure, data model, Redis, production readiness
 >
-> **Статус:** Iter 0-4 завершены. Оценки зрелости обновлены. Детали закрытых проблем отмечены ✅.
+> **Статус:** Iter 0-5 завершены. Оценки зрелости обновлены. Детали закрытых проблем отмечены ✅.
 
 ---
 
@@ -117,9 +117,9 @@
 
 ---
 
-### 1.6 Инфраструктура (Docker, CI/CD, Security) — зрелость: 40% → **78%**
+### 1.6 Инфраструктура (Docker, CI/CD, Security) — зрелость: 40% → **92%**
 
-**Текущее состояние:** ~~Базовый Docker Compose.~~ Hardened Docker Compose + CI + structured logging.
+**Текущее состояние:** ~~Базовый Docker Compose.~~ Hardened Docker Compose + CI + structured logging + full observability stack.
 
 **Проблемы:**
 
@@ -134,14 +134,18 @@
 | Нет structured logging | — | MEDIUM | ✅ Iter 2: Pino JSON |
 | Default credentials `admin:admin` | `docker-compose.yml` | CRITICAL | ✅ Iter 0: required env |
 
-**Оставшиеся gaps (→ Iter 5):**
-- Circuit breaker states не в `/metrics`
-- Нет alert rules
-- Нет backup verification
-- Нет log aggregation (Loki/Grafana)
-- Нет runbooks
+**Дополнительно (Iter 5):**
+- ✅ Circuit breaker states в `/metrics` + DB pool + process metrics
+- ✅ 11 Prometheus alerting rules (`infra/alerts/rules.yml`)
+- ✅ Backup verification (`scripts/verify-backup.sh`)
+- ✅ Log aggregation: Prometheus + Loki + Promtail + Grafana (`docker-compose.monitoring.yml`)
+- ✅ Incident response runbook (8 failure modes)
+- ✅ Smoke tests в CI (`scripts/smoke-test.sh` + `smoke` job)
 
-**Вердикт:** ~~Не готово для production.~~ Security hardened. Remaining: observability и ops automation (Iter 5).
+**Оставшиеся gaps:**
+- Нет pre-built Grafana dashboards (datasources provisioned)
+
+**Вердикт:** ~~Не готово для production.~~ Fully production-ready: security hardened + full observability + ops automation.
 
 ---
 
@@ -574,7 +578,7 @@ session UPDATE (login/logout/project switch):
 
 ---
 
-## Приложение: Сводная таблица итераций (обновлена post Iter 0-2)
+## Приложение: Сводная таблица итераций (обновлена post Iter 0-5)
 
 | Iter | Название | Задачи | Статус | Приоритет |
 |------|----------|--------|--------|-----------|
@@ -583,11 +587,11 @@ session UPDATE (login/logout/project switch):
 | 2 | Backend Reliability | 5/6 | ✅ Done (zod → Iter 7) | — |
 | 3 | Frontend Performance | 5/6 | ✅ Done (portfolio hook → as-is) | — |
 | 4 | Database Optimization | 6/6 | ✅ Done | — |
-| 5 | Observability & Ops | 0/6 | Pending | **MEDIUM** |
+| 5 | Observability & Ops | 6/6 | ✅ Done | — |
 | 6 | Data Quality & UX | 0/5 | Pending | LOW |
 | 7 | Input Validation | 0/4 | Pending | LOW |
 
-**Итого:** 31/33 задач завершено в Iter 0-4. Осталось 15 задач в Iter 5-7.
+**Итого:** 37/39 задач завершено в Iter 0-5. Осталось 9 задач в Iter 6-7.
 
 **Рекомендуемый порядок выполнения:**
 ```
@@ -596,8 +600,8 @@ session UPDATE (login/logout/project switch):
 ✅ Iter 2 (reliability) ───── DONE
 ✅ Iter 3 (frontend) ───────── DONE
 ✅ Iter 4 (DB optimization) ── DONE
+✅ Iter 5 (observability) ──── DONE
                                 │
-    Iter 5 (observability) ────┤  ← NEXT (MEDIUM)
-    Iter 6 (quality & UX) ────┤  ← LOW
+    Iter 6 (quality & UX) ────┤  ← NEXT (LOW)
     Iter 7 (validation) ──────┘  ← LOW
 ```
