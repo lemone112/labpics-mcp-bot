@@ -3,6 +3,7 @@
 import { useState } from "react";
 
 import { PageShell } from "@/components/page-shell";
+import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageLoadingSkeleton } from "@/components/ui/page-loading-skeleton";
 import { ProjectScopeRequired } from "@/components/project-scope-required";
@@ -19,9 +20,11 @@ export default function SearchFeaturePage() {
   const { hasProject, loadingProjects } = useProjectGate();
   const [query, setQuery] = useState("");
   const [topK, setTopK] = useState(10);
-  const [results, setResults] = useState([]);
+  const [chunks, setChunks] = useState([]);
+  const [evidence, setEvidence] = useState([]);
   const [busy, setBusy] = useState(false);
   const [meta, setMeta] = useState(null);
+  const [answer, setAnswer] = useState("");
   const [toast, setToast] = useState({ type: "info", message: "" });
 
   async function onSearch(event) {
@@ -29,19 +32,21 @@ export default function SearchFeaturePage() {
     setBusy(true);
     setToast({ type: "info", message: "" });
     try {
-      const data = await apiFetch("/search", {
+      const data = await apiFetch("/lightrag/query", {
         method: "POST",
         body: { query, topK: Number(topK) || 10 },
         timeoutMs: 25_000,
       });
-      setResults(Array.isArray(data?.results) ? data.results : []);
+      setChunks(Array.isArray(data?.chunks) ? data.chunks : []);
+      setEvidence(Array.isArray(data?.evidence) ? data.evidence : []);
+      setAnswer(String(data?.answer || ""));
       setMeta({
-        embedding_model: data?.embedding_model,
+        stats: data?.stats || {},
         topK: data?.topK,
       });
-      setToast({ type: "success", message: `Found ${data?.results?.length || 0} chunks` });
+      setToast({ type: "success", message: `Найдено ${data?.stats?.chunks || 0} релевантных chunk-фрагментов` });
     } catch (error) {
-      setToast({ type: "error", message: error?.message || "Search failed" });
+      setToast({ type: "error", message: error?.message || "Не удалось выполнить запрос LightRAG" });
     } finally {
       setBusy(false);
     }
@@ -49,7 +54,7 @@ export default function SearchFeaturePage() {
 
   if (loading || !session || loadingProjects) {
     return (
-      <PageShell title="Search" subtitle="Vector similarity search over ready embeddings">
+      <PageShell title="LightRAG" subtitle="Единый retrieval-слой по сообщениям, задачам и сделкам">
         <PageLoadingSkeleton />
       </PageShell>
     );
@@ -57,28 +62,28 @@ export default function SearchFeaturePage() {
 
   if (!hasProject) {
     return (
-      <PageShell title="Search" subtitle="Vector similarity search over ready embeddings">
+      <PageShell title="LightRAG" subtitle="Единый retrieval-слой по сообщениям, задачам и сделкам">
         <ProjectScopeRequired
           title="Сначала выберите активный проект"
-          description="Search выполняется в project scope. Выберите проект перед поиском по embeddings."
+          description="LightRAG выполняется в project scope. Выберите проект перед выполнением запроса."
         />
       </PageShell>
     );
   }
 
   return (
-    <PageShell title="Search" subtitle="Vector similarity search over ready embeddings">
+    <PageShell title="LightRAG" subtitle="Единый retrieval-слой по сообщениям, задачам и сделкам">
       <div className="space-y-4">
         <Card data-motion-item>
           <CardHeader>
-            <CardTitle>Search form</CardTitle>
+            <CardTitle>Запрос к LightRAG</CardTitle>
           </CardHeader>
           <CardContent>
             <form className="grid grid-cols-1 gap-3 md:grid-cols-[1fr_120px_120px]" onSubmit={onSearch}>
               <Input
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder="What did client promise about timeline?"
+                placeholder="Что обещал клиент по дедлайну релиза?"
                 required
               />
               <Input
@@ -89,13 +94,17 @@ export default function SearchFeaturePage() {
                 onChange={(e) => setTopK(e.target.value)}
               />
               <Button type="submit" disabled={busy}>
-                {busy ? "Searching..." : "Search"}
+                {busy ? "Ищу..." : "Выполнить"}
               </Button>
             </form>
 
             {meta ? (
-              <div className="mt-3 text-sm text-muted-foreground">
-                model: {meta.embedding_model || "-"} • topK: {meta.topK || "-"}
+              <div className="mt-3 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+                <Badge variant="outline">topK: {meta.topK || "-"}</Badge>
+                <Badge variant="outline">chunk: {meta?.stats?.chunks || 0}</Badge>
+                <Badge variant="outline">сообщения: {meta?.stats?.messages || 0}</Badge>
+                <Badge variant="outline">задачи: {meta?.stats?.issues || 0}</Badge>
+                <Badge variant="outline">сделки: {meta?.stats?.opportunities || 0}</Badge>
               </div>
             ) : null}
           </CardContent>
@@ -103,7 +112,16 @@ export default function SearchFeaturePage() {
 
         <Card data-motion-item>
           <CardHeader>
-            <CardTitle>Results</CardTitle>
+            <CardTitle>Краткий ответ</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-sm leading-relaxed text-muted-foreground">{answer || "Ответ появится после запроса."}</p>
+          </CardContent>
+        </Card>
+
+        <Card data-motion-item>
+          <CardHeader>
+            <CardTitle>Chunk-результаты</CardTitle>
           </CardHeader>
           <CardContent>
             <Table>
@@ -112,11 +130,11 @@ export default function SearchFeaturePage() {
                   <TableHead>Distance</TableHead>
                   <TableHead>Conversation</TableHead>
                   <TableHead>Message</TableHead>
-                  <TableHead>Chunk</TableHead>
+                  <TableHead>Фрагмент</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {results.map((row) => (
+                {chunks.map((row) => (
                   <TableRow key={row.id}>
                     <TableCell>{row.distance != null ? Number(row.distance).toFixed(4) : "-"}</TableCell>
                     <TableCell className="font-mono text-xs">{row.conversation_global_id || "-"}</TableCell>
@@ -124,15 +142,32 @@ export default function SearchFeaturePage() {
                     <TableCell className="max-w-[460px] whitespace-pre-wrap">{row.text}</TableCell>
                   </TableRow>
                 ))}
-                {!results.length ? (
+                {!chunks.length ? (
                   <TableRow>
                     <TableCell colSpan={4} className="text-muted-foreground">
-                      No results yet.
+                      Пока нет результатов.
                     </TableCell>
                   </TableRow>
                 ) : null}
               </TableBody>
             </Table>
+          </CardContent>
+        </Card>
+
+        <Card data-motion-item>
+          <CardHeader>
+            <CardTitle>Evidence из источников</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {evidence.slice(0, 20).map((item, idx) => (
+              <div key={`${item.source_type}-${item.source_pk || idx}`} className="rounded-md border p-2">
+                <p className="mb-1 text-xs text-muted-foreground">
+                  {item.source_type} • {item.source_ref || item.source_pk || "-"}
+                </p>
+                <p className="text-sm">{item.title || item.snippet || "Без описания"}</p>
+              </div>
+            ))}
+            {!evidence.length ? <p className="text-sm text-muted-foreground">Evidence появится после запроса.</p> : null}
           </CardContent>
         </Card>
 

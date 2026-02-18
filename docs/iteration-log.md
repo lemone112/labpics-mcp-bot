@@ -1,69 +1,28 @@
-# Iteration log и самоанализ
+# Iteration log
 
-## Iteration 1 (закрыта): Recommendation -> Evidence -> Action
+## Iteration: LightRAG migration (закрыта)
 
-### Что было слабым местом (самоанализ)
+### Что изменено
 
-1. Рекомендации генерировались, но не было продуктового цикла "показали -> сделали действие -> зафиксировали результат".
-2. Explainability была частичной: evidence были, но не было явного UX-ответа "почему показывается сейчас".
-3. Не хватало операционной наблюдаемости на уровне recommendation lifecycle (shown/action/retry).
+1. Введён режим `LIGHTRAG_ONLY=1` как дефолт.
+2. Добавлены API:
+   - `POST /lightrag/query`
+   - `POST /lightrag/refresh`
+   - `GET /lightrag/status`
+3. `/search` переведён на LightRAG alias-модель.
+4. В scheduler KAG-heavy jobs переводятся в `paused` в LightRAG-only режиме.
+5. Dashboard/UI очищены от KAG/recommendations зависимостей.
+6. Добавлена таблица `lightrag_query_runs` для observability запросов.
 
-### Что реализовано
+### Самокритика
 
-- Evidence gating:
-  - `evidence_count`,
-  - `evidence_quality_score`,
-  - `evidence_gate_status`,
-  - `evidence_gate_reason`.
-- Lifecycle timestamps:
-  - `acknowledged_at`,
-  - `dismissed_at`,
-  - `completed_at`,
-  - `first_shown_at`, `last_shown_at`, `shown_count`.
-- Action execution layer:
-  - `create_or_update_task`,
-  - `send_message`,
-  - `set_reminder`,
-  - retries через `recommendation_action_runs`.
-- Серверные логи:
-  - `recommendation_shown`,
-  - `recommendation_action_taken`.
-- UI секция "Рекомендации" в Control Tower:
-  - список,
-  - explainability блок,
-  - evidence,
-  - кнопки действий,
-  - лог action-runs.
+- KAG-legacy код остаётся в репозитории и увеличивает стоимость поддержки.
+- Часть исторических таблиц теперь не используется в активном пользовательском контуре.
+- Нужно усилить e2e-кейсы именно для LightRAG релиз-критериев.
 
-## Iteration 2 (следующая): Signals + Forecasting как UX-продукт
+## Следующая итерация (план)
 
-### Цель
-
-Сделать сигналы/прогнозы понятными PM на уровне принятия решения.
-
-### Backlog задач
-
-1. Каталог сигналов с версионированием:
-   - `signal_id`, `version`, `description`, `formula`, `confidence_policy`, `severity_policy`.
-2. Вклад top-k сигналов в рекомендацию:
-   - визуальный breakdown по signal contribution.
-3. Counterfactual hints:
-   - "что изменится, если снизить blockers_age / burn_rate".
-4. Калибровочные тесты:
-   - детерминированность,
-   - пороги drift/скачков вероятности между релизами.
-
-### Release критерий по Iteration 2
-
-- PM видит baseline, drivers, confidence и top-k вклады прямо в карточке рекомендации;
-- вероятности forecast не демонстрируют резких скачков на стабильном входе (по тестам).
-
-## Iteration 2.a (mobile UX hotfix): адаптив Control Tower
-
-Цель: сделать рабочий мобильный UX без потери навигации и проектного контекста.
-
-Сделано:
-
-- project sidebar доступен на телефоне как `Sheet` через текущую burger-кнопку в header;
-- для mobile добавлен нижний tabbar из 6 бизнес-разделов (`dashboard/messages/agreements/risks/finance/offers`);
-- desktop-поведение сохранено: nav rail + collapsible project sidebar.
+1. Материализованные представления для тяжёлых dashboard-агрегатов.
+2. Quality score для LightRAG-ответов (precision/coverage proxy).
+3. Алертинг по `sync_reconciliation_metrics` в CI/ops.
+4. Единый diff-репорт по изменению полноты данных между sync-циклами.

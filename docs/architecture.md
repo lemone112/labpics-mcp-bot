@@ -1,129 +1,75 @@
-# Архитектура системы (актуальная, web-first + data-first)
+# Архитектура системы (актуально: LightRAG-only)
 
-## 1) Цели архитектуры
+## 1) Архитектурная цель
 
-Система строится вокруг двух контуров:
+Система строится вокруг одного интеллектуального контура:
 
-1. **RAG-контур** — быстрый retrieval по коммуникациям/докам с evidence.
-2. **KAG-контур** — граф знаний, события, сигналы, скоринги, similarity, прогнозы и рекомендации.
+- **LightRAG** для retrieval-контекста по сообщениям, задачам и сделкам.
 
-Ключевой принцип: все выводы должны быть объяснимы и привязаны к источникам.
-
----
+KAG-контур сохранён в кодовой базе только как legacy fallback, но в активном режиме отключён через `LIGHTRAG_ONLY=1`.
 
 ## 2) Технологический стек
 
-- **Backend**: Node.js + Fastify (`server/`)
-- **Frontend**: Next.js (`web/`)
-- **База данных**: PostgreSQL + `pgvector`
-- **Миграции**: SQL миграции в `server/db/migrations`
-- **Интеграции**: Chatwoot / Linear / Attio
-  - режимы connector: HTTP (текущий) и MCP-ready абстракция
-- **LLM/OpenAI**:
-  - embeddings для RAG
-  - ограниченное применение в KAG (extraction/templates)
+- Backend: `Node.js + Fastify` (`server/`)
+- Frontend: `Next.js 16 + React 19` (`web/`)
+- Хранилище: `PostgreSQL + pgvector`
+- Интеграции: `Chatwoot`, `Linear`, `Attio`
+- UI-система: `shadcn/ui + Radix + Tailwind tokens + anime.js`
 
----
+## 3) Компоненты
 
-## 3) Высокоуровневые компоненты
+### Backend
 
-### Backend (`server/`)
+- Session/auth + scope guard.
+- Connectors sync + retry + reconciliation.
+- Embeddings/semantic retrieval (`rag_chunks`).
+- LightRAG endpoints:
+  - `POST /lightrag/query`
+  - `POST /lightrag/refresh`
+  - `GET /lightrag/status`
+- Scheduler/worker.
 
-- REST API (авторизация, CRUD, jobs, KAG endpoints)
-- Scheduler/worker loop
-- Sync services для внешних источников
-- RAG services (chunking/embeddings/search)
-- KAG services:
-  - graph/events/signals/scores
-  - snapshots/outcomes
-  - similarity
-  - forecasting
-  - recommendations v2
+### Frontend
 
-### Frontend (`web/`)
+- Control Tower (6 секций), Jobs, Search(LightRAG), CRM, Offers, Digests, Analytics.
+- Единая компонентная система без page-specific кастомных UI-слоёв.
 
-- Контрольная панель, portfolio, сигналы, риски, рекомендации.
+### База данных
 
-### Data layer (Postgres)
+- Единый scope-контур (`project_id`, `account_scope_id`).
+- Raw-таблицы источников + CRM mirror + RAG tables.
+- Audit/operational telemetry.
 
-- scoped data-модель (`project_id`, `account_scope_id`)
-- row-level consistency через trigger `enforce_project_scope_match`
-- event/log/history таблицы для explainability.
+## 4) Основные потоки
 
----
+### 4.1 Ingest
 
-## 4) Основные data-flows
+1. `connectors_sync_cycle` (15 мин): ingest + upsert + cursor state.
+2. `connector_errors_retry` (5 мин): точечные ретраи по due ошибкам.
 
-### 4.1 Ingest (Connector cycle)
+### 4.2 LightRAG
 
-1. `connectors_sync_cycle` (каждые ~15 мин):
-   - синхронизирует Chatwoot/Linear/Attio инкрементально
-   - обновляет `connector_sync_state`
-   - пишет ошибки в `connector_errors` (retry/backoff)
-2. `connector_errors_retry` (каждые ~5 мин):
-   - перезапускает только due-ошибки по конкретному connector
+1. Source data -> `rag_chunks` (pending).
+2. `embeddings_run` -> `embedding_status=ready`.
+3. `POST /lightrag/query`:
+   - vector retrieval из `rag_chunks`,
+   - source lookup в `cw_messages`, `linear_issues_raw`, `attio_opportunities_raw`,
+   - ответ + evidence.
 
-### 4.2 RAG flow
+### 4.3 UI observability
 
-1. сообщения/документы -> `rag_chunks`
-2. embeddings job -> `embedding_status=ready`
-3. search endpoint возвращает evidence-backed результаты
+- Dashboard показывает operational metrics + sync completeness.
+- Jobs/Connectors дают диагностику пайплайна.
 
-### 4.3 KAG operational flow
+## 5) LightRAG-only guardrails
 
-1. source facts -> `kag_event_log`
-2. signals/scores обновляются детерминированно
-3. daily snapshot -> `project_snapshots` + outcomes
-4. weekly signatures -> `case_signatures`
-5. forecast -> `kag_risk_forecasts`
-6. recommendations v2 -> `recommendations_v2`
+- При `LIGHTRAG_ONLY=1` маршруты `/kag/*` отключены (`410 kag_disabled`).
+- KAG scheduler jobs автоматически переводятся в `paused`.
+- Frontend не использует KAG API.
 
----
+## 6) Связанные документы
 
-## 5) Автоматизации и scheduling
-
-Рекомендуемая частота:
-
-- 15 минут: общий sync коннекторов
-- 5 минут: retry по connector errors
-- 1 раз в сутки: daily KAG pipeline (snapshot -> forecast -> recommendations)
-- 1 раз в неделю: пересборка similarity signatures
-
-Все этапы логируются в `kag_event_log` (`process_started/process_finished/process_failed/process_warning`) с длительностями и счётчиками.
-
----
-
-## 6) Scope и безопасность данных
-
-Для всех доменных записей соблюдается strict scoping:
-
-- `project_id` обязателен
-- `account_scope_id` обязателен
-- cross-scope write запрещён триггером
-
-На API уровне:
-
-- для protected endpoints нужна сессия
-- активный проект резолвится через session
-- mutating requests требуют CSRF.
-
----
-
-## 7) Explainability и quality gates
-
-- Любые производные сущности должны содержать `evidence_refs`.
-- Snapshot/forecast/recommendation без evidence:
-  - помечаются `publishable=false` или отфильтровываются из primary выдачи,
-  - фиксируется warning в `kag_event_log`.
-- Рекомендации принимаются deterministic rules + stats, не LLM-решениями.
-
----
-
-## 8) Смежные документы
-
-- Продуктовый обзор: [`docs/product/overview.md`](./product/overview.md)
-- Frontend + дизайн: [`docs/frontend-design.md`](./frontend-design.md)
-- Платформенные инварианты: [`docs/platform-architecture.md`](./platform-architecture.md)
-- Модель БД: [`docs/data-model.md`](./data-model.md)
-- Пайплайны/расписание: [`docs/pipelines.md`](./pipelines.md)
-- KAG v2: [`docs/kag_forecasting_recommendations.md`](./kag_forecasting_recommendations.md)
+- Platform invariants: [`docs/platform-architecture.md`](./platform-architecture.md)
+- Data model: [`docs/data-model.md`](./data-model.md)
+- Pipelines: [`docs/pipelines.md`](./pipelines.md)
+- API: [`docs/api.md`](./api.md)

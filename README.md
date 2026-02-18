@@ -7,7 +7,7 @@
 - `docs/` — каноническая документация
 - `docker-compose.yml` — локальный и серверный запуск стека
 
-Worker-контур введен как единый scheduler/worker слой (`server/src/worker-loop.js`).
+Текущий релиз работает в режиме **LightRAG-only** (`LIGHTRAG_ONLY=1`).
 
 ---
 
@@ -32,10 +32,6 @@ Worker-контур введен как единый scheduler/worker слой (
 ### Auth/session
 
 - `POST /auth/login`
-- `GET /auth/signup/status`
-- `POST /auth/signup/start`
-- `POST /auth/signup/confirm`
-- `POST /auth/telegram/webhook`
 - `POST /auth/logout`
 - `GET /auth/me`
 
@@ -55,7 +51,8 @@ Worker-контур введен как единый scheduler/worker слой (
 
 ### Search
 
-- `POST /search` (vector similarity)
+- `POST /lightrag/query` (основной endpoint)
+- `POST /search` (alias на LightRAG для совместимости)
 
 ### Data review
 

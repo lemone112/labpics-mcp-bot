@@ -11,7 +11,7 @@ import { createDbPool } from "./lib/db.js";
 import { ApiError, fail, parseLimit, sendError, sendOk, toApiError } from "./lib/api-contract.js";
 import { requireProjectScope } from "./lib/scope.js";
 import { applyMigrations } from "../db/migrate-lib.js";
-import { runEmbeddings, searchChunks } from "./services/embeddings.js";
+import { runEmbeddings } from "./services/embeddings.js";
 import { finishJob, getJobsStatus, startJob } from "./services/jobs.js";
 import { listAuditEvents, normalizeEvidenceRefs, writeAuditEvent } from "./services/audit.js";
 import { approveOutbound, createOutboundDraft, listOutbound, processDueOutbounds, sendOutbound, setOptOut } from "./services/outbox.js";
@@ -30,6 +30,7 @@ import { listUpsellRadar, refreshUpsellRadar, updateUpsellStatus } from "./servi
 import { applyContinuityActions, buildContinuityPreview, listContinuityActions } from "./services/continuity.js";
 import { getPortfolioMessages, getPortfolioOverview } from "./services/portfolio.js";
 import { syncLoopsContacts } from "./services/loops.js";
+import { getLightRagStatus, queryLightRag, refreshLightRag } from "./services/lightrag.js";
 import { listKagRecommendations, listKagScores, listKagSignals, runKagRecommendationRefresh } from "./services/kag.js";
 import { listProjectEvents } from "./services/event-log.js";
 import { buildProjectSnapshot, listPastCaseOutcomes, listProjectSnapshots } from "./services/snapshots.js";
@@ -94,6 +95,15 @@ function toNumber(value, fallback = 0, min = Number.NEGATIVE_INFINITY, max = Num
   const parsed = Number(value);
   if (!Number.isFinite(parsed)) return fallback;
   return Math.max(min, Math.min(max, parsed));
+}
+
+function toBoolean(value, fallback = false) {
+  if (value == null) return fallback;
+  const normalized = String(value).trim().toLowerCase();
+  if (!normalized) return fallback;
+  if (["1", "true", "yes", "on"].includes(normalized)) return true;
+  if (["0", "false", "no", "off"].includes(normalized)) return false;
+  return fallback;
 }
 
 function timingSafeStringEqual(a, b) {
@@ -171,6 +181,11 @@ function collectPreferredProjectIds(request) {
     [...urlProjectIds, ...queryProjectIds, ...bodyProjectIds, ...paramsProjectIds],
     100
   );
+}
+
+function isKagRoute(pathName) {
+  const normalized = String(pathName || "");
+  return normalized === "/kag" || normalized.startsWith("/kag/");
 }
 
 async function pickSessionFallbackProject(pool, preferredProjectIds = []) {
@@ -309,6 +324,7 @@ async function main() {
   const csrfCookieName = process.env.CSRF_COOKIE_NAME || "csrf_token";
   const isProd = (process.env.NODE_ENV || "").toLowerCase() === "production";
   const corsOrigin = process.env.CORS_ORIGIN || "http://localhost:3000";
+  const lightRagOnly = toBoolean(process.env.LIGHTRAG_ONLY, true);
   const loginRateLimitMaxAttempts = toBoundedInt(process.env.LOGIN_RATE_LIMIT_MAX_ATTEMPTS, 10, 3, 100);
   const loginRateLimitWindowMinutes = toBoundedInt(process.env.LOGIN_RATE_LIMIT_WINDOW_MINUTES, 15, 1, 1440);
 
@@ -488,6 +504,14 @@ async function main() {
 
     const preferredProjectIds = collectPreferredProjectIds(request);
     request.auth = await hydrateSessionScope(pool, request.auth.session_id, request.auth, preferredProjectIds);
+
+    if (lightRagOnly && isKagRoute(pathName)) {
+      return sendError(
+        reply,
+        request.requestId,
+        new ApiError(410, "kag_disabled", "KAG routes are disabled in LIGHTRAG_ONLY mode")
+      );
+    }
   });
 
   app.addHook("onResponse", async (_request, reply) => {
@@ -1170,8 +1194,58 @@ async function main() {
       return sendError(reply, request.requestId, new ApiError(400, "query_required", "Query is required"));
     }
 
-    const result = await searchChunks(pool, scope, query, topK, request.log);
+    const result = await queryLightRag(
+      pool,
+      scope,
+      { query, topK, sourceLimit: body?.sourceLimit, createdBy: request.auth?.username || null },
+      request.log
+    );
+    return sendOk(reply, request.requestId, {
+      ...result,
+      results: result.chunks,
+      mode: "lightrag",
+    });
+  });
+
+  registerGet("/lightrag/status", async (request, reply) => {
+    const scope = requireProjectScope(request);
+    const status = await getLightRagStatus(pool, scope);
+    return sendOk(reply, request.requestId, status);
+  });
+
+  registerPost("/lightrag/query", async (request, reply) => {
+    const scope = requireProjectScope(request);
+    const body = request.body && typeof request.body === "object" ? request.body : {};
+    const query = String(body?.query || "").trim();
+    if (!query) {
+      return sendError(reply, request.requestId, new ApiError(400, "query_required", "Query is required"));
+    }
+    const topK = toTopK(body?.topK, 10);
+    const result = await queryLightRag(
+      pool,
+      scope,
+      { query, topK, sourceLimit: body?.sourceLimit, createdBy: request.auth?.username || null },
+      request.log
+    );
     return sendOk(reply, request.requestId, result);
+  });
+
+  registerPost("/lightrag/refresh", async (request, reply) => {
+    const scope = requireProjectScope(request);
+    const result = await refreshLightRag(pool, scope, request.log);
+    await writeAuditEvent(pool, {
+      projectId: scope.projectId,
+      accountScopeId: scope.accountScopeId,
+      actorUsername: request.auth?.username || null,
+      action: "lightrag.refresh",
+      entityType: "lightrag",
+      entityId: scope.projectId,
+      status: result?.embeddings?.status || "ok",
+      requestId: request.requestId,
+      payload: result,
+      evidenceRefs: [],
+    });
+    return sendOk(reply, request.requestId, { result });
   });
 
   registerGet("/control-tower", async (request, reply) => {

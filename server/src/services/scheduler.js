@@ -22,8 +22,18 @@ function truncateError(error, max = 1000) {
   return String(error?.message || error || "scheduler_error").slice(0, max);
 }
 
+function toBoolean(value, fallback = false) {
+  if (value == null) return fallback;
+  const normalized = String(value).trim().toLowerCase();
+  if (!normalized) return fallback;
+  if (["1", "true", "yes", "on"].includes(normalized)) return true;
+  if (["0", "false", "no", "off"].includes(normalized)) return false;
+  return fallback;
+}
+
 function createHandlers(customHandlers = {}) {
-  return {
+  const lightRagOnly = toBoolean(process.env.LIGHTRAG_ONLY, true);
+  const handlers = {
     chatwoot_sync: async ({ pool, scope, logger }) => runConnectorSync(pool, scope, "chatwoot", logger),
     attio_sync: async ({ pool, scope, logger }) => runConnectorSync(pool, scope, "attio", logger),
     linear_sync: async ({ pool, scope, logger }) => runConnectorSync(pool, scope, "linear", logger),
@@ -40,20 +50,6 @@ function createHandlers(customHandlers = {}) {
     campaign_scheduler: async ({ pool, scope }) =>
       processDueOutbounds(pool, scope, "scheduler", `scheduler_campaign_${Date.now()}`, 50),
     analytics_aggregates: async ({ pool, scope }) => refreshAnalytics(pool, scope, 30),
-    project_snapshot_daily: async ({ pool, scope }) => buildProjectSnapshot(pool, scope, {}),
-    case_signatures_refresh: async ({ pool, scope }) => rebuildCaseSignatures(pool, scope, {}),
-    kag_v2_forecast_refresh: async ({ pool, scope }) => refreshRiskForecasts(pool, scope, {}),
-    kag_v2_recommendations_refresh: async ({ pool, scope }) => refreshRecommendationsV2(pool, scope, {}),
-    kag_daily_pipeline: async ({ pool, scope }) => {
-      const snapshot = await buildProjectSnapshot(pool, scope, {});
-      const forecast = await refreshRiskForecasts(pool, scope, {});
-      const recommendations = await refreshRecommendationsV2(pool, scope, {});
-      return {
-        snapshot,
-        forecast,
-        recommendations,
-      };
-    },
     loops_contacts_sync: async ({ pool, scope }) =>
       syncLoopsContacts(
         pool,
@@ -64,12 +60,29 @@ function createHandlers(customHandlers = {}) {
           limit: 300,
         }
       ),
-    kag_recommendations_refresh: async ({ pool, scope }) => runKagRecommendationRefresh(pool, scope),
-    ...customHandlers,
   };
+  if (!lightRagOnly) {
+    handlers.project_snapshot_daily = async ({ pool, scope }) => buildProjectSnapshot(pool, scope, {});
+    handlers.case_signatures_refresh = async ({ pool, scope }) => rebuildCaseSignatures(pool, scope, {});
+    handlers.kag_v2_forecast_refresh = async ({ pool, scope }) => refreshRiskForecasts(pool, scope, {});
+    handlers.kag_v2_recommendations_refresh = async ({ pool, scope }) => refreshRecommendationsV2(pool, scope, {});
+    handlers.kag_daily_pipeline = async ({ pool, scope }) => {
+      const snapshot = await buildProjectSnapshot(pool, scope, {});
+      const forecast = await refreshRiskForecasts(pool, scope, {});
+      const recommendations = await refreshRecommendationsV2(pool, scope, {});
+      return {
+        snapshot,
+        forecast,
+        recommendations,
+      };
+    };
+    handlers.kag_recommendations_refresh = async ({ pool, scope }) => runKagRecommendationRefresh(pool, scope);
+  }
+  return { ...handlers, ...customHandlers };
 }
 
 export async function ensureDefaultScheduledJobs(pool, scope) {
+  const lightRagOnly = toBoolean(process.env.LIGHTRAG_ONLY, true);
   const defaults = [
     { jobType: "connectors_sync_cycle", cadenceSeconds: 900 },
     { jobType: "connectors_reconciliation_daily", cadenceSeconds: 86400 },
@@ -82,11 +95,14 @@ export async function ensureDefaultScheduledJobs(pool, scope) {
     { jobType: "weekly_digest", cadenceSeconds: 604800 },
     { jobType: "campaign_scheduler", cadenceSeconds: 300 },
     { jobType: "analytics_aggregates", cadenceSeconds: 1800 },
-    { jobType: "case_signatures_refresh", cadenceSeconds: 604800 },
-    { jobType: "kag_daily_pipeline", cadenceSeconds: 86400 },
     { jobType: "loops_contacts_sync", cadenceSeconds: 3600 },
-    { jobType: "kag_recommendations_refresh", cadenceSeconds: 900 },
   ];
+  if (!lightRagOnly) {
+    defaults.push({ jobType: "project_snapshot_daily", cadenceSeconds: 86400 });
+    defaults.push({ jobType: "case_signatures_refresh", cadenceSeconds: 604800 });
+    defaults.push({ jobType: "kag_daily_pipeline", cadenceSeconds: 86400 });
+    defaults.push({ jobType: "kag_recommendations_refresh", cadenceSeconds: 900 });
+  }
 
   for (const item of defaults) {
     await pool.query(
@@ -135,8 +151,31 @@ export async function runSchedulerTick(pool, scope, options = {}) {
   const limit = toPositiveInt(options.limit, 10, 1, 100);
   const handlers = createHandlers(options.handlers || {});
   const logger = options.logger || console;
+  const lightRagOnly = toBoolean(process.env.LIGHTRAG_ONLY, true);
 
   await ensureDefaultScheduledJobs(pool, scope);
+  if (lightRagOnly) {
+    await pool.query(
+      `
+        UPDATE scheduled_jobs
+        SET status = 'paused',
+            last_status = 'paused',
+            last_error = 'paused_by_lightrag_only_mode',
+            updated_at = now()
+        WHERE project_id = $1
+          AND account_scope_id = $2
+          AND job_type IN (
+            'project_snapshot_daily',
+            'case_signatures_refresh',
+            'kag_v2_forecast_refresh',
+            'kag_v2_recommendations_refresh',
+            'kag_daily_pipeline',
+            'kag_recommendations_refresh'
+          )
+      `,
+      [scope.projectId, scope.accountScopeId]
+    );
+  }
 
   const dueRows = await pool.query(
     `
