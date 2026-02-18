@@ -1,6 +1,6 @@
 # Статус продукта и roadmap (Production-Ready Plan)
 
-> Обновлено: 2026-02-18 (post Iter 0-8)
+> Обновлено: 2026-02-18 (post Iter 0-9)
 > Детальный анализ: [`docs/product-structure-analysis.md`](./product-structure-analysis.md)
 
 ---
@@ -18,7 +18,7 @@
 - ✅ Session cache в Redis (TTL 60s) + batched `last_seen_at` (раз в 30s)
 - ✅ Structured JSON logging (Pino с serializers, request_id, correlation)
 - ✅ Graceful shutdown (SIGTERM → 10s drain → close Redis → close DB pool)
-- ✅ Zod schema validation на 14 POST endpoints (`parseBody()` + standardized error response)
+- ✅ Zod schema validation на **все 32 POST endpoints** (`parseBody()` + standardized error response)
 - ✅ Login timing attack fix — bcrypt.compare() always called (dummy hash for wrong username)
 - ✅ Security headers: CSP, HSTS, X-Frame-Options, X-Content-Type-Options, Referrer-Policy
 - ✅ Session cache invalidation on project switch
@@ -30,16 +30,17 @@
 **Оставшиеся gaps:**
 - `hydrateSessionScope()` может вызываться дважды (onRequest + preValidation)
 
-### Интеграции / Connectors (зрелость: 85% → **96%**)
+### Интеграции / Connectors (зрелость: 85% → **97%**)
 
 **Было:** Инкрементальный sync, DLQ, reconciliation — но нет circuit breaker, нет alerting.
 
-**Сделано (Iter 2 + 4 + 6):**
+**Сделано (Iter 2 + 4 + 6 + 9):**
 - ✅ Circuit breaker в `fetchWithRetry()` — per-host, 5 failures threshold, 30s reset
 - ✅ Completeness alerting: при `completeness_pct < threshold` → audit event + SSE
 - ✅ Strategic indexes: `connector_errors(project_id, error_kind, status)`, `crm_account_contacts(project_id, account_id)`
 - ✅ Completeness diff report: delta per connector между sync-циклами (`GET /connectors/reconciliation/diff`)
 - ✅ Auto identity dedup preview при sync cycle completion
+- ✅ Dead letter error visibility: `GET /connectors/errors/dead-letter` + `POST .../retry`
 
 **Оставшиеся gaps:**
 - Нет pre-built Grafana dashboards для connector metrics
@@ -125,14 +126,14 @@
 | 6 | Data Quality & LightRAG UX | ✅ Done | 5/5 | Quality score proxy, feedback endpoint, source filters, identity dedup preview, completeness diff |
 | 7 | Input Validation & API Hardening | ✅ Done | 4/4 | Zod schemas for CRM/offers/outbound/auth/lightrag, `parseBody()` helper, standardized validation errors with details |
 | 8 | Security Hardening II | ✅ Done | 7/7 | Timing attack fix, security headers, session cache invalidation, loginAttempts cleanup, session expiration, CSRF httpOnly, trustProxy |
+| 9 | Extended Input Validation | ✅ Done | 5/5 | 18 new Zod schemas for all remaining POST endpoints, dead letter visibility endpoints, allProjectsFlag reusable preprocessor |
 
 ---
 
-## 3) Оставшиеся итерации (Wave 2: Iter 9-12)
+## 3) Оставшиеся итерации (Wave 2: Iter 10-12)
 
 | Iter | Название | Задач | Приоритет | Фокус |
 |------|----------|-------|-----------|-------|
-| 9 | Extended Input Validation | 5 | HIGH | Zod schemas для 22 оставшихся POST endpoints + dead_letter fix |
 | 10 | Frontend Resilience | 5 | HIGH | Error boundaries, retry logic, SSE reconnect |
 | 11 | CI/CD Hardening | 6 | HIGH | .dockerignore, npm audit, tests in deploy, pre-deploy backup, rollback |
 | 12 | Connector Robustness | 5 | MEDIUM | Advisory lock, dead-letter visibility, reconciliation parallel, error sanitization |
@@ -151,27 +152,27 @@
 ✅ Iter 6 (quality & UX) ──── DONE (5/5)
 ✅ Iter 7 (validation) ─────── DONE (4/4)
 ✅ Iter 8 (security II) ────── DONE (7/7)
-⬜ Iter 9 (ext. validation) ── 5 tasks
+✅ Iter 9 (ext. validation) ── DONE (5/5)
 ⬜ Iter 10 (frontend res.) ─── 5 tasks
 ⬜ Iter 11 (CI/CD) ──────────── 6 tasks
 ⬜ Iter 12 (connectors) ────── 5 tasks
 ```
 
-**Итого:** 9 итераций завершены (53/55 задач). 4 итерации осталось (21 задача). 2 задачи отложены by design (zod в Iter 2, portfolio hook в Iter 3).
+**Итого:** 10 итераций завершены (58/60 задач). 3 итерации осталось (16 задач). 2 задачи отложены by design (zod в Iter 2, portfolio hook в Iter 3).
 
 ---
 
 ## 5) Матрица зрелости
 
-| Зона | До (Iter 0) | После (Iter 0-2) | После (Iter 0-4) | После (Iter 0-5) | После (Iter 0-7) | После (Iter 0-8) | Target |
-|------|-------------|-------------------|-------------------|-------------------|-------------------|-------------------|--------|
-| Платформа | 80% | 92% | 92% | 92% | 96% | **98%** | 99% |
-| Connectors | 85% | 92% | 95% | 95% | 96% | **96%** | 99% |
-| Intelligence | 65% | 75% | 82% | 82% | 90% | **90%** | 92% |
-| Dashboard | 50% | 70% | 88% | 88% | 88% | **88%** | 95% |
-| Frontend | 70% | 70% | 85% | 85% | 85% | **85%** | 95% |
-| Инфраструктура | 40% | 78% | 78% | 92% | 92% | **92%** | 98% |
-| **Среднее** | **65%** | **80%** | **87%** | **89%** | **91%** | **92%** | **96%** |
+| Зона | До (Iter 0) | После (Iter 0-2) | После (Iter 0-4) | После (Iter 0-5) | После (Iter 0-7) | После (Iter 0-8) | После (Iter 0-9) | Target |
+|------|-------------|-------------------|-------------------|-------------------|-------------------|-------------------|-------------------|--------|
+| Платформа | 80% | 92% | 92% | 92% | 96% | 98% | **99%** | 99% |
+| Connectors | 85% | 92% | 95% | 95% | 96% | 96% | **97%** | 99% |
+| Intelligence | 65% | 75% | 82% | 82% | 90% | 90% | **90%** | 92% |
+| Dashboard | 50% | 70% | 88% | 88% | 88% | 88% | **88%** | 95% |
+| Frontend | 70% | 70% | 85% | 85% | 85% | 85% | **85%** | 95% |
+| Инфраструктура | 40% | 78% | 78% | 92% | 92% | 92% | **92%** | 98% |
+| **Среднее** | **65%** | **80%** | **87%** | **89%** | **91%** | **92%** | **92%** | **96%** |
 
 ---
 
