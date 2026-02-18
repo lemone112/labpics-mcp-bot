@@ -23,6 +23,24 @@ import {
   LightRagQuerySchema,
   LightRagFeedbackSchema,
   SearchSchema,
+  SignalStatusSchema,
+  NbaStatusSchema,
+  IdentityPreviewSchema,
+  IdentitySuggestionApplySchema,
+  KagSimilarityRebuildSchema,
+  KagForecastRefreshSchema,
+  RecommendationsShownSchema,
+  RecommendationStatusSchema,
+  RecommendationFeedbackSchema,
+  RecommendationActionSchema,
+  RecommendationActionRetrySchema,
+  ConnectorRetrySchema,
+  AnalyticsRefreshSchema,
+  OutboundApproveSchema,
+  OutboundProcessSchema,
+  LoopsSyncSchema,
+  UpsellStatusSchema,
+  ContinuityApplySchema,
 } from "./lib/schemas.js";
 import { requireProjectScope } from "./lib/scope.js";
 import { applyMigrations } from "../db/migrate-lib.js";
@@ -38,6 +56,7 @@ import {
   runAllConnectorsSync,
   runConnectorSync,
 } from "./services/connector-sync.js";
+import { listDeadLetterErrors, retryDeadLetterError } from "./services/connector-state.js";
 import { getCompletenessDiff, listSyncReconciliation, runSyncReconciliation } from "./services/reconciliation.js";
 import { applyIdentitySuggestions, listIdentityLinks, listIdentitySuggestions, previewIdentitySuggestions } from "./services/identity-graph.js";
 import { extractSignalsAndNba, getTopNba, listNba, listSignals, updateNbaStatus, updateSignalStatus } from "./services/signals.js";
@@ -1433,9 +1452,9 @@ async function main() {
 
   registerPost("/connectors/errors/retry", async (request, reply) => {
     const scope = requireProjectScope(request);
-    const body = request.body && typeof request.body === "object" ? request.body : {};
+    const body = parseBody(ConnectorRetrySchema, request.body);
     const result = await retryConnectorErrors(pool, scope, {
-      limit: body?.limit,
+      limit: body.limit,
       logger: request.log,
     });
     await writeAuditEvent(pool, {
@@ -1451,6 +1470,34 @@ async function main() {
       evidenceRefs: [],
     });
     return sendOk(reply, request.requestId, { result });
+  });
+
+  registerGet("/connectors/errors/dead-letter", async (request, reply) => {
+    const scope = requireProjectScope(request);
+    const limit = parseLimit(request.query?.limit, 50, 500);
+    const errors = await listDeadLetterErrors(pool, scope, limit);
+    return sendOk(reply, request.requestId, { errors });
+  });
+
+  registerPost("/connectors/errors/dead-letter/:id/retry", async (request, reply) => {
+    const scope = requireProjectScope(request);
+    const error = await retryDeadLetterError(pool, scope, String(request.params?.id || ""));
+    if (!error) {
+      return sendError(reply, request.requestId, new ApiError(404, "error_not_found", "Dead letter error not found"));
+    }
+    await writeAuditEvent(pool, {
+      projectId: scope.projectId,
+      accountScopeId: scope.accountScopeId,
+      actorUsername: request.auth?.username || null,
+      action: "connector_error.dead_letter_retry",
+      entityType: "connector_error",
+      entityId: String(error.id),
+      status: "ok",
+      requestId: request.requestId,
+      payload: { connector: error.connector, error_kind: error.error_kind },
+      evidenceRefs: [],
+    });
+    return sendOk(reply, request.requestId, { error });
   });
 
   registerGet("/jobs/scheduler", async (request, reply) => {
@@ -1600,8 +1647,8 @@ async function main() {
 
   registerPost("/identity/suggestions/preview", async (request, reply) => {
     const scope = requireProjectScope(request);
-    const body = request.body && typeof request.body === "object" ? request.body : {};
-    const limit = parseLimit(body?.limit, 100, 200);
+    const body = parseBody(IdentityPreviewSchema, request.body);
+    const limit = body.limit;
     const result = await previewIdentitySuggestions(pool, scope, limit);
     await writeAuditEvent(pool, {
       projectId: scope.projectId,
@@ -1629,9 +1676,8 @@ async function main() {
 
   registerPost("/identity/suggestions/apply", async (request, reply) => {
     const scope = requireProjectScope(request);
-    const body = request.body && typeof request.body === "object" ? request.body : {};
-    const suggestionIds = Array.isArray(body?.suggestion_ids) ? body.suggestion_ids : [];
-    const result = await applyIdentitySuggestions(pool, scope, suggestionIds, request.auth?.username || null);
+    const body = parseBody(IdentitySuggestionApplySchema, request.body);
+    const result = await applyIdentitySuggestions(pool, scope, body.suggestion_ids, request.auth?.username || null);
     await writeAuditEvent(pool, {
       projectId: scope.projectId,
       accountScopeId: scope.accountScopeId,
@@ -1686,12 +1732,12 @@ async function main() {
 
   registerPost("/signals/:id/status", async (request, reply) => {
     const scope = requireProjectScope(request);
-    const body = request.body && typeof request.body === "object" ? request.body : {};
+    const body = parseBody(SignalStatusSchema, request.body);
     const signal = await updateSignalStatus(
       pool,
       scope,
       String(request.params?.id || ""),
-      String(body?.status || "")
+      body.status
     );
     if (!signal) {
       return sendError(reply, request.requestId, new ApiError(404, "signal_not_found", "Signal not found"));
@@ -1722,8 +1768,8 @@ async function main() {
 
   registerPost("/nba/:id/status", async (request, reply) => {
     const scope = requireProjectScope(request);
-    const body = request.body && typeof request.body === "object" ? request.body : {};
-    const item = await updateNbaStatus(pool, scope, String(request.params?.id || ""), String(body?.status || ""));
+    const body = parseBody(NbaStatusSchema, request.body);
+    const item = await updateNbaStatus(pool, scope, String(request.params?.id || ""), body.status);
     if (!item) {
       return sendError(reply, request.requestId, new ApiError(404, "nba_not_found", "NBA item not found"));
     }
@@ -1831,10 +1877,10 @@ async function main() {
 
   registerPost("/kag/similarity/rebuild", async (request, reply) => {
     const scope = requireProjectScope(request);
-    const body = request.body && typeof request.body === "object" ? request.body : {};
+    const body = parseBody(KagSimilarityRebuildSchema, request.body);
     const result = await rebuildCaseSignatures(pool, scope, {
-      project_id: body?.project_id,
-      window_days: body?.window_days,
+      project_id: body.project_id,
+      window_days: body.window_days,
     });
     await writeAuditEvent(pool, {
       projectId: scope.projectId,
@@ -1863,11 +1909,11 @@ async function main() {
 
   registerPost("/kag/v2/forecast/refresh", async (request, reply) => {
     const scope = requireProjectScope(request);
-    const body = request.body && typeof request.body === "object" ? request.body : {};
+    const body = parseBody(KagForecastRefreshSchema, request.body);
     const result = await refreshRiskForecasts(pool, scope, {
-      project_id: body?.project_id,
-      window_days: body?.window_days,
-      top_k: body?.top_k,
+      project_id: body.project_id,
+      window_days: body.window_days,
+      top_k: body.top_k,
     });
     await writeAuditEvent(pool, {
       projectId: scope.projectId,
@@ -1931,10 +1977,9 @@ async function main() {
 
   registerPost("/kag/v2/recommendations/shown", async (request, reply) => {
     const scope = requireProjectScope(request);
-    const body = request.body && typeof request.body === "object" ? request.body : {};
-    const recommendationIds = Array.isArray(body?.recommendation_ids) ? body.recommendation_ids : [];
-    const allProjects = String(body?.all_projects || request.query?.all_projects || "").trim().toLowerCase() === "true";
-    const shown = await markRecommendationsV2Shown(pool, scope, recommendationIds, {
+    const body = parseBody(RecommendationsShownSchema, request.body);
+    const allProjects = body.all_projects || String(request.query?.all_projects || "").trim().toLowerCase() === "true";
+    const shown = await markRecommendationsV2Shown(pool, scope, body.recommendation_ids, {
       all_projects: allProjects ? "true" : "false",
     });
     if (shown.length) {
@@ -1960,14 +2005,14 @@ async function main() {
 
   registerPost("/kag/v2/recommendations/:id/status", async (request, reply) => {
     const scope = requireProjectScope(request);
-    const body = request.body && typeof request.body === "object" ? request.body : {};
-    const allProjects = String(body?.all_projects || request.query?.all_projects || "").trim().toLowerCase() === "true";
+    const body = parseBody(RecommendationStatusSchema, request.body);
+    const allProjects = body.all_projects || String(request.query?.all_projects || "").trim().toLowerCase() === "true";
     try {
       const recommendation = await updateRecommendationV2Status(
         pool,
         scope,
         String(request.params?.id || ""),
-        String(body?.status || ""),
+        body.status,
         { all_projects: allProjects ? "true" : "false" }
       );
       if (!recommendation) {
@@ -1995,15 +2040,15 @@ async function main() {
 
   registerPost("/kag/v2/recommendations/:id/feedback", async (request, reply) => {
     const scope = requireProjectScope(request);
-    const body = request.body && typeof request.body === "object" ? request.body : {};
-    const allProjects = String(body?.all_projects || request.query?.all_projects || "").trim().toLowerCase() === "true";
+    const body = parseBody(RecommendationFeedbackSchema, request.body);
+    const allProjects = body.all_projects || String(request.query?.all_projects || "").trim().toLowerCase() === "true";
     try {
       const recommendation = await updateRecommendationV2Feedback(
         pool,
         scope,
         String(request.params?.id || ""),
-        String(body?.helpful || "unknown"),
-        String(body?.note || ""),
+        body.helpful,
+        body.note || "",
         { all_projects: allProjects ? "true" : "false" }
       );
       if (!recommendation) {
@@ -2041,15 +2086,15 @@ async function main() {
 
   registerPost("/kag/v2/recommendations/:id/actions", async (request, reply) => {
     const scope = requireProjectScope(request);
-    const body = request.body && typeof request.body === "object" ? request.body : {};
-    const allProjects = String(body?.all_projects || request.query?.all_projects || "").trim().toLowerCase() === "true";
+    const body = parseBody(RecommendationActionSchema, request.body);
+    const allProjects = body.all_projects || String(request.query?.all_projects || "").trim().toLowerCase() === "true";
     try {
       const result = await runRecommendationAction(
         pool,
         scope,
         String(request.params?.id || ""),
-        String(body?.action_type || ""),
-        body?.action_payload || {},
+        body.action_type,
+        body.action_payload,
         {
           all_projects: allProjects ? "true" : "false",
           actorUsername: request.auth?.username || null,
@@ -2091,8 +2136,8 @@ async function main() {
 
   registerPost("/kag/v2/recommendations/actions/:actionId/retry", async (request, reply) => {
     const scope = requireProjectScope(request);
-    const body = request.body && typeof request.body === "object" ? request.body : {};
-    const allProjects = String(body?.all_projects || request.query?.all_projects || "").trim().toLowerCase() === "true";
+    const body = parseBody(RecommendationActionRetrySchema, request.body);
+    const allProjects = body.all_projects || String(request.query?.all_projects || "").trim().toLowerCase() === "true";
     try {
       const result = await retryRecommendationActionRun(pool, scope, String(request.params?.actionId || ""), {
         all_projects: allProjects ? "true" : "false",
@@ -2160,8 +2205,8 @@ async function main() {
 
   registerPost("/upsell/:id/status", async (request, reply) => {
     const scope = requireProjectScope(request);
-    const body = request.body && typeof request.body === "object" ? request.body : {};
-    const item = await updateUpsellStatus(pool, scope, String(request.params?.id || ""), String(body?.status || ""));
+    const body = parseBody(UpsellStatusSchema, request.body);
+    const item = await updateUpsellStatus(pool, scope, String(request.params?.id || ""), body.status);
     if (!item) {
       return sendError(reply, request.requestId, new ApiError(404, "upsell_not_found", "Upsell opportunity not found"));
     }
@@ -2209,9 +2254,8 @@ async function main() {
 
   registerPost("/continuity/apply", async (request, reply) => {
     const scope = requireProjectScope(request);
-    const body = request.body && typeof request.body === "object" ? request.body : {};
-    const ids = Array.isArray(body?.action_ids) ? body.action_ids : [];
-    const result = await applyContinuityActions(pool, scope, ids, request.auth?.username || null);
+    const body = parseBody(ContinuityApplySchema, request.body);
+    const result = await applyContinuityActions(pool, scope, body.action_ids, request.auth?.username || null);
     await writeAuditEvent(pool, {
       projectId: scope.projectId,
       accountScopeId: scope.accountScopeId,
@@ -2779,8 +2823,8 @@ async function main() {
 
   registerPost("/analytics/refresh", async (request, reply) => {
     const scope = requireProjectScope(request);
-    const body = request.body && typeof request.body === "object" ? request.body : {};
-    const days = parseLimit(body?.period_days, 30, 120);
+    const body = parseBody(AnalyticsRefreshSchema, request.body);
+    const days = body.period_days;
     const result = await refreshAnalytics(pool, scope, days);
     await writeAuditEvent(pool, {
       projectId: scope.projectId,
@@ -2881,14 +2925,14 @@ async function main() {
 
   registerPost("/outbound/:id/approve", async (request, reply) => {
     const scope = requireProjectScope(request);
-    const body = request.body && typeof request.body === "object" ? request.body : {};
+    const body = parseBody(OutboundApproveSchema, request.body);
     const outbound = await approveOutbound(
       pool,
       scope,
       String(request.params?.id || ""),
       request.auth?.username || null,
       request.requestId,
-      body?.evidence_refs || []
+      body.evidence_refs
     );
     return sendOk(reply, request.requestId, { outbound });
   });
@@ -2914,13 +2958,13 @@ async function main() {
 
   registerPost("/outbound/process", async (request, reply) => {
     const scope = requireProjectScope(request);
-    const body = request.body && typeof request.body === "object" ? request.body : {};
+    const body = parseBody(OutboundProcessSchema, request.body);
     const result = await processDueOutbounds(
       pool,
       scope,
       request.auth?.username || "manual_runner",
       request.requestId,
-      parseLimit(body?.limit, 20, 200)
+      body.limit
     );
     return sendOk(reply, request.requestId, { result });
   });
@@ -2930,12 +2974,12 @@ async function main() {
     if (!accountScopeId) {
       fail(409, "account_scope_required", "Account scope is required");
     }
-    const body = request.body && typeof request.body === "object" ? request.body : {};
+    const body = parseBody(LoopsSyncSchema, request.body);
     const result = await syncLoopsContacts(
       pool,
       {
         accountScopeId,
-        projectIds: parseProjectIdsInput(body?.project_ids, 100),
+        projectIds: parseProjectIdsInput(body.project_ids, 100),
       },
       {
         actorUsername: request.auth?.username || null,

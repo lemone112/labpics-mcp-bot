@@ -1,10 +1,10 @@
 # Глубокий анализ структуры продукта Labpics Dashboard
 
-> Дата анализа: 2026-02-18 | Обновлено: 2026-02-18 (post Iter 0-8)
+> Дата анализа: 2026-02-18 | Обновлено: 2026-02-18 (post Iter 0-9)
 > Метод: 3-цикловый ресёрч (structure → hotpaths → self-criticism)
 > Scope: backend, frontend, infrastructure, data model, Redis, production readiness
 >
-> **Статус:** Iter 0-8 завершены. Wave 2 (Iter 9-12) запланирован. Оценки зрелости обновлены.
+> **Статус:** Iter 0-9 завершены. Wave 2 (Iter 10-12) запланирован. Оценки зрелости обновлены.
 
 ---
 
@@ -23,7 +23,7 @@
 
 Продукт имеет шесть фундаментальных зон, каждая со своим уровнем зрелости.
 
-### 1.1 Платформенный слой (Scope, Auth, Audit) — зрелость: 80% → **98%**
+### 1.1 Платформенный слой (Scope, Auth, Audit) — зрелость: 80% → **99%**
 
 **Текущее состояние:** Зрелое ядро. Session auth + CSRF + request_id, жёсткий project/account scope, audit trail.
 
@@ -38,11 +38,11 @@
 | Нет API rate limiting кроме login endpoint | `index.js` | 604-635 | CRITICAL | ✅ Iter 0: 200/60 rpm |
 | Нет bcrypt/argon2 — пароли не хешируются | `index.js` | ~605 | CRITICAL | ✅ Iter 0: bcrypt |
 
-**Вердикт:** ~~Нужна доработка перед production.~~ Все CRITICAL закрыты. Iter 8: timing attack fix, security headers, session cache invalidation, CSRF hardening, trustProxy. Remaining: hydrate dedup (MEDIUM).
+**Вердикт:** ~~Нужна доработка перед production.~~ Все CRITICAL закрыты. Iter 8: timing attack fix, security headers, session cache invalidation, CSRF hardening, trustProxy. Iter 9: Zod validation на все 32 POST endpoints. Remaining: hydrate dedup (MEDIUM).
 
 ---
 
-### 1.2 Интеграционный слой (Connectors) — зрелость: 85% → **96%**
+### 1.2 Интеграционный слой (Connectors) — зрелость: 85% → **97%**
 
 **Текущее состояние:** Хорошая архитектура. Инкрементальный sync, DLQ с backoff, reconciliation, два режима (HTTP/MCP).
 
@@ -57,7 +57,7 @@
 | Нет auto identity dedup preview | `connector-sync.js` | MEDIUM | ✅ Iter 6.4: preview at sync |
 | 80+ env vars дублируются между server и worker в docker-compose | `docker-compose.yml` | LOW | Open |
 
-**Вердикт:** ~~Нужен circuit breaker и мониторинг SLA.~~ Circuit breaker, alerting, strategic indexes, completeness diff и identity preview реализованы. CB states в `/metrics` (Iter 5).
+**Вердикт:** ~~Нужен circuit breaker и мониторинг SLA.~~ Circuit breaker, alerting, strategic indexes, completeness diff и identity preview реализованы. CB states в `/metrics` (Iter 5). Dead letter visibility endpoints (Iter 9).
 
 ---
 
@@ -175,7 +175,7 @@ MEDIUM (качество и масштабируемость):
   11. ✅ Повторные запросы одних данных в portfolio → Iter 1 (cache 90s)
   12. ✅ Frontend: code splitting + SSE polling disabled (Iter 3)
   13. ✅ Нет structured logging → Iter 2 (Pino)
-  14. ✅ Нет input validation schemas → Iter 7: Zod schemas на 14 POST endpoints
+  14. ✅ Нет input validation schemas → Iter 7+9: Zod schemas на все 32 POST endpoints
   15. ✅ evidence_items: pg_trgm GIN index on snippet (Iter 4.1)
 
 Закрыто: 14/15 (93%). Remaining: 1 item (env vars dedup, LOW).
@@ -594,8 +594,9 @@ session UPDATE (login/logout/project switch):
 | 6 | Data Quality & UX | 5/5 | ✅ Done | — |
 | 7 | Input Validation | 4/4 | ✅ Done | — |
 | 8 | Security Hardening II | 7/7 | ✅ Done | — |
+| 9 | Extended Input Validation | 5/5 | ✅ Done | — |
 
-**Итого:** 53/55 задач завершено в Iter 0-8. Wave 2 (Iter 9-12, 21 задача) запланирован.
+**Итого:** 58/60 задач завершено в Iter 0-9. Wave 2 (Iter 10-12, 16 задач) запланирован.
 
 **Рекомендуемый порядок выполнения:**
 ```
@@ -608,7 +609,7 @@ session UPDATE (login/logout/project switch):
 ✅ Iter 6 (quality & UX) ──── DONE
 ✅ Iter 7 (validation) ─────── DONE
 ✅ Iter 8 (security II) ────── DONE
-⬜ Iter 9 (ext. validation) ── PLANNED
+✅ Iter 9 (ext. validation) ── DONE
 ⬜ Iter 10 (frontend res.) ─── PLANNED
 ⬜ Iter 11 (CI/CD) ──────────── PLANNED
 ⬜ Iter 12 (connectors) ────── PLANNED

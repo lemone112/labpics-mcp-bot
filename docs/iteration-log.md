@@ -309,3 +309,33 @@ Circuit breaker вызвал failure в `http.unit.test.js` — global state (`c
 - Dummy bcrypt hash — static string. При bcrypt cost factor change нужно обновить. Для текущего `$2b$10$` — OK.
 - CSP policy restrictive (`default-src 'self'`). При добавлении CDN/external fonts нужно расширять.
 - CSRF token в memory — при F5 refresh теряется до первого `/auth/me` call. `getCurrentSession()` вызывается при mount, так что window минимален.
+
+---
+
+## Iter 9 — Extended Input Validation (закрыта — 2026-02-18)
+
+> Zod schemas для 18 оставшихся POST endpoints. Dead letter visibility endpoints.
+
+### Что изменено
+
+| # | Задача | Файлы | Результат |
+|---|--------|-------|-----------|
+| 9.1 | Schemas для signals & identity | `server/src/lib/schemas.js`, `server/src/index.js` | `SignalStatusSchema`, `NbaStatusSchema`, `IdentityPreviewSchema`, `IdentitySuggestionApplySchema` — валидация на `/signals/:id/status`, `/nba/:id/status`, `/identity/suggestions/preview`, `/identity/suggestions/apply` |
+| 9.2 | Schemas для KAG & forecasting | `server/src/lib/schemas.js`, `server/src/index.js` | `KagSimilarityRebuildSchema`, `KagForecastRefreshSchema`, `RecommendationsShownSchema`, `RecommendationStatusSchema`, `RecommendationFeedbackSchema`, `RecommendationActionSchema`, `RecommendationActionRetrySchema` — валидация на 7 KAG/recommendation endpoints |
+| 9.3 | Schemas для connectors & jobs | `server/src/lib/schemas.js`, `server/src/index.js` | `ConnectorRetrySchema`, `AnalyticsRefreshSchema` — валидация на `/connectors/errors/retry`, `/analytics/refresh` |
+| 9.4 | Schemas для outbound & continuity | `server/src/lib/schemas.js`, `server/src/index.js` | `OutboundApproveSchema`, `OutboundProcessSchema`, `LoopsSyncSchema`, `UpsellStatusSchema`, `ContinuityApplySchema` — валидация на 5 endpoints |
+| 9.5 | Dead letter visibility | `server/src/services/connector-state.js`, `server/src/index.js` | `listDeadLetterErrors()`, `retryDeadLetterError()` functions + `GET /connectors/errors/dead-letter` + `POST /connectors/errors/dead-letter/:id/retry` endpoints |
+
+### Дополнительно
+
+- Reusable `allProjectsFlag` preprocessor: `z.preprocess()` для `all_projects` body field (string "true" → boolean)
+- `z.object({}).passthrough()` вместо `z.record(z.any())` — fix для Zod v4 compatibility
+- 17 новых schemas + 2 new connector-state functions
+- 36 новых unit tests в `server/test/extended-schemas.unit.test.js` (415 total)
+- Zod validation покрывает **все** POST endpoints (14 + 18 = 32 endpoints)
+
+### Самокритика
+
+- Dead letter endpoints используют manual ID validation (string coerce) — при UUID-only IDs стоит добавить UUID schema.
+- `allProjectsFlag` preprocess — допускает любой truthy string кроме "true" как false. Достаточно для текущего API contract.
+- `z.object({}).passthrough()` — менее strict чем `z.record(z.string(), z.any())`, но работает с Zod v4 без crashes.

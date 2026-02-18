@@ -322,6 +322,46 @@ export async function listDueConnectorErrors(pool, scope, limit = 20) {
   return rows;
 }
 
+export async function listDeadLetterErrors(pool, scope, limit = 50) {
+  const safeLimit = clampInt(limit, 50, 1, 500);
+  const { rows } = await pool.query(
+    `
+      SELECT
+        id, connector, mode, operation, source_ref,
+        error_kind, error_message, payload_json,
+        attempt, next_retry_at, status, dedupe_key,
+        created_at, updated_at
+      FROM connector_errors
+      WHERE project_id = $1
+        AND account_scope_id = $2
+        AND status = 'dead_letter'
+      ORDER BY updated_at DESC, id ASC
+      LIMIT $3
+    `,
+    [scope.projectId, scope.accountScopeId, safeLimit]
+  );
+  return rows;
+}
+
+export async function retryDeadLetterError(pool, scope, errorId) {
+  const result = await pool.query(
+    `
+      UPDATE connector_errors
+      SET status = 'pending',
+          attempt = 0,
+          next_retry_at = now(),
+          updated_at = now()
+      WHERE id = $1
+        AND project_id = $2
+        AND account_scope_id = $3
+        AND status = 'dead_letter'
+      RETURNING *
+    `,
+    [errorId, scope.projectId, scope.accountScopeId]
+  );
+  return result.rows[0] || null;
+}
+
 export async function resolveConnectorErrorById(pool, scope, errorId) {
   const result = await pool.query(
     `

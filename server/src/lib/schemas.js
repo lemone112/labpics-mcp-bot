@@ -76,7 +76,7 @@ export const CreateOutboundDraftSchema = z.object({
   channel: outboundChannel,
   recipient_ref: trimmedString(1, 500),
   idempotency_key: trimmedString(1, 500),
-  payload: z.record(z.any()).optional().default({}),
+  payload: z.object({}).passthrough().optional().default({}),
   dedupe_key: optionalTrimmedString(500),
   max_retries: z.coerce.number().int().min(0).max(20).optional().default(5),
   evidence_refs: evidenceRefs,
@@ -132,4 +132,106 @@ export const SearchSchema = z.object({
   query: trimmedString(1, 4000),
   topK: z.coerce.number().int().min(1).max(50).optional().default(10),
   sourceLimit: z.coerce.number().int().min(1).max(25).optional(),
+});
+
+// ---------------------------------------------------------------------------
+// 9.1  Signals & Identity schemas
+// ---------------------------------------------------------------------------
+
+export const SignalStatusSchema = z.object({
+  status: z.string().trim().toLowerCase().min(1, "status is required"),
+});
+
+export const NbaStatusSchema = z.object({
+  status: z.string().trim().toLowerCase().min(1, "status is required"),
+});
+
+export const IdentityPreviewSchema = z.object({
+  limit: z.coerce.number().int().min(1).max(200).optional().default(100),
+});
+
+export const IdentitySuggestionApplySchema = z.object({
+  suggestion_ids: z.array(z.string()).default([]),
+});
+
+// ---------------------------------------------------------------------------
+// 9.2  KAG & Forecasting schemas
+// ---------------------------------------------------------------------------
+
+const allProjectsFlag = z.preprocess(
+  (v) => String(v || "").trim().toLowerCase() === "true",
+  z.boolean().default(false)
+);
+
+export const KagSimilarityRebuildSchema = z.object({
+  project_id: z.string().optional().default(null).nullable(),
+  window_days: z.coerce.number().int().min(1).max(365).optional(),
+});
+
+export const KagForecastRefreshSchema = z.object({
+  project_id: z.string().optional().default(null).nullable(),
+  window_days: z.coerce.number().int().min(1).max(365).optional(),
+  top_k: z.coerce.number().int().min(1).max(100).optional(),
+});
+
+export const RecommendationsShownSchema = z.object({
+  recommendation_ids: z.array(z.string()).default([]),
+  all_projects: allProjectsFlag,
+});
+
+export const RecommendationStatusSchema = z.object({
+  status: z.string().trim().toLowerCase().min(1, "status is required"),
+  all_projects: allProjectsFlag,
+});
+
+export const RecommendationFeedbackSchema = z.object({
+  helpful: z.string().trim().toLowerCase().default("unknown"),
+  note: optionalTrimmedString(2000),
+  all_projects: allProjectsFlag,
+});
+
+export const RecommendationActionSchema = z.object({
+  action_type: z.string().trim().min(1, "action_type is required"),
+  action_payload: z.object({}).passthrough().optional().default({}),
+  all_projects: allProjectsFlag,
+});
+
+export const RecommendationActionRetrySchema = z.object({
+  all_projects: allProjectsFlag,
+});
+
+// ---------------------------------------------------------------------------
+// 9.3  Connectors & Jobs schemas
+// ---------------------------------------------------------------------------
+
+export const ConnectorRetrySchema = z.object({
+  limit: z.coerce.number().int().min(1).max(500).optional().default(20),
+});
+
+export const AnalyticsRefreshSchema = z.object({
+  period_days: z.coerce.number().int().min(1).max(120).optional().default(30),
+});
+
+// ---------------------------------------------------------------------------
+// 9.4  Outbound, Continuity & Upsell schemas
+// ---------------------------------------------------------------------------
+
+export const OutboundApproveSchema = z.object({
+  evidence_refs: evidenceRefs,
+});
+
+export const OutboundProcessSchema = z.object({
+  limit: z.coerce.number().int().min(1).max(200).optional().default(20),
+});
+
+export const LoopsSyncSchema = z.object({
+  project_ids: z.array(z.string()).optional().default([]),
+});
+
+export const UpsellStatusSchema = z.object({
+  status: z.string().trim().toLowerCase().min(1, "status is required"),
+});
+
+export const ContinuityApplySchema = z.object({
+  action_ids: z.array(z.string()).default([]),
 });
