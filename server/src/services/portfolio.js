@@ -113,66 +113,20 @@ export async function getPortfolioOverview(pool, options = {}) {
       pool.query(
         `
           SELECT
-            p.id::text AS project_id,
-            p.name AS project_name,
-            COALESCE(msg.messages_7d, 0)::int AS messages_7d,
-            COALESCE(lin.issues_open, 0)::int AS linear_open_issues,
-            COALESCE(att.pipeline_amount, 0)::numeric(14,2) AS attio_pipeline_amount,
-            COALESCE(att.expected_revenue, 0)::numeric(14,2) AS attio_expected_revenue,
-            COALESCE(crm.pipeline_amount, 0)::numeric(14,2) AS crm_pipeline_amount,
-            COALESCE(crm.expected_revenue, 0)::numeric(14,2) AS expected_revenue,
-            COALESCE(hs.score, 0)::numeric(6,2) AS health_score,
-            COALESCE(risk.risks_open, 0)::int AS risks_open
-          FROM projects AS p
-          LEFT JOIN LATERAL (
-            SELECT count(*) FILTER (WHERE created_at > now() - interval '7 days')::int AS messages_7d
-            FROM cw_messages
-            WHERE project_id = p.id
-              AND account_scope_id = $1
-          ) AS msg ON TRUE
-          LEFT JOIN LATERAL (
-            SELECT count(*) FILTER (WHERE completed_at IS NULL)::int AS issues_open
-            FROM linear_issues_raw
-            WHERE project_id = p.id
-              AND account_scope_id = $1
-          ) AS lin ON TRUE
-          LEFT JOIN LATERAL (
-            SELECT
-              COALESCE(sum(amount), 0)::numeric(14,2) AS pipeline_amount,
-              COALESCE(sum(amount * probability), 0)::numeric(14,2) AS expected_revenue
-            FROM attio_opportunities_raw
-            WHERE project_id = p.id
-              AND account_scope_id = $1
-              AND lower(COALESCE(stage, '')) NOT IN ('won', 'lost', 'closed-won', 'closed-lost')
-          ) AS att ON TRUE
-          LEFT JOIN LATERAL (
-            SELECT
-              COALESCE(sum(amount_estimate), 0)::numeric(14,2) AS pipeline_amount,
-              COALESCE(sum(amount_estimate * probability), 0)::numeric(14,2) AS expected_revenue
-            FROM crm_opportunities
-            WHERE project_id = p.id
-              AND account_scope_id = $1
-              AND COALESCE(source_system, 'manual') <> 'attio'
-              AND stage NOT IN ('won', 'lost')
-          ) AS crm ON TRUE
-          LEFT JOIN LATERAL (
-            SELECT score
-            FROM health_scores
-            WHERE project_id = p.id
-              AND account_scope_id = $1
-            ORDER BY generated_at DESC
-            LIMIT 1
-          ) AS hs ON TRUE
-          LEFT JOIN LATERAL (
-            SELECT count(*)::int AS risks_open
-            FROM risk_radar_items
-            WHERE project_id = p.id
-              AND account_scope_id = $1
-              AND status <> 'closed'
-          ) AS risk ON TRUE
-          WHERE p.account_scope_id = $1
-            AND p.id::text = ANY($2::text[])
-          ORDER BY p.name ASC
+            project_id::text AS project_id,
+            project_name,
+            messages_7d,
+            linear_open_issues,
+            attio_pipeline_amount,
+            attio_expected_revenue,
+            crm_pipeline_amount,
+            expected_revenue,
+            health_score,
+            risks_open
+          FROM mv_portfolio_dashboard
+          WHERE account_scope_id = $1
+            AND project_id::text = ANY($2::text[])
+          ORDER BY project_name ASC
         `,
         [accountScopeId, selectedProjectIds]
       ),
@@ -319,19 +273,22 @@ export async function getPortfolioOverview(pool, options = {}) {
             )::numeric(14,2) AS gross_margin,
             GREATEST(COALESCE(crm.forecast_days, 0), COALESCE(attio.forecast_days, 0))::int AS forecast_days
           FROM projects AS p
-          LEFT JOIN LATERAL (
+          LEFT JOIN (
             SELECT
+              project_id,
               COALESCE(sum(amount_estimate) FILTER (WHERE stage = 'won'), 0)::numeric(14,2) AS deal_amount,
               COALESCE(sum(amount_estimate) FILTER (WHERE stage NOT IN ('won', 'lost')), 0)::numeric(14,2) AS pipeline_amount,
               COALESCE(sum(amount_estimate * probability) FILTER (WHERE stage NOT IN ('won', 'lost')), 0)::numeric(14,2) AS expected_revenue,
               COALESCE(avg(GREATEST(0, expected_close_date - current_date)) FILTER (WHERE stage NOT IN ('won', 'lost') AND expected_close_date IS NOT NULL), 0)::int AS forecast_days
             FROM crm_opportunities
-            WHERE project_id = p.id
-              AND account_scope_id = $1
+            WHERE account_scope_id = $1
+              AND project_id::text = ANY($2::text[])
               AND COALESCE(source_system, 'manual') <> 'attio'
-          ) AS crm ON TRUE
-          LEFT JOIN LATERAL (
+            GROUP BY project_id
+          ) AS crm ON crm.project_id = p.id
+          LEFT JOIN (
             SELECT
+              project_id,
               COALESCE(sum(amount) FILTER (
                 WHERE lower(COALESCE(stage, '')) IN ('won', 'closed-won')
               ), 0)::numeric(14,2) AS deal_amount,
@@ -346,23 +303,27 @@ export async function getPortfolioOverview(pool, options = {}) {
                   AND expected_close_date IS NOT NULL
               ), 0)::int AS forecast_days
             FROM attio_opportunities_raw
-            WHERE project_id = p.id
-              AND account_scope_id = $1
-          ) AS attio ON TRUE
-          LEFT JOIN LATERAL (
-            SELECT COALESCE(sum(total) FILTER (WHERE status = 'signed'), 0)::numeric(14,2) AS signed_total
+            WHERE account_scope_id = $1
+              AND project_id::text = ANY($2::text[])
+            GROUP BY project_id
+          ) AS attio ON attio.project_id = p.id
+          LEFT JOIN (
+            SELECT
+              project_id,
+              COALESCE(sum(total) FILTER (WHERE status = 'signed'), 0)::numeric(14,2) AS signed_total
             FROM offers
-            WHERE project_id = p.id
-              AND account_scope_id = $1
-          ) AS o ON TRUE
-          LEFT JOIN LATERAL (
-            SELECT costs_amount, gross_margin
+            WHERE account_scope_id = $1
+              AND project_id::text = ANY($2::text[])
+            GROUP BY project_id
+          ) AS o ON o.project_id = p.id
+          LEFT JOIN (
+            SELECT DISTINCT ON (project_id)
+              project_id, costs_amount, gross_margin
             FROM analytics_revenue_snapshots
-            WHERE project_id = p.id
-              AND account_scope_id = $1
-            ORDER BY generated_at DESC
-            LIMIT 1
-          ) AS ar ON TRUE
+            WHERE account_scope_id = $1
+              AND project_id::text = ANY($2::text[])
+            ORDER BY project_id, generated_at DESC
+          ) AS ar ON ar.project_id = p.id
           WHERE p.account_scope_id = $1
             AND p.id::text = ANY($2::text[])
           ORDER BY p.name ASC
