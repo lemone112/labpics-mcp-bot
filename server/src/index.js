@@ -61,6 +61,7 @@ import {
 } from "./services/intelligence.js";
 import { createRedisPubSub } from "./lib/redis-pubsub.js";
 import { createSseBroadcaster } from "./lib/sse-broadcaster.js";
+import { createCacheLayer, cacheKeyHash } from "./lib/cache.js";
 import { requiredEnv } from "./lib/utils.js";
 
 function isBcryptHash(value) {
@@ -353,9 +354,32 @@ async function main() {
   const migrationsDir = path.join(currentDir, "..", "db", "migrations");
   await applyMigrations(pool, migrationsDir, app.log);
 
-  // --- Redis Pub/Sub + SSE setup ---
+  // --- Redis Pub/Sub + SSE + Cache setup ---
   const redisPubSub = createRedisPubSub({ logger: app.log });
   const sseBroadcaster = createSseBroadcaster(app.log);
+  const cache = createCacheLayer({ logger: app.log });
+
+  if (cache.enabled) {
+    app.log.info("redis cache layer active");
+  }
+
+  // --- Session touch buffer: batch last_seen_at updates ---
+  const sessionTouchBuffer = new Set();
+  const SESSION_TOUCH_INTERVAL_MS = 30_000;
+  const sessionTouchTimer = setInterval(async () => {
+    if (sessionTouchBuffer.size === 0) return;
+    const sids = [...sessionTouchBuffer];
+    sessionTouchBuffer.clear();
+    try {
+      await pool.query(
+        "UPDATE sessions SET last_seen_at = now() WHERE session_id = ANY($1::text[])",
+        [sids]
+      );
+    } catch (err) {
+      app.log.warn({ error: String(err?.message || err), count: sids.length }, "session touch batch failed");
+    }
+  }, SESSION_TOUCH_INTERVAL_MS);
+  sessionTouchTimer.unref();
 
   if (redisPubSub.enabled) {
     await redisPubSub.subscribe("job_completed", (payload) => {
@@ -366,8 +390,19 @@ async function main() {
         status: payload.status,
         at: payload.at,
       });
+
+      // --- Cache invalidation on job completion ---
+      const accountScopeId = payload?.account_scope_id;
+      const jobType = String(payload?.job_type || "");
+      if (accountScopeId) {
+        cache.invalidateByPrefix(`portfolio:${accountScopeId}`);
+      }
+      cache.invalidateByPrefix(`ct:${projectId}`);
+      if (["connectors_sync_cycle", "embeddings_run"].includes(jobType)) {
+        cache.invalidateByPrefix(`lightrag:${projectId}`);
+      }
     });
-    app.log.info("redis pub/sub → sse bridge active");
+    app.log.info("redis pub/sub → sse bridge active (with cache invalidation)");
   } else {
     app.log.info("redis unavailable — SSE will not receive real-time events");
   }
@@ -537,7 +572,13 @@ async function main() {
       return sendError(reply, requestId, new ApiError(401, "unauthorized", "Unauthorized"));
     }
 
-    const sessionRow = await loadSessionWithProjectScope(sid);
+    // Session cache: check Redis first, fall back to DB
+    const sessionCacheKey = `session:${sid}`;
+    let sessionRow = await cache.get(sessionCacheKey);
+    if (!sessionRow) {
+      sessionRow = await loadSessionWithProjectScope(sid);
+      if (sessionRow) await cache.set(sessionCacheKey, sessionRow, 60);
+    }
     if (!sessionRow) {
       reply.clearCookie(cookieName, cookieOptions);
       reply.clearCookie(csrfCookieName, csrfCookieOptions);
@@ -546,7 +587,8 @@ async function main() {
 
     const preferredProjectIds = parseProjectIdsFromUrl(request.url);
     request.auth = await hydrateSessionScope(pool, sid, sessionRow, preferredProjectIds);
-    await pool.query("UPDATE sessions SET last_seen_at = now() WHERE session_id = $1", [sid]);
+    // Batch last_seen_at updates every 30s instead of per-request
+    sessionTouchBuffer.add(sid);
 
     // Rate limit authenticated requests by session
     const sessionKey = `session:${sid}`;
@@ -596,6 +638,7 @@ async function main() {
 
   registerGet("/metrics", async (_request, reply) => {
     const sseStats = sseBroadcaster.getStats();
+    const cacheStats = cache.getStats();
     const lines = [
       "# TYPE app_requests_total counter",
       `app_requests_total ${metrics.requests_total}`,
@@ -607,6 +650,16 @@ async function main() {
       `app_sse_connections_total ${sseStats.total_connections}`,
       "# TYPE app_sse_projects_subscribed gauge",
       `app_sse_projects_subscribed ${sseStats.projects}`,
+      "# TYPE app_cache_hits_total counter",
+      `app_cache_hits_total ${cacheStats.hits}`,
+      "# TYPE app_cache_misses_total counter",
+      `app_cache_misses_total ${cacheStats.misses}`,
+      "# TYPE app_cache_sets_total counter",
+      `app_cache_sets_total ${cacheStats.sets}`,
+      "# TYPE app_cache_invalidations_total counter",
+      `app_cache_invalidations_total ${cacheStats.invalidations}`,
+      "# TYPE app_cache_enabled gauge",
+      `app_cache_enabled ${cacheStats.enabled ? 1 : 0}`,
     ];
     for (const [statusCode, count] of Object.entries(metrics.status_counts)) {
       lines.push(`app_response_status_total{status="${statusCode}"} ${count}`);
@@ -708,7 +761,10 @@ async function main() {
 
   registerPost("/auth/logout", async (request, reply) => {
     const sid = request.cookies?.[cookieName];
-    if (sid) await pool.query("DELETE FROM sessions WHERE session_id = $1", [sid]);
+    if (sid) {
+      await pool.query("DELETE FROM sessions WHERE session_id = $1", [sid]);
+      await cache.del(`session:${sid}`);
+    }
     reply.clearCookie(cookieName, cookieOptions);
     reply.clearCookie(csrfCookieName, csrfCookieOptions);
     return sendOk(reply, request.requestId);
@@ -1344,12 +1400,18 @@ async function main() {
       return sendError(reply, request.requestId, new ApiError(400, "query_required", "Query is required"));
     }
     const topK = toTopK(body?.topK, 10);
+
+    const ragCacheKey = `lightrag:${scope.projectId}:${cacheKeyHash(query, String(topK))}`;
+    const cached = await cache.get(ragCacheKey);
+    if (cached) return sendOk(reply, request.requestId, { ...cached, cached: true });
+
     const result = await queryLightRag(
       pool,
       scope,
       { query, topK, sourceLimit: body?.sourceLimit, createdBy: request.auth?.username || null },
       request.log
     );
+    await cache.set(ragCacheKey, result, 300);
     return sendOk(reply, request.requestId, result);
   });
 
@@ -1373,13 +1435,22 @@ async function main() {
 
   registerGet("/control-tower", async (request, reply) => {
     const scope = requireProjectScope(request);
+    const ctCacheKey = `ct:${scope.projectId}`;
+    const cached = await cache.get(ctCacheKey);
+    if (cached) return sendOk(reply, request.requestId, cached);
+
     const payload = await getControlTower(pool, scope);
+    await cache.set(ctCacheKey, payload, 120);
     return sendOk(reply, request.requestId, payload);
   });
 
   registerGet("/portfolio/overview", async (request, reply) => {
     const projectIds = parseProjectIdsInput(request.query?.project_ids, 100);
     const accountScopeId = await resolvePortfolioAccountScopeId(pool, request, projectIds);
+
+    const portfolioCacheKey = `portfolio:${accountScopeId}:${cacheKeyHash(...projectIds.sort())}`;
+    const cached = await cache.get(portfolioCacheKey);
+    if (cached) return sendOk(reply, request.requestId, cached);
 
     const payload = await getPortfolioOverview(pool, {
       accountScopeId,
@@ -1388,6 +1459,7 @@ async function main() {
       messageLimit: request.query?.message_limit,
       cardLimit: request.query?.card_limit,
     });
+    await cache.set(portfolioCacheKey, payload, 90);
     return sendOk(reply, request.requestId, payload);
   });
 
@@ -2798,6 +2870,8 @@ async function main() {
   });
 
   app.addHook("onClose", async () => {
+    clearInterval(sessionTouchTimer);
+    await cache.close();
     await redisPubSub.close();
     await pool.end();
   });
