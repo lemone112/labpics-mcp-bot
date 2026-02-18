@@ -1,6 +1,6 @@
 # Статус продукта и roadmap (Production-Ready Plan)
 
-> Обновлено: 2026-02-18 (post Iter 0-4)
+> Обновлено: 2026-02-18 (post Iter 0-6)
 > Детальный анализ: [`docs/product-structure-analysis.md`](./product-structure-analysis.md)
 
 ---
@@ -23,30 +23,35 @@
 - Нет Zod/schema validation на POST endpoints (ручная проверка body)
 - `hydrateSessionScope()` может вызываться дважды (onRequest + preValidation)
 
-### Интеграции / Connectors (зрелость: 85% → **95%**)
+### Интеграции / Connectors (зрелость: 85% → **96%**)
 
 **Было:** Инкрементальный sync, DLQ, reconciliation — но нет circuit breaker, нет alerting.
 
-**Сделано (Iter 2 + 4):**
+**Сделано (Iter 2 + 4 + 6):**
 - ✅ Circuit breaker в `fetchWithRetry()` — per-host, 5 failures threshold, 30s reset
 - ✅ Completeness alerting: при `completeness_pct < threshold` → audit event + SSE
 - ✅ Strategic indexes: `connector_errors(project_id, error_kind, status)`, `crm_account_contacts(project_id, account_id)`
+- ✅ Completeness diff report: delta per connector между sync-циклами (`GET /connectors/reconciliation/diff`)
+- ✅ Auto identity dedup preview при sync cycle completion
 
 **Оставшиеся gaps:**
-- Circuit breaker states не экспортируются в `/metrics` (функция `getCircuitBreakerStates()` есть, но не вызывается)
+- Нет pre-built Grafana dashboards для connector metrics
 
-### Intelligence / LightRAG (зрелость: 65% → **82%**)
+### Intelligence / LightRAG (зрелость: 65% → **90%**)
 
 **Было:** Рабочий vector search + ILIKE, но fullscan, нет кеша, нет quality score.
 
-**Сделано (Iter 1 + 4):**
-- ✅ LightRAG query cache: `lightrag:{projectId}:{hash(query,topK)}`, TTL 300s
+**Сделано (Iter 1 + 4 + 6):**
+- ✅ LightRAG query cache: `lightrag:{projectId}:{hash(query,topK,sourceFilter)}`, TTL 300s
 - ✅ Event-driven invalidation при embeddings_run и sync completion
 - ✅ pg_trgm GIN indexes: `cw_messages(content)`, `linear_issues_raw(title)`, `attio_opportunities_raw(title)` — ILIKE → index scan
+- ✅ Quality score proxy: `computeQualityScore()` — coverage (40%) + diversity (35%) + depth (25%) = 0-100
+- ✅ Feedback endpoint: `POST /lightrag/feedback` — rating (-1/0/1) + comment, persisted в `lightrag_feedback`
+- ✅ Evidence source filters: `sourceFilter: ["messages", "issues", "deals", "chunks"]` — conditional query execution
 
 **Оставшиеся gaps:**
-- Нет quality score / feedback loop
-- Нет фильтрации по типу источника
+- Quality score — proxy metric без ground truth (calibratable через feedback data)
+- Vector index tuning (IVFFlat probes / HNSW ef_search) только через env vars
 
 ### Dashboard / Portfolio (зрелость: 50% → **88%**)
 
@@ -76,11 +81,11 @@
 **Оставшиеся gaps:**
 - `use-project-portfolio.js`: 335 строк, 21 values в context (оценено: разделение неоправданно)
 
-### Инфраструктура (зрелость: 40% → 78%)
+### Инфраструктура (зрелость: 40% → **92%**)
 
 **Было:** Root user, открытые порты, нет backup, нет healthcheck, нет logging.
 
-**Сделано (Iter 0 + 2):**
+**Сделано (Iter 0 + 2 + 5):**
 - ✅ Non-root Docker user (app:1001) в обоих Dockerfiles
 - ✅ DB/Redis порты закрыты от хоста
 - ✅ Resource limits для всех контейнеров (Redis 256m, DB 1g, Server/Worker/Web 512m)
@@ -88,13 +93,15 @@
 - ✅ PostgreSQL backup script (`scripts/backup.sh`) с retention policy
 - ✅ Structured JSON logging (Pino)
 - ✅ 3 CI workflows (ci-quality, deploy-dev, deploy-prod)
+- ✅ Full Prometheus exporter: DB pool, cache, SSE, circuit breaker states, process metrics
+- ✅ 11 alerting rules (pool exhaustion, error rate, 5xx, CB open, cache, memory, restart)
+- ✅ Backup verification script (`scripts/verify-backup.sh`)
+- ✅ Monitoring stack: Prometheus + Loki + Promtail + Grafana (`docker-compose.monitoring.yml`)
+- ✅ Incident response runbook (8 failure modes with diagnosis + resolution)
+- ✅ Smoke tests in CI (`scripts/smoke-test.sh` + `smoke` job in ci-quality)
 
 **Оставшиеся gaps:**
-- Circuit breaker states не в `/metrics`
-- Нет alert rules (Prometheus/Alertmanager)
-- Нет backup verification (restore test)
-- Нет log aggregation (Loki/Grafana)
-- Нет runbooks
+- Нет pre-built Grafana dashboards (datasources provisioned)
 
 ---
 
@@ -107,49 +114,12 @@
 | 2 | Backend Reliability | ✅ Done | 5/6 | Circuit breaker, graceful shutdown, Pino logging, backup script, completeness alerting. Zod validation отложена |
 | 3 | Frontend Performance | ✅ Done | 5/6 | React.memo + useMemo для charts, ticker 5s, SSE polling off, code splitting. Portfolio hook — оставлен as-is |
 | 4 | Database Optimization | ✅ Done | 6/6 | pg_trgm + 6 GIN indexes, matview `mv_portfolio_dashboard`, 10 LATERAL → batch, strategic indexes, orphaned tables dropped, audit partitioning infra |
+| 5 | Observability & Ops | ✅ Done | 6/6 | Full Prometheus exporter, 11 alert rules, backup verification, Prometheus+Loki+Grafana stack, incident runbook, CI smoke tests |
+| 6 | Data Quality & LightRAG UX | ✅ Done | 5/5 | Quality score proxy, feedback endpoint, source filters, identity dedup preview, completeness diff |
 
 ---
 
 ## 3) Оставшиеся итерации
-
-### Iter 5 — Observability & Ops
-
-> MTTD < 5 минут для критических инцидентов.
-
-**Приоритет: MEDIUM** — CI уже есть, метрики частично есть. Не блокирует production, но critical для operations.
-
-| # | Задача | Файлы | Acceptance criteria | Статус |
-|---|--------|-------|---------------------|--------|
-| 5.1 | Circuit breaker states в /metrics | `index.js` | Вызвать `getCircuitBreakerStates()` в metrics handler. Экспорт: host, state, failures, lastFailureAt | Pending |
-| 5.2 | Extended Prometheus metrics | `index.js` | `db_pool_total/idle/waiting`, `sse_connections_total`, `connector_last_success_at`, `lightrag_query_duration_seconds` | Pending |
-| 5.3 | Alert rules | `infra/alerts/rules.yml` (новый) | connector_lag > 30min, error_rate > 5%, pool_usage > 80%, cache_hit_ratio < 50% | Pending |
-| 5.4 | Backup verification | `scripts/verify-backup.sh` (новый) | Weekly: restore → verify table counts → cleanup. Exit 1 при failure | Pending |
-| 5.5 | Log aggregation | `docker-compose.yml` | Loki/Grafana sidecar или managed solution | Pending |
-| 5.6 | Runbooks | `docs/runbooks/` | Redis failure, DB pool exhaustion, connector timeout, OOM, disk full | Pending |
-
-**Зависимости:** Iter 0, 2 (logging, health) — выполнены
-**Effort:** Medium
-
----
-
-### Iter 6 — Data Quality & LightRAG UX
-
-> LightRAG feedback собирается. Quality trend наблюдаем.
-
-**Приоритет: LOW** — улучшение UX, не блокирует работоспособность.
-
-| # | Задача | Файлы | Acceptance criteria | Статус |
-|---|--------|-------|---------------------|--------|
-| 6.1 | Quality score proxy | `lightrag.js` | `quality_score` в response: f(evidence_count, source_diversity). Range 0-100 | Pending |
-| 6.2 | Feedback endpoint | `index.js`, новая миграция | `POST /lightrag/feedback` — `{ query_run_id, rating, comment? }` | Pending |
-| 6.3 | Evidence source filters | `lightrag.js` | Параметр `sourceFilter: ["messages", "issues", "deals"]` | Pending |
-| 6.4 | Auto-dedup preview | `identity-graph.js` | При sync completion → identity suggestions preview в SSE | Pending |
-| 6.5 | Completeness diff report | `reconciliation.js` | Delta между sync-циклами в audit_events | Pending |
-
-**Зависимости:** Iter 1 (cache), Iter 4 (indexes)
-**Effort:** Medium
-
----
 
 ### Iter 7 — Input Validation & API Hardening (новая)
 
@@ -177,29 +147,27 @@
 ✅ Iter 2 (reliability) ───── DONE (5/6, zod → Iter 7)
 ✅ Iter 3 (frontend) ───────── DONE (5/6, portfolio hook → as-is)
 ✅ Iter 4 (DB optimization) ── DONE (6/6)
-                                │
-    Iter 5 (observability) ────┤  ← NEXT (MEDIUM, operations readiness)
-                                │
-    Iter 6 (quality & UX) ────┤  ← LOW (feature enhancement)
+✅ Iter 5 (observability) ──── DONE (6/6)
+✅ Iter 6 (quality & UX) ──── DONE (5/5)
                                 │
     Iter 7 (validation) ──────┘  ← LOW (tech debt)
 ```
 
-**Итого:** 5 итераций завершены (31/33 задач). Осталось 3 итерации (15 задач).
+**Итого:** 7 итераций завершены (42/44 задач). Осталось 1 итерация (4 задачи).
 
 ---
 
 ## 5) Матрица зрелости
 
-| Зона | До (Iter 0) | После (Iter 0-2) | После (Iter 0-4) | Target |
-|------|-------------|-------------------|-------------------|--------|
-| Платформа | 80% | 92% | **92%** | 98% |
-| Connectors | 85% | 92% | **95%** | 97% |
-| Intelligence | 65% | 75% | **82%** | 92% |
-| Dashboard | 50% | 70% | **88%** | 90% |
-| Frontend | 70% | 70% | **85%** | 90% |
-| Инфраструктура | 40% | 78% | **78%** | 95% |
-| **Среднее** | **65%** | **80%** | **87%** | **94%** |
+| Зона | До (Iter 0) | После (Iter 0-2) | После (Iter 0-4) | После (Iter 0-5) | После (Iter 0-6) | Target |
+|------|-------------|-------------------|-------------------|-------------------|-------------------|--------|
+| Платформа | 80% | 92% | 92% | 92% | **92%** | 98% |
+| Connectors | 85% | 92% | 95% | 95% | **96%** | 97% |
+| Intelligence | 65% | 75% | 82% | 82% | **90%** | 92% |
+| Dashboard | 50% | 70% | 88% | 88% | **88%** | 90% |
+| Frontend | 70% | 70% | 85% | 85% | **85%** | 90% |
+| Инфраструктура | 40% | 78% | 78% | 92% | **92%** | 95% |
+| **Среднее** | **65%** | **80%** | **87%** | **89%** | **91%** | **94%** |
 
 ---
 

@@ -61,9 +61,19 @@ function buildEvidenceFromRows(rows, sourceType) {
   }));
 }
 
+function computeQualityScore(evidence, stats) {
+  if (!evidence.length) return 0;
+  const sourceTypes = new Set(evidence.map((e) => e.source_type));
+  const diversity = sourceTypes.size;
+  const coverageScore = Math.min(1, evidence.length / 10) * 40;
+  const diversityScore = Math.min(1, diversity / 3) * 35;
+  const depthScore = Math.min(1, (stats.chunks || 0) / 5) * 25;
+  return Math.round(Math.min(100, coverageScore + diversityScore + depthScore));
+}
+
 async function persistLightRagQueryRun(pool, scope, payload = {}, logger = console) {
   try {
-    await pool.query(
+    const { rows } = await pool.query(
       `
         INSERT INTO lightrag_query_runs(
           project_id,
@@ -74,9 +84,12 @@ async function persistLightRagQueryRun(pool, scope, payload = {}, logger = conso
           source_hits,
           evidence,
           answer,
-          created_by
+          created_by,
+          quality_score,
+          source_diversity
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, $9)
+        VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, $9, $10, $11)
+        RETURNING id
       `,
       [
         scope.projectId,
@@ -88,10 +101,14 @@ async function persistLightRagQueryRun(pool, scope, payload = {}, logger = conso
         JSON.stringify(Array.isArray(payload.evidence) ? payload.evidence.slice(0, 50) : []),
         asText(payload.answer, 10_000),
         asText(payload.createdBy, 200) || null,
+        payload.qualityScore ?? null,
+        payload.sourceDiversity ?? 0,
       ]
     );
+    return rows[0]?.id || null;
   } catch (error) {
     logger.warn({ err: String(error?.message || error || "persist_lightrag_query_failed") }, "unable to persist lightrag query run");
+    return null;
   }
 }
 
@@ -171,9 +188,18 @@ export async function queryLightRag(pool, scope, options = {}, logger = console)
   const patterns = buildLikePatterns(query);
   const safePatterns = patterns.length ? patterns : [`%${query}%`];
 
+  const sourceFilter = Array.isArray(options.sourceFilter)
+    ? new Set(options.sourceFilter.map((s) => String(s).toLowerCase().trim()).filter(Boolean))
+    : null;
+  const includeMessages = !sourceFilter || sourceFilter.has("messages");
+  const includeIssues = !sourceFilter || sourceFilter.has("issues");
+  const includeOpportunities = !sourceFilter || sourceFilter.has("deals") || sourceFilter.has("opportunities");
+  const includeChunks = !sourceFilter || sourceFilter.has("chunks");
+
+  const emptyResult = { rows: [] };
   const [chunkSearch, messageRows, issueRows, opportunityRows] = await Promise.all([
-    searchChunks(pool, scope, query, topK, logger),
-    pool.query(
+    includeChunks ? searchChunks(pool, scope, query, topK, logger) : { results: [], embedding_model: null, search_config: null },
+    includeMessages ? pool.query(
       `
         SELECT
           id,
@@ -194,8 +220,8 @@ export async function queryLightRag(pool, scope, options = {}, logger = console)
         LIMIT $4
       `,
       [scope.projectId, scope.accountScopeId, safePatterns, sourceLimit]
-    ),
-    pool.query(
+    ) : emptyResult,
+    includeIssues ? pool.query(
       `
         SELECT
           id,
@@ -220,8 +246,8 @@ export async function queryLightRag(pool, scope, options = {}, logger = console)
         LIMIT $4
       `,
       [scope.projectId, scope.accountScopeId, safePatterns, sourceLimit]
-    ),
-    pool.query(
+    ) : emptyResult,
+    includeOpportunities ? pool.query(
       `
         SELECT
           id,
@@ -247,7 +273,7 @@ export async function queryLightRag(pool, scope, options = {}, logger = console)
         LIMIT $4
       `,
       [scope.projectId, scope.accountScopeId, safePatterns, sourceLimit]
-    ),
+    ) : emptyResult,
   ]);
 
   const messages = messageRows.rows || [];
@@ -274,47 +300,68 @@ export async function queryLightRag(pool, scope, options = {}, logger = console)
       : []),
   ];
 
-  const response = {
-    query,
-    topK,
-    embedding_model: chunkSearch.embedding_model || null,
-    search_config: chunkSearch.search_config || null,
-    answer: lightragAnswer(
-      query,
-      chunkSearch.results?.length || 0,
-      messages.length,
-      issues.length,
-      opportunities.length
-    ),
-    chunks: chunkSearch.results || [],
-    evidence,
-    entities: {
-      messages,
-      issues,
-      opportunities,
-    },
-    stats: {
-      chunks: chunkSearch.results?.length || 0,
-      messages: messages.length,
-      issues: issues.length,
-      opportunities: opportunities.length,
-    },
+  const stats = {
+    chunks: chunkSearch.results?.length || 0,
+    messages: messages.length,
+    issues: issues.length,
+    opportunities: opportunities.length,
   };
 
-  await persistLightRagQueryRun(
+  const sourceTypes = new Set(evidence.map((e) => e.source_type));
+  const qualityScore = computeQualityScore(evidence, stats);
+
+  const queryRunId = await persistLightRagQueryRun(
     pool,
     scope,
     {
       query,
       topK,
-      chunkHits: response.stats.chunks,
-      sourceHits: response.stats.messages + response.stats.issues + response.stats.opportunities,
-      evidence: response.evidence,
-      answer: response.answer,
+      chunkHits: stats.chunks,
+      sourceHits: stats.messages + stats.issues + stats.opportunities,
+      evidence,
+      answer: lightragAnswer(query, stats.chunks, stats.messages, stats.issues, stats.opportunities),
       createdBy: options.createdBy || null,
+      qualityScore,
+      sourceDiversity: sourceTypes.size,
     },
     logger
   );
 
-  return response;
+  return {
+    query,
+    topK,
+    query_run_id: queryRunId,
+    embedding_model: chunkSearch.embedding_model || null,
+    search_config: chunkSearch.search_config || null,
+    quality_score: qualityScore,
+    source_diversity: sourceTypes.size,
+    answer: lightragAnswer(query, stats.chunks, stats.messages, stats.issues, stats.opportunities),
+    chunks: chunkSearch.results || [],
+    evidence,
+    entities: { messages, issues, opportunities },
+    stats,
+  };
+}
+
+export async function submitLightRagFeedback(pool, scope, options = {}) {
+  const queryRunId = Number(options.queryRunId);
+  if (!Number.isFinite(queryRunId) || queryRunId <= 0) {
+    return null;
+  }
+  const rating = Number(options.rating);
+  if (![-1, 0, 1].includes(rating)) {
+    return null;
+  }
+  const comment = asText(options.comment, 2000) || null;
+  const createdBy = asText(options.createdBy, 200) || null;
+
+  const { rows } = await pool.query(
+    `
+      INSERT INTO lightrag_feedback(project_id, account_scope_id, query_run_id, rating, comment, created_by)
+      VALUES ($1, $2, $3, $4, $5, $6)
+      RETURNING id, query_run_id, rating, comment, created_at
+    `,
+    [scope.projectId, scope.accountScopeId, queryRunId, rating, comment, createdBy]
+  );
+  return rows[0] || null;
 }

@@ -330,6 +330,44 @@ export async function runSyncReconciliation(pool, scope, options = {}) {
   };
 }
 
+export async function getCompletenessDiff(pool, scope) {
+  const { rows } = await pool.query(
+    `
+      WITH latest AS (
+        SELECT DISTINCT ON (connector)
+          connector, completeness_pct, total_count, missing_count, duplicate_count, captured_at
+        FROM sync_reconciliation_metrics
+        WHERE project_id = $1 AND account_scope_id = $2 AND connector <> 'portfolio'
+        ORDER BY connector, captured_at DESC
+      ),
+      previous AS (
+        SELECT DISTINCT ON (connector)
+          connector, completeness_pct, total_count, missing_count, duplicate_count, captured_at
+        FROM sync_reconciliation_metrics
+        WHERE project_id = $1 AND account_scope_id = $2 AND connector <> 'portfolio'
+          AND captured_at < (SELECT min(captured_at) FROM latest)
+        ORDER BY connector, captured_at DESC
+      )
+      SELECT
+        l.connector,
+        l.completeness_pct AS current_pct,
+        COALESCE(p.completeness_pct, l.completeness_pct) AS previous_pct,
+        (l.completeness_pct - COALESCE(p.completeness_pct, l.completeness_pct))::numeric(6,2) AS delta_pct,
+        l.total_count AS current_total,
+        COALESCE(p.total_count, 0) AS previous_total,
+        (l.total_count - COALESCE(p.total_count, 0))::int AS delta_total,
+        l.missing_count AS current_missing,
+        COALESCE(p.missing_count, 0) AS previous_missing,
+        l.captured_at
+      FROM latest l
+      LEFT JOIN previous p ON p.connector = l.connector
+      ORDER BY l.connector
+    `,
+    [scope.projectId, scope.accountScopeId]
+  );
+  return rows;
+}
+
 export async function listSyncReconciliation(pool, scope, options = {}) {
   const days = toPositiveInt(options.days, 14, 1, 365);
   const limit = toPositiveInt(options.limit, 500, 20, 3000);

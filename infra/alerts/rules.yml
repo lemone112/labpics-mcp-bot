@@ -1,0 +1,109 @@
+# Prometheus alerting rules for labpics-dashboard
+# Usage: reference this file in prometheus.yml -> rule_files
+#
+# scrape_configs:
+#   - job_name: labpics-server
+#     static_configs:
+#       - targets: ['server:8080']
+#     metrics_path: /metrics
+
+groups:
+  - name: labpics-dashboard
+    rules:
+      # --- DB Pool ---
+      - alert: DbPoolExhausted
+        expr: app_db_pool_waiting > 5
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "DB connection pool has {{ $value }} waiting requests"
+          description: >
+            More than 5 queries are waiting for a DB connection for 2+ minutes.
+            Check for long-running queries or increase PG_POOL_MAX.
+
+      - alert: DbPoolHighUsage
+        expr: (app_db_pool_total - app_db_pool_idle) / app_db_pool_total > 0.8
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "DB pool usage above 80% ({{ $value | humanizePercentage }})"
+
+      # --- Error rate ---
+      - alert: HighErrorRate
+        expr: rate(app_errors_total[5m]) / rate(app_requests_total[5m]) > 0.05
+        for: 3m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Error rate above 5% ({{ $value | humanizePercentage }})"
+          description: >
+            More than 5% of requests are returning errors.
+            Check logs for root cause.
+
+      - alert: High5xxRate
+        expr: rate(app_response_status_total{status=~"5.."}[5m]) / rate(app_responses_total[5m]) > 0.02
+        for: 3m
+        labels:
+          severity: critical
+        annotations:
+          summary: "5xx rate above 2% ({{ $value | humanizePercentage }})"
+
+      # --- Circuit breaker ---
+      - alert: CircuitBreakerOpen
+        expr: app_circuit_breaker_state == 1
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Circuit breaker open for {{ $labels.host }}"
+          description: >
+            External API at {{ $labels.host }} has tripped the circuit breaker.
+            Will auto-recover after 30s probe succeeds.
+
+      # --- Cache ---
+      - alert: CacheDisabled
+        expr: app_cache_enabled == 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Redis cache is disabled"
+          description: >
+            Cache layer is not operational. All requests hit PostgreSQL directly.
+            Check Redis connectivity.
+
+      - alert: CacheHitRateLow
+        expr: rate(app_cache_hits_total[10m]) / (rate(app_cache_hits_total[10m]) + rate(app_cache_misses_total[10m])) < 0.5
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Cache hit rate below 50% ({{ $value | humanizePercentage }})"
+
+      # --- SSE ---
+      - alert: NoSseConnections
+        expr: app_sse_connections_total == 0
+        for: 30m
+        labels:
+          severity: info
+        annotations:
+          summary: "No active SSE connections for 30 minutes"
+          description: "No browsers are connected via SSE. Verify frontend is operational."
+
+      # --- Process ---
+      - alert: HighMemoryUsage
+        expr: app_process_rss_bytes > 450 * 1024 * 1024
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Server RSS memory above 450MB (limit 512MB)"
+
+      - alert: ProcessRestarted
+        expr: app_process_uptime_seconds < 120
+        labels:
+          severity: info
+        annotations:
+          summary: "Server process restarted (uptime {{ $value }}s)"

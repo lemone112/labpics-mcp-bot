@@ -206,3 +206,48 @@ Circuit breaker вызвал failure в `http.unit.test.js` — global state (`c
 - Matview `now()` фиксируется на момент REFRESH — `messages_7d` актуален на момент последнего sync, не запроса. Допустимо: данные и так обновляются только при sync.
 - `audit_events_partitioned` — shadow table без auto-migration. Требует ручного переноса данных при >5M строк.
 - Не добавлен GIN trgm index на `cw_contacts(phone_number)` — поле редко используется в поиске.
+
+---
+
+## Iter 5 — Observability & Ops (закрыта — 2026-02-18)
+
+> Полный Prometheus exporter. Alerting rules. Monitoring stack. Smoke tests в CI. Runbook.
+
+### Что изменено
+
+| # | Задача | Файлы | Результат |
+|---|--------|-------|-----------|
+| 5.1 | Prometheus exporter | `server/src/index.js` | `/metrics` расширен: DB pool (total/idle/waiting), circuit breaker states (per-host state + failures), process (uptime, heap, RSS). Import `getCircuitBreakerStates` из `lib/http.js` |
+| 5.2 | Alerting rules | `infra/alerts/rules.yml` (новый) | 11 Prometheus alert rules: DbPoolExhausted, DbPoolHighUsage, HighErrorRate, High5xxRate, CircuitBreakerOpen, CacheDisabled, CacheHitRateLow, NoSseConnections, HighMemoryUsage, ProcessRestarted |
+| 5.3 | Backup verification | `scripts/verify-backup.sh` (новый) | Восстановление в temp DB, проверка 8 ключевых таблиц, проверка extensions (vector, pg_trgm), JSON structured logs |
+| 5.4 | Log aggregation | `docker-compose.monitoring.yml` (новый), `infra/prometheus.yml`, `infra/promtail.yml`, `infra/grafana-datasources.yml` | Prometheus + Loki + Promtail + Grafana стек. Docker log collection через promtail. Auto-provisioned datasources. Resource limits на все сервисы |
+| 5.5 | Runbook | `docs/runbooks/incident-response.md` (новый) | 8 failure modes: high error rate, circuit breaker, DB pool exhaustion, cache disabled, connector lag, high memory, crash loop, backup failure. Diagnosis commands + resolution steps |
+| 5.6 | E2E smoke tests | `scripts/smoke-test.sh` (новый), `.github/workflows/ci-quality.yml` | Smoke script: /health, /metrics (4 checks: format, pool, cache, process), /projects auth, /v1 prefix. CI: новый `smoke` job после `quality`, docker compose up → smoke-test.sh → down |
+
+### Самокритика
+
+- Prometheus scrape interval 10s может быть слишком агрессивным для low-traffic deployments — настраивается.
+- Promtail Docker SD requires `/var/run/docker.sock` mount — security trade-off для log collection.
+- Smoke test в CI запускает полный docker compose stack — добавляет ~2-3 мин к CI.
+
+---
+
+## Iter 6 — Data Quality & LightRAG UX (закрыта — 2026-02-18)
+
+> Quality score proxy. Feedback loop. Source filters. Identity dedup preview. Completeness diff.
+
+### Что изменено
+
+| # | Задача | Файлы | Результат |
+|---|--------|-------|-----------|
+| 6.1 | Quality score proxy | `server/src/services/lightrag.js` | `computeQualityScore(evidence, stats)`: coverage (evidence/10 × 40) + diversity (types/3 × 35) + depth (chunks/5 × 25) = 0-100. `quality_score` и `source_diversity` в response |
+| 6.2 | Feedback endpoint | `server/src/index.js`, `server/src/services/lightrag.js`, `server/db/migrations/0019_lightrag_feedback.sql` | `POST /lightrag/feedback` — rating (-1/0/1) + optional comment. Таблица `lightrag_feedback` с FK на `lightrag_query_runs`. Колонки `quality_score`, `source_diversity` в `lightrag_query_runs` |
+| 6.3 | Evidence source filters | `server/src/services/lightrag.js`, `server/src/index.js` | Параметр `sourceFilter: ["messages", "issues", "deals", "chunks"]`. Условное выполнение запросов — пропущенные источники возвращают пустой результат. Cache key включает sourceFilter hash |
+| 6.4 | Auto identity dedup preview | `server/src/services/connector-sync.js` | `previewIdentitySuggestions(pool, scope, 50)` вызывается после matview refresh в sync cycle. Обёрнуто в try/catch (non-critical) |
+| 6.5 | Completeness diff report | `server/src/services/reconciliation.js`, `server/src/index.js` | `getCompletenessDiff()` — CTE-запрос: latest vs previous reconciliation cycle per connector. `GET /connectors/reconciliation/diff` endpoint. Delta по completeness_pct и total_count |
+
+### Самокритика
+
+- Quality score — proxy metric без ground truth. Формула эвристическая, но calibratable через feedback data.
+- `persistLightRagQueryRun` сохраняет до 50 evidence items — при масштабировании может потребоваться агрегация.
+- Identity preview limit 50 — при большом количестве контактов может пропустить важные совпадения.

@@ -14,6 +14,7 @@ import {
 } from "./connector-state.js";
 import { syncConnectorEventLog } from "./event-log.js";
 import { failProcessRun, finishProcessRun, startProcessRun, warnProcess } from "./kag-process-log.js";
+import { previewIdentitySuggestions } from "./identity-graph.js";
 import { runSyncReconciliation } from "./reconciliation.js";
 
 const CONNECTORS = ["chatwoot", "linear", "attio"];
@@ -191,6 +192,12 @@ export async function runAllConnectorsSync(pool, scope, logger = console) {
     await pool.query('REFRESH MATERIALIZED VIEW CONCURRENTLY mv_portfolio_dashboard');
   } catch {
     // matview may not exist yet (pre-migration) — swallow
+  }
+
+  try {
+    await previewIdentitySuggestions(pool, scope, 50);
+  } catch {
+    // identity preview failure is non-critical
   }
 
   let reconciliation = null;
