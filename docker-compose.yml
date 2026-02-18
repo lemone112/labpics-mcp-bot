@@ -3,8 +3,7 @@ services:
     image: redis:7-alpine
     restart: unless-stopped
     command: redis-server --maxmemory 128mb --maxmemory-policy allkeys-lru
-    ports:
-      - "${REDIS_PORT:-6379}:6379"
+    # ports intentionally not exposed to host — access only via internal network
     volumes:
       - redisdata:/data
     healthcheck:
@@ -12,6 +11,11 @@ services:
       interval: 5s
       timeout: 3s
       retries: 10
+    deploy:
+      resources:
+        limits:
+          memory: 256m
+          cpus: "0.5"
 
   db:
     image: pgvector/pgvector:pg16
@@ -20,8 +24,7 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:-labpics}
       POSTGRES_USER: ${POSTGRES_USER:-app}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-app}
-    ports:
-      - "${DB_PORT:-5432}:5432"
+    # ports intentionally not exposed to host — access only via internal network
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -29,6 +32,11 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
+    deploy:
+      resources:
+        limits:
+          memory: 1g
+          cpus: "1.0"
 
   server:
     build:
@@ -40,9 +48,9 @@ services:
       REDIS_URL: ${REDIS_URL:-redis://redis:6379}
       HOST: 0.0.0.0
       PORT: 8080
-      AUTH_CREDENTIALS: ${AUTH_CREDENTIALS:-admin:admin}
-      AUTH_USERNAME: ${AUTH_USERNAME:-admin}
-      AUTH_PASSWORD: ${AUTH_PASSWORD:-admin}
+      AUTH_CREDENTIALS: ${AUTH_CREDENTIALS:?Set AUTH_CREDENTIALS as login:password}
+      AUTH_USERNAME: ${AUTH_USERNAME:-}
+      AUTH_PASSWORD: ${AUTH_PASSWORD:-}
       SESSION_COOKIE_NAME: ${SESSION_COOKIE_NAME:-sid}
       CSRF_COOKIE_NAME: ${CSRF_COOKIE_NAME:-csrf_token}
       LOGIN_RATE_LIMIT_MAX_ATTEMPTS: ${LOGIN_RATE_LIMIT_MAX_ATTEMPTS:-10}
@@ -86,6 +94,17 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+          cpus: "1.0"
 
   worker:
     build:
@@ -135,7 +154,18 @@ services:
       redis:
         condition: service_healthy
       server:
-        condition: service_started
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep -f 'node src/worker-loop' || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+          cpus: "1.0"
 
   web:
     build:
@@ -154,6 +184,17 @@ services:
       - "${WEB_PORT:-3000}:3000"
     depends_on:
       - server
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3000/ || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+          cpus: "1.0"
 
   edge:
     image: caddy:2.9.1-alpine
@@ -175,6 +216,11 @@ services:
       - caddy_config:/config
     depends_on:
       - web
+    deploy:
+      resources:
+        limits:
+          memory: 128m
+          cpus: "0.25"
 
 volumes:
   pgdata:
