@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import Fastify from "fastify";
 import cookie from "@fastify/cookie";
 import cors from "@fastify/cors";
+import bcrypt from "bcrypt";
 
 import { createDbPool } from "./lib/db.js";
 import { ApiError, fail, parseLimit, sendError, sendOk, toApiError } from "./lib/api-contract.js";
@@ -62,6 +63,10 @@ import { createRedisPubSub } from "./lib/redis-pubsub.js";
 import { createSseBroadcaster } from "./lib/sse-broadcaster.js";
 import { requiredEnv } from "./lib/utils.js";
 
+function isBcryptHash(value) {
+  return /^\$2[aby]?\$\d{1,2}\$.{53}$/.test(value);
+}
+
 function getAuthConfig() {
   const packed = String(process.env.AUTH_CREDENTIALS || "").trim();
   if (packed) {
@@ -69,17 +74,17 @@ function getAuthConfig() {
     const username = idx >= 0 ? packed.slice(0, idx).trim() : "";
     const password = idx >= 0 ? packed.slice(idx + 1) : "";
     if (!username || !password) {
-      throw new Error("Invalid AUTH_CREDENTIALS format. Expected \"login:password\".");
+      throw new Error("Invalid AUTH_CREDENTIALS format. Expected \"login:password\" or \"login:$2b$...\".");
     }
-    return { username, password };
+    return { username, password, hashed: isBcryptHash(password) };
   }
 
   const username = String(process.env.AUTH_USERNAME || process.env.ADMIN_USERNAME || "").trim();
   const password = String(process.env.AUTH_PASSWORD || process.env.ADMIN_PASSWORD || "");
   if (!username || !password) {
-    throw new Error("Missing auth credentials. Set AUTH_CREDENTIALS in format \"login:password\".");
+    throw new Error("Missing auth credentials. Set AUTH_CREDENTIALS in format \"login:$2b$hash\".");
   }
-  return { username, password };
+  return { username, password, hashed: isBcryptHash(password) };
 }
 
 function toTopK(value, fallback = 10) {
@@ -429,6 +434,34 @@ async function main() {
     loginAttempts.delete(loginAttemptKey(ip, username));
   }
 
+  // --- General API rate limiting (per session + per IP for unauthenticated) ---
+  const apiRateBuckets = new Map();
+  const API_RATE_WINDOW_MS = 60_000;
+  const API_RATE_LIMIT_SESSION = 200;   // 200 req/min per session
+  const API_RATE_LIMIT_IP = 60;         // 60 req/min per IP (unauthenticated)
+
+  function checkApiRateLimit(key, limit) {
+    const now = Date.now();
+    let bucket = apiRateBuckets.get(key);
+    if (!bucket || now - bucket.windowStart > API_RATE_WINDOW_MS) {
+      bucket = { count: 0, windowStart: now };
+      apiRateBuckets.set(key, bucket);
+    }
+    bucket.count += 1;
+    if (bucket.count > limit) {
+      return false;
+    }
+    return true;
+  }
+
+  // Cleanup stale buckets every 2 minutes
+  setInterval(() => {
+    const cutoff = Date.now() - API_RATE_WINDOW_MS * 2;
+    for (const [key, bucket] of apiRateBuckets) {
+      if (bucket.windowStart < cutoff) apiRateBuckets.delete(key);
+    }
+  }, 120_000).unref();
+
   async function createSession(username) {
     const sid = crypto.randomBytes(32).toString("hex");
     const csrfToken = crypto.randomBytes(24).toString("hex");
@@ -488,6 +521,15 @@ async function main() {
     const rawPath = request.url.split("?")[0];
     const pathName = routePathForAuthCheck(rawPath);
     const isPublic = pathName === "/health" || pathName === "/metrics" || pathName.startsWith("/auth/");
+
+    // Rate limit unauthenticated requests by IP (except health/metrics)
+    if (!isPublic) {
+      const ipKey = `ip:${request.ip}`;
+      if (!checkApiRateLimit(ipKey, API_RATE_LIMIT_IP)) {
+        return sendError(reply, requestId, new ApiError(429, "rate_limited", "Too many requests"));
+      }
+    }
+
     if (isPublic) return;
 
     const sid = request.cookies?.[cookieName];
@@ -505,6 +547,12 @@ async function main() {
     const preferredProjectIds = parseProjectIdsFromUrl(request.url);
     request.auth = await hydrateSessionScope(pool, sid, sessionRow, preferredProjectIds);
     await pool.query("UPDATE sessions SET last_seen_at = now() WHERE session_id = $1", [sid]);
+
+    // Rate limit authenticated requests by session
+    const sessionKey = `session:${sid}`;
+    if (!checkApiRateLimit(sessionKey, API_RATE_LIMIT_SESSION)) {
+      return sendError(reply, requestId, new ApiError(429, "rate_limited", "Too many requests"));
+    }
 
     const isMutating = !["GET", "HEAD", "OPTIONS"].includes(String(request.method || "GET").toUpperCase());
     if (isMutating) {
@@ -612,10 +660,13 @@ async function main() {
     assertLoginRateLimit(request.ip, username);
 
     const authUsername = normalizeAccountUsername(auth.username);
-    const sessionUsername =
-      timingSafeStringEqual(username, authUsername) && timingSafeStringEqual(password, auth.password)
-        ? auth.username
-        : null;
+    let sessionUsername = null;
+    if (timingSafeStringEqual(username, authUsername)) {
+      const passwordMatch = auth.hashed
+        ? await bcrypt.compare(password, auth.password)
+        : timingSafeStringEqual(password, auth.password);
+      if (passwordMatch) sessionUsername = auth.username;
+    }
 
     if (!sessionUsername) {
       recordLoginFailure(request.ip, username);
@@ -2750,6 +2801,10 @@ async function main() {
     await redisPubSub.close();
     await pool.end();
   });
+
+  if (!auth.hashed) {
+    app.log.warn("AUTH_CREDENTIALS contains a plaintext password. Use bcrypt hash: npx bcrypt-cli hash <password>");
+  }
 
   await app.listen({ host, port });
   app.log.info({ host, port }, "server started");
