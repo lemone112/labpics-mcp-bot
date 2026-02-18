@@ -277,6 +277,8 @@ export async function queryLightRag(pool, scope, options = {}, logger = console)
   const response = {
     query,
     topK,
+    embedding_model: chunkSearch.embedding_model || null,
+    search_config: chunkSearch.search_config || null,
     answer: lightragAnswer(
       query,
       chunkSearch.results?.length || 0,
