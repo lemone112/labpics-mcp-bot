@@ -87,22 +87,22 @@ function formatRiskSourceRu(source) {
 
 function formatRiskSeverityMeta(severityValue) {
   const severity = Math.max(0, Math.round(numberValue(severityValue)));
-  if (severity >= 5) return { label: "Критическое влияние", className: "border-red-500/30 bg-red-500/15 text-red-300" };
-  if (severity >= 4) return { label: "Высокое влияние", className: "border-orange-500/30 bg-orange-500/15 text-orange-300" };
-  if (severity >= 3) return { label: "Среднее влияние", className: "border-amber-500/30 bg-amber-500/15 text-amber-300" };
-  if (severity >= 2) return { label: "Низкое влияние", className: "border-emerald-500/30 bg-emerald-500/15 text-emerald-300" };
-  return { label: "Минимальное влияние", className: "border-emerald-500/30 bg-emerald-500/15 text-emerald-300" };
+  if (severity >= 5) return { label: "Критическое влияние", className: "border-destructive/35 bg-destructive/10 text-destructive" };
+  if (severity >= 4) return { label: "Высокое влияние", className: "border-chart-4/35 bg-chart-4/10 text-chart-4" };
+  if (severity >= 3) return { label: "Среднее влияние", className: "border-chart-5/35 bg-chart-5/10 text-chart-5" };
+  if (severity >= 2) return { label: "Низкое влияние", className: "border-chart-2/35 bg-chart-2/10 text-chart-2" };
+  return { label: "Минимальное влияние", className: "border-chart-2/35 bg-chart-2/10 text-chart-2" };
 }
 
 function formatRiskProbabilityMeta(probabilityValue) {
   const probabilityPct = Math.round(numberValue(probabilityValue) * 100);
   if (probabilityPct >= 70) {
-    return { label: `Вероятность ${probabilityPct}%`, className: "border-red-500/30 bg-red-500/15 text-red-300" };
+    return { label: `Вероятность ${probabilityPct}%`, className: "border-destructive/35 bg-destructive/10 text-destructive" };
   }
   if (probabilityPct >= 40) {
-    return { label: `Вероятность ${probabilityPct}%`, className: "border-orange-500/30 bg-orange-500/15 text-orange-300" };
+    return { label: `Вероятность ${probabilityPct}%`, className: "border-chart-4/35 bg-chart-4/10 text-chart-4" };
   }
-  return { label: `Вероятность ${Math.max(0, probabilityPct)}%`, className: "border-emerald-500/30 bg-emerald-500/15 text-emerald-300" };
+  return { label: `Вероятность ${Math.max(0, probabilityPct)}%`, className: "border-chart-2/35 bg-chart-2/10 text-chart-2" };
 }
 
 function formatRiskTitleRu(rawTitle) {
