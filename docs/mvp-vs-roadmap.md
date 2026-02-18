@@ -1,6 +1,6 @@
 # Статус продукта и roadmap (Production-Ready Plan)
 
-> Обновлено: 2026-02-18 (post Iter 0-9 + Architecture Audit)
+> Обновлено: 2026-02-18 (post Iter 0-9 + Architecture Audit v2 — HKUDS LightRAG migration)
 > Детальный анализ: [`docs/product-structure-analysis.md`](./product-structure-analysis.md)
 
 ---
@@ -45,24 +45,24 @@
 **Оставшиеся gaps:**
 - Нет pre-built Grafana dashboards для connector metrics
 
-### Intelligence / RAG (зрелость: 65% → **90%**)
+### Intelligence / RAG (зрелость: 65% → **90%** → target **98%** после миграции)
 
-**Архитектура:** Custom hybrid RAG (vector search via pgvector + ILIKE keyword search). **Примечание:** внутреннее название "LightRAG" — это custom реализация, НЕ [HKUDS LightRAG](https://github.com/HKUDS/LightRAG). Наша система не строит knowledge graph.
+**Текущая архитектура (custom hybrid RAG):** pgvector vector search + ILIKE keyword search. Нет knowledge graph. Имя "LightRAG" — внутреннее, это НЕ HKUDS LightRAG.
 
-**Было:** Рабочий vector search + ILIKE, но fullscan, нет кеша, нет quality score.
+**Целевая архитектура (Iter 11):** Миграция на [HKUDS LightRAG](https://github.com/HKUDS/LightRAG) из форка [`lemone112/lightrag`](https://github.com/lemone112/lightrag). Knowledge graph + dual-level retrieval + pgvector. PostgreSQL backend (PGKVStorage + PGVectorStorage + PGGraphStorage). REST API сервер + MCP для Telegram бота.
 
 **Сделано (Iter 1 + 4 + 6):**
-- ✅ Query cache: `lightrag:{projectId}:{hash(query,topK,sourceFilter)}`, TTL 300s
-- ✅ Event-driven invalidation при embeddings_run и sync completion
-- ✅ pg_trgm GIN indexes: `cw_messages(content)`, `linear_issues_raw(title)`, `attio_opportunities_raw(title)` — ILIKE → index scan
-- ✅ Quality score proxy: `computeQualityScore()` — coverage (40%) + diversity (35%) + depth (25%) = 0-100
-- ✅ Feedback endpoint: `POST /lightrag/feedback` — rating (-1/0/1) + comment, persisted в `lightrag_feedback`
-- ✅ Evidence source filters: `sourceFilter: ["messages", "issues", "deals", "chunks"]` — conditional query execution
+- ✅ Query cache: TTL 300s с event-driven invalidation
+- ✅ pg_trgm GIN indexes: ILIKE → index scan
+- ✅ Quality score proxy + feedback endpoint
+- ✅ Evidence source filters
 
-**Оставшиеся gaps:**
-- Quality score — proxy metric без ground truth (calibratable через feedback data)
-- Vector index tuning (IVFFlat probes / HNSW ef_search) только через env vars
-- Нет knowledge graph (entity extraction, relationship mapping) — для AI agent use cases может потребоваться upgrade
+**Планируется (Iter 11 — HKUDS LightRAG migration):**
+- ⬜ Deploy LightRAG Server (Python) рядом с нашим Fastify backend
+- ⬜ Настроить PostgreSQL storage backend (shared DB)
+- ⬜ Data ingestion pipeline: connector data → LightRAG documents
+- ⬜ MCP server ([daniel-lightrag-mcp](https://github.com/desimpkins/daniel-lightrag-mcp)) для Telegram бота
+- ⬜ Заменить custom lightrag.js на proxy к LightRAG Server API
 
 ### Dashboard / Portfolio (зрелость: 50% → **88%**)
 
@@ -133,12 +133,12 @@
 
 ---
 
-## 3) Оставшиеся итерации (Wave 2: Iter 10-13 — пересмотрено post Architecture Audit)
+## 3) Оставшиеся итерации (Wave 2: Iter 10-13 — пересмотрено v2)
 
 | Iter | Название | Задач | Приоритет | Фокус |
 |------|----------|-------|-----------|-------|
-| 10 | KAG Legacy Cleanup | 6 | **CRITICAL** | Удаление ~2,770 LOC мёртвого KAG кода, rename kag_event_log → connector_events, очистка scheduler/routes, удаление KAG таблиц |
-| 11 | MCP Server + Telegram Integration | 5 | **HIGH** | MCP Server как API-обёртка, POST /lightrag/ingest endpoint, POST /notes + таблица, service account auth, MCP tool definitions |
+| 10 | KAG Legacy Cleanup | 6 | **CRITICAL** | Удаление ~2,770 LOC мёртвого KAG кода, rename kag_event_log → connector_events, очистка scheduler/routes |
+| 11 | HKUDS LightRAG Migration + MCP | 7 | **HIGH** | Миграция на реальный LightRAG (форк `lemone112/lightrag`), data ingestion, MCP server для Telegram бота |
 | 12 | Frontend Resilience | 5 | MEDIUM | Error boundaries, retry logic, SSE reconnect, loading states |
 | 13 | CI/CD Hardening | 4 | MEDIUM | .dockerignore, npm audit, pre-deploy backup, rollback strategy |
 
@@ -151,17 +151,47 @@
 | 10.3 | Удалить /kag/* API routes | `server/src/index.js` | Удалить ~118 LOC disabled routes + `isKagRoute()` helper + LIGHTRAG_ONLY preValidation gate |
 | 10.4 | Очистить scheduler от KAG jobs | `server/src/services/scheduler.js` | Удалить kag_recommendations_refresh handler, job definitions, dependency chain. Оставить активные jobs (connectors, embeddings) |
 | 10.5 | Удалить неиспользуемые KAG DB таблицы | migration 0021 | DROP TABLE kag_nodes, kag_edges, kag_events, kag_provenance_refs, kag_signal_state, kag_recommendations, kag_templates (if inlined). Оставить kag_signals, kag_scores, kag_risk_forecasts (used by recommendations-v2, forecasting) |
-| 10.6 | Обновить KAG тесты и документацию | test files, docs | Удалить 7 KAG test files. Обновить lightrag-contract.md, spec 0018. Убрать "KAG" из всех активных доков |
+| 10.6 | Обновить KAG тесты и документацию | test files, docs | Удалить KAG test files. Убрать "KAG" из всех активных доков |
 
-### Iter 11 — MCP Server + Telegram Integration (HIGH)
+### Iter 11 — HKUDS LightRAG Migration + MCP (HIGH)
 
-| # | Задача | Файлы | Изменения |
-|---|--------|-------|-----------|
-| 11.1 | Service account authentication | `server/src/index.js`, `schemas.js` | Новый auth method: API key (header `X-API-Key`) для service accounts. Env `SERVICE_API_KEYS`. Scope assignment per key |
-| 11.2 | POST /lightrag/ingest endpoint | `server/src/index.js`, `lightrag.js` | Принимает free text → создаёт chunks в rag_chunks → embedding_status='pending'. Zod schema. Audit event |
-| 11.3 | POST /notes endpoint + таблица | migration 0022, `server/src/services/notes.js` (new) | Таблица `manager_notes(id, project_id, account_scope_id, content, source, created_by, created_at)`. CRUD endpoints |
-| 11.4 | MCP Server component | `server/src/mcp/` (new directory) | MCP server wrapping REST API: tools query_knowledge, get_portfolio, get_project_status, add_note, ingest_text. stdio transport |
-| 11.5 | MCP integration tests | `server/test/mcp.unit.test.js` | Tests for MCP tool definitions, service account auth, ingest + notes endpoints |
+> Миграция с custom hybrid RAG на реальный [HKUDS LightRAG](https://github.com/HKUDS/LightRAG) из форка [`lemone112/lightrag`](https://github.com/lemone112/lightrag).
+> Knowledge graph + dual-level retrieval + PostgreSQL backend + MCP для Telegram бота.
+
+**Целевая архитектура:**
+```
+┌─────────────────┐     ┌─────────────────────┐     ┌──────────────┐
+│  Telegram Bot   │────▶│ daniel-lightrag-mcp  │────▶│  LightRAG    │
+│  (LLM + MCP)   │     │ (22 tools, MCP)      │     │  Server      │
+└─────────────────┘     └─────────────────────┘     │  (Python)    │
+                                                     └──────┬───────┘
+┌─────────────────┐     ┌─────────────────────┐            │
+│  Labpics Web    │────▶│  Fastify API         │────▶ LightRAG REST API
+│  (Next.js)      │     │  (proxy endpoints)   │            │
+└─────────────────┘     └─────────────────────┘     ┌──────▼───────┐
+                                                     │  PostgreSQL  │
+                        ┌─────────────────────┐     │  pgvector    │
+                        │  Connector Sync      │────▶│  PGGraph     │
+                        │  (worker)            │     │  (shared DB) │
+                        └─────────────────────┘     └──────────────┘
+```
+
+| # | Задача | Файлы / Компоненты | Изменения |
+|---|--------|---------------------|-----------|
+| 11.1 | Deploy LightRAG Server | `docker-compose.yml`, `lemone112/lightrag` | Добавить lightrag service (Python). Настроить OPENAI_API_KEY, PostgreSQL connection. Health check на `/health` |
+| 11.2 | PostgreSQL storage backend | LightRAG config, shared PostgreSQL | PGKVStorage + PGVectorStorage + PGGraphStorage. Shared DB с нашими таблицами. Namespace isolation |
+| 11.3 | Data ingestion pipeline | `server/src/services/connector-sync.js` | После sync: отправить connector data (messages, issues, deals) в LightRAG Server через REST API `/documents`. Batch ingestion |
+| 11.4 | Proxy endpoints в Fastify | `server/src/index.js`, `server/src/services/lightrag.js` | `/lightrag/query` → proxy к LightRAG Server `/query`. `/lightrag/status` → proxy к `/health`. Сохранить совместимость с frontend. Удалить custom RAG код |
+| 11.5 | MCP Server для Telegram бота | `docker-compose.yml` | [daniel-lightrag-mcp](https://github.com/desimpkins/daniel-lightrag-mcp) (22 tools). Подключить к LightRAG Server. Tools: query, document management, knowledge graph operations |
+| 11.6 | Service account auth | `server/src/index.js` | API key auth (header `X-API-Key`) для service-to-service calls. Env `SERVICE_API_KEYS`. Scope per key |
+| 11.7 | Integration tests | `server/test/lightrag-integration.test.js` | Tests: proxy endpoints, data ingestion flow, LightRAG health check, auth |
+
+**Критерии завершения:**
+- LightRAG Server запущен и доступен
+- Connector data автоматически попадает в knowledge graph
+- `/lightrag/query` возвращает results с knowledge graph entities
+- Telegram бот через MCP может запрашивать данные и получать контекстные ответы
+- Frontend продолжает работать без изменений (proxy-совместимость)
 
 ### Iter 12 — Frontend Resilience (MEDIUM)
 
@@ -188,7 +218,7 @@
 |---|--------|-------|-----------|
 | L.1 | tsconfig.json с checkJs | `server/tsconfig.json`, `web/tsconfig.json` | `checkJs: true, allowJs: true, strict: false`. Постепенная type-safety без rename |
 | L.2 | Type definitions для core modules | `server/src/types/` (new) | Типы для scope, session, api-contract, database rows. `.d.ts` files |
-| L.3 | Новые файлы на TypeScript | convention | Все новые файлы (MCP server, notes service) пишутся на .ts |
+| L.3 | Новые файлы на TypeScript | convention | Все новые файлы пишутся на .ts |
 
 ---
 
@@ -206,13 +236,13 @@
 ✅ Iter 8 (security II) ────── DONE (7/7)
 ✅ Iter 9 (ext. validation) ── DONE (5/5)
 ⬜ Iter 10 (KAG cleanup) ───── 6 tasks — CRITICAL
-⬜ Iter 11 (MCP + Telegram) ── 5 tasks — HIGH
+⬜ Iter 11 (LightRAG + MCP) ── 7 tasks — HIGH ★ KEY ITERATION
 ⬜ Iter 12 (frontend res.) ─── 5 tasks — MEDIUM
 ⬜ Iter 13 (CI/CD) ──────────── 4 tasks — MEDIUM
 ⬜ Later (TypeScript Phase 1) ─ 3 tasks — LOW
 ```
 
-**Итого:** 10 итераций завершены (58/60 задач). 4 итерации + 1 deferred (23 задачи). 2 задачи отложены by design (zod в Iter 2, portfolio hook в Iter 3).
+**Итого:** 10 итераций завершены (58/60 задач). 4 итерации + 1 deferred (25 задач). Iter 11 — ключевая: миграция на HKUDS LightRAG + MCP для Telegram бота.
 
 ---
 
@@ -232,20 +262,34 @@
 
 ## 6) Архитектурные решения
 
-### Наша "LightRAG" — custom hybrid RAG
+### Custom RAG → HKUDS LightRAG (Iter 11)
 
-Наша реализация (`server/src/services/lightrag.js`) — это **custom hybrid RAG**: pgvector vector search + ILIKE keyword search. Это **НЕ** [HKUDS LightRAG](https://github.com/HKUDS/LightRAG) (knowledge graph + dual-level retrieval). Имя "LightRAG" — внутреннее.
+**Текущее:** Custom hybrid RAG (`lightrag.js`) — pgvector + ILIKE. Нет knowledge graph. Костыльная реализация.
 
-**Для текущих use cases** (поиск по CRM/messages/issues) наша реализация достаточна.
-**Для AI agent use cases** (Telegram бот с контекстным пониманием) может потребоваться upgrade до graph-based retrieval.
+**Целевое:** [HKUDS LightRAG](https://github.com/HKUDS/LightRAG) из форка [`lemone112/lightrag`](https://github.com/lemone112/lightrag):
+- Knowledge graph с entity extraction и relationship mapping (LLM-based)
+- Dual-level retrieval: low-level entities + high-level themes
+- PostgreSQL backend (PGKVStorage + PGVectorStorage + PGGraphStorage) — shared DB с нашими таблицами
+- REST API сервер с Ollama-compatible interface
+- Готовые MCP серверы: [daniel-lightrag-mcp](https://github.com/desimpkins/daniel-lightrag-mcp) (22 tools)
+
+**Миграция**: Iter 10 (cleanup) → Iter 11 (deploy LightRAG + proxy + MCP). Frontend без изменений (proxy-совместимость).
 
 ### KAG — deprecated, cleanup в Iter 10
 
-KAG (custom Knowledge Augmented Graph) — отключён (`LIGHTRAG_ONLY=true`). ~2,770 LOC мёртвого кода подлежит удалению. Критическая зависимость: `kag_event_log` используется connector sync → rename в `connector_events`.
+KAG (custom Knowledge Augmented Graph) — отключён. ~2,770 LOC мёртвого кода. Удаляется в Iter 10. `kag_event_log` → `connector_events`.
+
+### Telegram Bot Architecture
+
+```
+Telegram Bot (LLM) → daniel-lightrag-mcp (22 tools) → LightRAG Server → PostgreSQL
+```
+
+Бот получает доступ к knowledge graph через MCP: query, document management, graph operations. Данные из connectors (Chatwoot, Linear, Attio) автоматически попадают в LightRAG через ingestion pipeline.
 
 ### JS → TS — инкрементальный подход
 
-Полная миграция (131 файлов, 17.5K LOC) за 4-6 недель неоправданна на текущем этапе. Рекомендуется: `tsconfig.json` с `checkJs`, новые файлы на TypeScript, постепенная конвертация.
+Полная миграция (131 файлов, 17.5K LOC) неоправданна. `tsconfig.json` с `checkJs`, новые файлы на TypeScript, постепенная конвертация.
 
 ---
 
@@ -267,3 +311,4 @@ KAG (custom Knowledge Augmented Graph) — отключён (`LIGHTRAG_ONLY=true
 - Redis/SSE архитектура: [`docs/redis-sse.md`](./redis-sse.md)
 - LightRAG контракт: [`docs/lightrag-contract.md`](./lightrag-contract.md)
 - LightRAG-only spec: [`docs/specs/0018-lightrag-only-mode.md`](./specs/0018-lightrag-only-mode.md)
+- Бэклог: [`docs/backlog.md`](./backlog.md)

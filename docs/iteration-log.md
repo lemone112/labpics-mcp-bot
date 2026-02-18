@@ -387,14 +387,14 @@ Circuit breaker вызвал failure в `http.unit.test.js` — global state (`c
 - **Рекомендация**: инкрементальный подход (tsconfig checkJs + новые файлы на TS)
 - Zod schemas уже дают runtime type safety на 32 POST endpoints
 
-### 4. Telegram Bot + MCP Integration Architecture
+### 4. Telegram Bot + HKUDS LightRAG + MCP Architecture (v2)
 
-Рекомендуемая архитектура: MCP Server как обёртка над нашим REST API.
+Решение обновлено: вместо обёртки над custom RAG — **миграция на HKUDS LightRAG** из форка [`lemone112/lightrag`](https://github.com/lemone112/lightrag).
 
 ```
-Telegram Bot (external) → MCP protocol → MCP Server (новый) → Labpics API → PostgreSQL
+Telegram Bot (LLM) → daniel-lightrag-mcp (22 tools) → LightRAG Server (Python) → PostgreSQL
+Labpics Web (Next.js) → Fastify API (proxy endpoints) → LightRAG Server → PostgreSQL (shared DB)
+Connector Sync (worker) → data ingestion → LightRAG Server /documents API → PostgreSQL
 ```
 
-Требуются 2 новых endpoint для двустороннего обмена:
-- `POST /lightrag/ingest` — добавить текст в rag_chunks
-- `POST /notes` — менеджерские заметки (новая таблица)
+HKUDS LightRAG даёт: knowledge graph, entity extraction, dual-level retrieval, PostgreSQL backend (PGKVStorage + PGVectorStorage + PGGraphStorage). Запланировано в Iter 11.

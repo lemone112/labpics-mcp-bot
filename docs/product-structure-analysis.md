@@ -596,7 +596,7 @@ session UPDATE (login/logout/project switch):
 | 8 | Security Hardening II | 7/7 | ✅ Done | — |
 | 9 | Extended Input Validation | 5/5 | ✅ Done | — |
 
-**Итого:** 58/60 задач завершено в Iter 0-9. Wave 2 пересмотрен: Iter 10-13 (20 задач) + Later (3 задачи).
+**Итого:** 58/60 задач завершено в Iter 0-9. Wave 2 пересмотрен v2: Iter 10-13 (22 задачи) + Later (3 задачи).
 
 **Рекомендуемый порядок выполнения:**
 ```
@@ -611,14 +611,14 @@ session UPDATE (login/logout/project switch):
 ✅ Iter 8 (security II) ────── DONE
 ✅ Iter 9 (ext. validation) ── DONE
 ⬜ Iter 10 (KAG cleanup) ───── CRITICAL — удаление ~2,770 LOC мёртвого кода
-⬜ Iter 11 (MCP + Telegram) ── HIGH — MCP server + ingest/notes endpoints
+⬜ Iter 11 (LightRAG + MCP) ── HIGH ★ — миграция на HKUDS LightRAG + MCP для Telegram бота
 ⬜ Iter 12 (frontend res.) ─── MEDIUM — error boundaries, SSE reconnect
 ⬜ Iter 13 (CI/CD) ──────────── MEDIUM — audit, backup, rollback
 ⬜ Later (TypeScript Phase 1) ─ LOW — tsconfig checkJs, новые файлы на TS
 ```
 
-**Архитектурные решения (Architecture Audit 2026-02-18):**
-- Наша "LightRAG" = custom hybrid RAG (pgvector + ILIKE), не HKUDS LightRAG
-- KAG = deprecated custom graph system, подлежит удалению
+**Архитектурные решения (Architecture Audit v2, 2026-02-18):**
+- Custom hybrid RAG → миграция на [HKUDS LightRAG](https://github.com/HKUDS/LightRAG) из форка `lemone112/lightrag`
+- KAG = deprecated, удаляется в Iter 10. `kag_event_log` → `connector_events`
+- Telegram Bot = [daniel-lightrag-mcp](https://github.com/desimpkins/daniel-lightrag-mcp) (22 tools) → LightRAG Server → PostgreSQL
 - JS → TS = инкрементальный подход (checkJs + новые файлы на TS)
-- Telegram Bot = MCP Server как обёртка над REST API

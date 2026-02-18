@@ -60,9 +60,14 @@
 2. RFC должен явно изменить этот контракт.
 3. До утверждения RFC реализация блокируется.
 
-## 7) Будущее: Knowledge Graph upgrade
+## 7) Миграция на HKUDS LightRAG (Iter 11 — запланировано)
 
-При необходимости graph-based retrieval (для AI agent use cases, Telegram bot):
-- Рассмотреть интеграцию с [HKUDS LightRAG](https://github.com/HKUDS/LightRAG) (Python, pgvector + AGE)
-- Или расширить текущую систему entity extraction layer
-- Требуется отдельный RFC с оценкой стоимости/пользы
+Решение принято: миграция на [HKUDS LightRAG](https://github.com/HKUDS/LightRAG) из форка [`lemone112/lightrag`](https://github.com/lemone112/lightrag).
+
+**Что даёт:**
+- Knowledge graph с entity extraction и relationship mapping (LLM-based)
+- Dual-level retrieval: low-level (entities) + high-level (themes)
+- PostgreSQL backend (PGKVStorage + PGVectorStorage + PGGraphStorage) — shared DB
+- REST API сервер + MCP для Telegram бота ([daniel-lightrag-mcp](https://github.com/desimpkins/daniel-lightrag-mcp), 22 tools)
+
+**План:** см. Iter 11 в [`docs/mvp-vs-roadmap.md`](./mvp-vs-roadmap.md)
