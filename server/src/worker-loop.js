@@ -62,15 +62,28 @@ async function main() {
     console.log("worker: redis unavailable, real-time SSE disabled (polling still active)");
   }
 
+  // --- Graceful shutdown ---
+  let running = true;
+  async function gracefulShutdown(signal) {
+    console.log(JSON.stringify({ type: "worker_shutdown", signal, at: new Date().toISOString() }));
+    running = false;
+  }
+  process.on("SIGTERM", () => gracefulShutdown("SIGTERM"));
+  process.on("SIGINT", () => gracefulShutdown("SIGINT"));
+
   try {
-    while (true) {
+    while (running) {
       try {
         await runCycle(pool, limitPerProject, publishFn);
       } catch (error) {
         console.error("worker cycle failed:", error);
       }
-      await sleep(intervalSeconds * 1000);
+      // Interruptible sleep: check running flag every second
+      for (let i = 0; i < intervalSeconds && running; i++) {
+        await sleep(1000);
+      }
     }
+    console.log(JSON.stringify({ type: "worker_stopped", at: new Date().toISOString() }));
   } finally {
     await redisPubSub.close();
     await pool.end();
