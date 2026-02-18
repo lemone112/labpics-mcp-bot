@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { memo, useEffect, useMemo, useRef, useState } from "react";
 import {
   Area,
   AreaChart,
@@ -201,30 +201,50 @@ function LinkifiedText({ text }) {
   );
 }
 
-function renderDashboardCharts(payload, moneyFormatter, numberFormatter) {
+const DashboardCharts = memo(function DashboardCharts({ payload, moneyFormatter, numberFormatter }) {
   const totals = payload?.dashboard?.totals || {};
-  const charts = payload?.dashboard?.charts || {};
-  const health = Array.isArray(charts.health_score) ? charts.health_score : [];
-  const velocity = Array.isArray(charts.velocity_completed_issues) ? charts.velocity_completed_issues : [];
-  const overdueIssues = Array.isArray(charts.overdue_issues_count) ? charts.overdue_issues_count : [];
-  const responsiveness = Array.isArray(charts.client_responsiveness_minutes) ? charts.client_responsiveness_minutes : [];
-  const agreements = Array.isArray(charts.agreements_vs_signed_offers) ? charts.agreements_vs_signed_offers : [];
-  const risks = Array.isArray(charts.risks_trend) ? charts.risks_trend : [];
-  const burnBudget = Array.isArray(charts.burn_vs_budget) ? charts.burn_vs_budget : [];
-  const upsell = Array.isArray(charts.upsell_potential_score) ? charts.upsell_potential_score : [];
-  const syncReconciliation = Array.isArray(charts.sync_reconciliation_completeness)
-    ? charts.sync_reconciliation_completeness
-    : [];
+  const rawCharts = payload?.dashboard?.charts;
 
-  const hasHealth = seriesHasVisibleValues(health);
-  const hasVelocity = seriesHasVisibleValues(velocity);
-  const hasOverdue = seriesHasVisibleValues(overdueIssues);
-  const hasResponsiveness = seriesHasVisibleValues(responsiveness);
-  const hasAgreements = seriesHasVisibleValues(agreements, ["agreements", "signed_offers"]);
-  const hasRisks = seriesHasVisibleValues(risks, ["count", "severity_avg"]);
-  const hasBurnBudget = seriesHasVisibleValues(burnBudget, ["burn", "budget"]);
-  const hasUpsell = seriesHasVisibleValues(upsell);
-  const hasSync = seriesHasVisibleValues(syncReconciliation, ["completeness_pct", "missing_count"]);
+  const {
+    healthData, velocityData, overdueData, responsivenessData,
+    agreementsChartData, risksChartData, burnBudgetData, upsellData, syncData,
+    hasHealth, hasVelocity, hasOverdue, hasResponsiveness,
+    hasAgreements, hasRisks, hasBurnBudget, hasUpsell, hasSync,
+  } = useMemo(() => {
+    const charts = rawCharts || {};
+    const health = Array.isArray(charts.health_score) ? charts.health_score : [];
+    const velocity = Array.isArray(charts.velocity_completed_issues) ? charts.velocity_completed_issues : [];
+    const overdueIssues = Array.isArray(charts.overdue_issues_count) ? charts.overdue_issues_count : [];
+    const responsiveness = Array.isArray(charts.client_responsiveness_minutes) ? charts.client_responsiveness_minutes : [];
+    const agreements = Array.isArray(charts.agreements_vs_signed_offers) ? charts.agreements_vs_signed_offers : [];
+    const risks = Array.isArray(charts.risks_trend) ? charts.risks_trend : [];
+    const burnBudget = Array.isArray(charts.burn_vs_budget) ? charts.burn_vs_budget : [];
+    const upsell = Array.isArray(charts.upsell_potential_score) ? charts.upsell_potential_score : [];
+    const syncReconciliation = Array.isArray(charts.sync_reconciliation_completeness) ? charts.sync_reconciliation_completeness : [];
+
+    const addLabel = (items) => items.map((item) => ({ ...item, label: toRuDateLabel(item.point) }));
+
+    return {
+      healthData: addLabel(health),
+      velocityData: addLabel(velocity),
+      overdueData: addLabel(overdueIssues),
+      responsivenessData: addLabel(responsiveness),
+      agreementsChartData: addLabel(agreements),
+      risksChartData: addLabel(risks),
+      burnBudgetData: addLabel(burnBudget),
+      upsellData: upsell.map((item) => ({ ...item, label: toRuDateLabel(item.point), value: numberValue(item.value) * 100 })),
+      syncData: addLabel(syncReconciliation),
+      hasHealth: seriesHasVisibleValues(health),
+      hasVelocity: seriesHasVisibleValues(velocity),
+      hasOverdue: seriesHasVisibleValues(overdueIssues),
+      hasResponsiveness: seriesHasVisibleValues(responsiveness),
+      hasAgreements: seriesHasVisibleValues(agreements, ["agreements", "signed_offers"]),
+      hasRisks: seriesHasVisibleValues(risks, ["count", "severity_avg"]),
+      hasBurnBudget: seriesHasVisibleValues(burnBudget, ["burn", "budget"]),
+      hasUpsell: seriesHasVisibleValues(upsell),
+      hasSync: seriesHasVisibleValues(syncReconciliation, ["completeness_pct", "missing_count"]),
+    };
+  }, [rawCharts]);
 
   return (
     <div className="space-y-4">
@@ -243,7 +263,7 @@ function renderDashboardCharts(payload, moneyFormatter, numberFormatter) {
         <CardContent>
           {hasHealth ? (
             <ChartContainer config={{ value: { label: "Индекс", markerClassName: "bg-primary" } }}>
-              <AreaChart data={health.map((item) => ({ ...item, label: toRuDateLabel(item.point) }))}>
+              <AreaChart data={healthData}>
                 <CartesianGrid vertical={false} />
                 <XAxis dataKey="label" tickLine={false} axisLine={false} minTickGap={24} />
                 <YAxis tickLine={false} axisLine={false} domain={[0, 100]} />
@@ -264,7 +284,7 @@ function renderDashboardCharts(payload, moneyFormatter, numberFormatter) {
         <CardContent>
           {hasVelocity ? (
             <ChartContainer config={{ value: { label: "Завершено", markerClassName: "bg-chart-2" } }}>
-              <BarChart data={velocity.map((item) => ({ ...item, label: toRuDateLabel(item.point) }))}>
+              <BarChart data={velocityData}>
                 <CartesianGrid vertical={false} />
                 <XAxis dataKey="label" tickLine={false} axisLine={false} minTickGap={24} />
                 <YAxis tickLine={false} axisLine={false} />
@@ -285,7 +305,7 @@ function renderDashboardCharts(payload, moneyFormatter, numberFormatter) {
         <CardContent>
           {hasOverdue ? (
             <ChartContainer config={{ value: { label: "Просрочено", markerClassName: "bg-destructive" } }}>
-              <LineChart data={overdueIssues.map((item) => ({ ...item, label: toRuDateLabel(item.point) }))}>
+              <LineChart data={overdueData}>
                 <CartesianGrid vertical={false} />
                 <XAxis dataKey="label" tickLine={false} axisLine={false} minTickGap={24} />
                 <YAxis tickLine={false} axisLine={false} />
@@ -306,7 +326,7 @@ function renderDashboardCharts(payload, moneyFormatter, numberFormatter) {
         <CardContent>
           {hasResponsiveness ? (
             <ChartContainer config={{ value: { label: "Среднее, мин", markerClassName: "bg-chart-3" } }}>
-              <LineChart data={responsiveness.map((item) => ({ ...item, label: toRuDateLabel(item.point) }))}>
+              <LineChart data={responsivenessData}>
                 <CartesianGrid vertical={false} />
                 <XAxis dataKey="label" tickLine={false} axisLine={false} minTickGap={24} />
                 <YAxis tickLine={false} axisLine={false} />
@@ -332,7 +352,7 @@ function renderDashboardCharts(payload, moneyFormatter, numberFormatter) {
                 signed_offers: { label: "Подписанные офферы", markerClassName: "bg-chart-4" },
               }}
             >
-              <BarChart data={agreements.map((item) => ({ ...item, label: toRuDateLabel(item.point) }))}>
+              <BarChart data={agreementsChartData}>
                 <CartesianGrid vertical={false} />
                 <XAxis dataKey="label" tickLine={false} axisLine={false} minTickGap={24} />
                 <YAxis tickLine={false} axisLine={false} />
@@ -360,7 +380,7 @@ function renderDashboardCharts(payload, moneyFormatter, numberFormatter) {
                 severity_avg: { label: "Средняя критичность", markerClassName: "bg-chart-5" },
               }}
             >
-              <LineChart data={risks.map((item) => ({ ...item, label: toRuDateLabel(item.point) }))}>
+              <LineChart data={risksChartData}>
                 <CartesianGrid vertical={false} />
                 <XAxis dataKey="label" tickLine={false} axisLine={false} minTickGap={24} />
                 <YAxis tickLine={false} axisLine={false} />
@@ -388,7 +408,7 @@ function renderDashboardCharts(payload, moneyFormatter, numberFormatter) {
                 budget: { label: "Пайплайн", markerClassName: "bg-primary" },
               }}
             >
-              <AreaChart data={burnBudget.map((item) => ({ ...item, label: toRuDateLabel(item.point) }))}>
+              <AreaChart data={burnBudgetData}>
                 <CartesianGrid vertical={false} />
                 <XAxis dataKey="label" tickLine={false} axisLine={false} minTickGap={24} />
                 <YAxis tickLine={false} axisLine={false} />
@@ -411,7 +431,7 @@ function renderDashboardCharts(payload, moneyFormatter, numberFormatter) {
         <CardContent>
           {hasUpsell ? (
             <ChartContainer config={{ value: { label: "Индекс апсейла", markerClassName: "bg-primary" } }}>
-              <BarChart data={upsell.map((item) => ({ ...item, label: toRuDateLabel(item.point), value: numberValue(item.value) * 100 }))}>
+              <BarChart data={upsellData}>
                 <CartesianGrid vertical={false} />
                 <XAxis dataKey="label" tickLine={false} axisLine={false} minTickGap={24} />
                 <YAxis tickLine={false} axisLine={false} domain={[0, 100]} />
@@ -437,7 +457,7 @@ function renderDashboardCharts(payload, moneyFormatter, numberFormatter) {
                 missing_count: { label: "Пропуски", markerClassName: "bg-destructive" },
               }}
             >
-              <LineChart data={syncReconciliation.map((item) => ({ ...item, label: toRuDateLabel(item.point) }))}>
+              <LineChart data={syncData}>
                 <CartesianGrid vertical={false} />
                 <XAxis dataKey="label" tickLine={false} axisLine={false} minTickGap={24} />
                 <YAxis tickLine={false} axisLine={false} domain={[0, 100]} />
@@ -455,9 +475,9 @@ function renderDashboardCharts(payload, moneyFormatter, numberFormatter) {
       </div>
     </div>
   );
-}
+});
 
-function renderAgreements(agreements, isAllProjects) {
+const AgreementsSection = memo(function AgreementsSection({ agreements, isAllProjects }) {
   return (
     <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
       {agreements.map((item) => (
@@ -477,10 +497,10 @@ function renderAgreements(agreements, isAllProjects) {
       {!agreements.length ? <p className="text-sm text-muted-foreground">По выбранному фильтру договоренности не найдены.</p> : null}
     </div>
   );
-}
+});
 
-function renderRisks(risks, isAllProjects) {
-  const visibleRisks = compactUniqueRisks(risks, 12);
+const RisksSection = memo(function RisksSection({ risks, isAllProjects }) {
+  const visibleRisks = useMemo(() => compactUniqueRisks(risks, 12), [risks]);
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -524,21 +544,30 @@ function renderRisks(risks, isAllProjects) {
       </div>
     </div>
   );
-}
+});
 
-function renderFinance(financePayload, moneyFormatter, numberFormatter) {
+const FinanceSection = memo(function FinanceSection({ financePayload, moneyFormatter, numberFormatter }) {
   const totals = financePayload?.totals || {};
   const byProject = Array.isArray(financePayload?.by_project) ? financePayload.by_project : [];
-  const charts = financePayload?.charts || {};
+  const rawCharts = financePayload?.charts;
 
-  const revenueByProject = Array.isArray(charts.revenue_by_project) ? charts.revenue_by_project : [];
-  const costsByProject = Array.isArray(charts.costs_by_project) ? charts.costs_by_project : [];
-  const marginByProject = Array.isArray(charts.margin_by_project) ? charts.margin_by_project : [];
-  const burnTrend = Array.isArray(charts.burn_rate_trend) ? charts.burn_rate_trend : [];
-  const forecastCompletion = Array.isArray(charts.forecast_completion_days) ? charts.forecast_completion_days : [];
-  const budgetActual = Array.isArray(charts.budget_vs_actual) ? charts.budget_vs_actual : [];
-  const unitEconomics = Array.isArray(charts.unit_economics_proxy) ? charts.unit_economics_proxy : [];
-  const funnelNodes = Array.isArray(charts.funnel_nodes) ? charts.funnel_nodes : [];
+  const {
+    revenueByProject, costsByProject, marginByProject,
+    burnTrendData, forecastCompletion, budgetActualData,
+    unitEconomics, funnelNodes,
+  } = useMemo(() => {
+    const charts = rawCharts || {};
+    return {
+      revenueByProject: Array.isArray(charts.revenue_by_project) ? charts.revenue_by_project : [],
+      costsByProject: Array.isArray(charts.costs_by_project) ? charts.costs_by_project : [],
+      marginByProject: Array.isArray(charts.margin_by_project) ? charts.margin_by_project : [],
+      burnTrendData: (Array.isArray(charts.burn_rate_trend) ? charts.burn_rate_trend : []).map((item) => ({ ...item, label: toRuDateLabel(item.point) })),
+      forecastCompletion: Array.isArray(charts.forecast_completion_days) ? charts.forecast_completion_days : [],
+      budgetActualData: (Array.isArray(charts.budget_vs_actual) ? charts.budget_vs_actual : []).map((item) => ({ ...item, label: toRuDateLabel(item.point) })),
+      unitEconomics: Array.isArray(charts.unit_economics_proxy) ? charts.unit_economics_proxy : [],
+      funnelNodes: Array.isArray(charts.funnel_nodes) ? charts.funnel_nodes : [],
+    };
+  }, [rawCharts]);
 
   return (
     <div className="space-y-4">
@@ -601,7 +630,7 @@ function renderFinance(financePayload, moneyFormatter, numberFormatter) {
           <CardHeader><CardTitle>Темп затрат</CardTitle></CardHeader>
           <CardContent>
             <ChartContainer>
-              <LineChart data={burnTrend.map((item) => ({ ...item, label: toRuDateLabel(item.point) }))}>
+              <LineChart data={burnTrendData}>
                 <CartesianGrid vertical={false} />
                 <XAxis dataKey="label" tickLine={false} axisLine={false} minTickGap={24} />
                 <YAxis tickLine={false} axisLine={false} />
@@ -636,7 +665,7 @@ function renderFinance(financePayload, moneyFormatter, numberFormatter) {
                 actual: { label: "Факт", markerClassName: "bg-destructive" },
               }}
             >
-              <BarChart data={budgetActual.map((item) => ({ ...item, label: toRuDateLabel(item.point) }))}>
+              <BarChart data={budgetActualData}>
                 <CartesianGrid vertical={false} />
                 <XAxis dataKey="label" tickLine={false} axisLine={false} minTickGap={24} />
                 <YAxis tickLine={false} axisLine={false} />
@@ -691,9 +720,9 @@ function renderFinance(financePayload, moneyFormatter, numberFormatter) {
       </div>
     </div>
   );
-}
+});
 
-function renderOffers(payload, isAllProjects, moneyFormatter) {
+const OffersSection = memo(function OffersSection({ payload, isAllProjects, moneyFormatter }) {
   const offers = payload?.offers || { upsell: [], recent_offers: [], discount_policy: [] };
   const loopsStats = payload?.loops || { contacts_with_email: 0, unique_emails: 0 };
 
@@ -764,9 +793,9 @@ function renderOffers(payload, isAllProjects, moneyFormatter) {
       </Card>
     </div>
   );
-}
+});
 
-function MessagesSection({ messagesPayload, selectedPersonId, setSelectedPersonId, loadingMessages }) {
+const MessagesSection = memo(function MessagesSection({ messagesPayload, selectedPersonId, setSelectedPersonId, loadingMessages }) {
   const project = messagesPayload?.project || null;
   const persons = Array.isArray(messagesPayload?.persons) ? messagesPayload.persons : [];
   const messages = Array.isArray(messagesPayload?.messages) ? messagesPayload.messages : [];
@@ -857,7 +886,7 @@ function MessagesSection({ messagesPayload, selectedPersonId, setSelectedPersonI
       </CardContent>
     </Card>
   );
-}
+});
 
 export default function ControlTowerSectionPage({ section }) {
   const normalizedSection = normalizePortfolioSection(section);
@@ -947,7 +976,7 @@ export default function ControlTowerSectionPage({ section }) {
           onRefresh={activeReload}
           loading={overview.loading || messages.loading}
         />
-        {normalizedSection === "dashboard" ? renderDashboardCharts(overviewPayload, moneyFormatter, numberFormatter) : null}
+        {normalizedSection === "dashboard" ? <DashboardCharts payload={overviewPayload} moneyFormatter={moneyFormatter} numberFormatter={numberFormatter} /> : null}
         {normalizedSection === "messages"
           ? (
             <MessagesSection
@@ -958,10 +987,10 @@ export default function ControlTowerSectionPage({ section }) {
             />
           )
           : null}
-        {normalizedSection === "agreements" ? renderAgreements(agreements, isAllProjects) : null}
-        {normalizedSection === "risks" ? renderRisks(risks, isAllProjects) : null}
-        {normalizedSection === "finance" ? renderFinance(overviewPayload?.finances, moneyFormatter, numberFormatter) : null}
-        {normalizedSection === "offers" ? renderOffers(overviewPayload, isAllProjects, moneyFormatter) : null}
+        {normalizedSection === "agreements" ? <AgreementsSection agreements={agreements} isAllProjects={isAllProjects} /> : null}
+        {normalizedSection === "risks" ? <RisksSection risks={risks} isAllProjects={isAllProjects} /> : null}
+        {normalizedSection === "finance" ? <FinanceSection financePayload={overviewPayload?.finances} moneyFormatter={moneyFormatter} numberFormatter={numberFormatter} /> : null}
+        {normalizedSection === "offers" ? <OffersSection payload={overviewPayload} isAllProjects={isAllProjects} moneyFormatter={moneyFormatter} /> : null}
 
         {(overview.error || messages.error)
           ? <Toast type="error" message={overview.error || messages.error} />

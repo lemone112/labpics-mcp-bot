@@ -1,7 +1,13 @@
+import dynamic from "next/dynamic";
 import { redirect } from "next/navigation";
 
-import ControlTowerSectionPage from "@/features/control-tower/section-page";
 import { normalizePortfolioSection } from "@/lib/portfolio-sections";
+import { PageLoadingSkeleton } from "@/components/ui/page-loading-skeleton";
+
+const ControlTowerSectionPage = dynamic(
+  () => import("@/features/control-tower/section-page"),
+  { loading: () => <PageLoadingSkeleton /> }
+);
 
 export default async function ControlTowerSectionRoute({ params }) {
   const resolvedParams = await params;

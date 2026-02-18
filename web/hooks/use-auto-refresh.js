@@ -12,8 +12,9 @@ import { useCallback, useEffect, useRef, useState } from "react";
  */
 export function useAutoRefresh(fetchFn, intervalMs, options = {}) {
   const { enabled = true, sseConnected = false } = options;
-  // When SSE is active, reduce polling frequency (3x interval) as a safety net
-  const effectiveInterval = sseConnected ? intervalMs * 3 : intervalMs;
+  // When SSE is active, disable polling entirely — real-time updates via SSE.
+  // Tab-refocus stale check below still works as a safety net.
+  const effectiveInterval = sseConnected ? 0 : intervalMs;
   const [lastRefreshedAt, setLastRefreshedAt] = useState(null);
   const [secondsAgo, setSecondsAgo] = useState(null);
   const [paused, setPaused] = useState(false);
@@ -52,13 +53,13 @@ export function useAutoRefresh(fetchFn, intervalMs, options = {}) {
     return () => clearInterval(intervalRef.current);
   }, [enabled, paused, effectiveInterval]);
 
-  // 1-second ticker to compute secondsAgo display
+  // 5-second ticker to compute secondsAgo display (reduced from 1s to cut re-renders 5×)
   useEffect(() => {
     tickRef.current = setInterval(() => {
       const ts = lastRefreshedAtRef.current;
       if (!ts) return;
       setSecondsAgo(Math.floor((Date.now() - ts.getTime()) / 1000));
-    }, 1000);
+    }, 5000);
     return () => clearInterval(tickRef.current);
   }, []);
 
@@ -68,7 +69,8 @@ export function useAutoRefresh(fetchFn, intervalMs, options = {}) {
     function onVisibilityChange() {
       if (typeof document === "undefined" || document.hidden) return;
       const ts = lastRefreshedAtRef.current;
-      if (ts && Date.now() - ts.getTime() > effectiveInterval) {
+      // Use base intervalMs (not effectiveInterval) so stale check works even when SSE disables polling
+      if (ts && Date.now() - ts.getTime() > intervalMs) {
         if (fetchingRef.current) return;
         fetchingRef.current = true;
         fetchRef.current()
@@ -83,7 +85,7 @@ export function useAutoRefresh(fetchFn, intervalMs, options = {}) {
     }
     document.addEventListener("visibilitychange", onVisibilityChange);
     return () => document.removeEventListener("visibilitychange", onVisibilityChange);
-  }, [enabled, effectiveInterval]);
+  }, [enabled, intervalMs]);
 
   const pause = useCallback(() => setPaused(true), []);
   const resume = useCallback(() => setPaused(false), []);
