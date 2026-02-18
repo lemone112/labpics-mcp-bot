@@ -339,3 +339,62 @@ Circuit breaker вызвал failure в `http.unit.test.js` — global state (`c
 - Dead letter endpoints используют manual ID validation (string coerce) — при UUID-only IDs стоит добавить UUID schema.
 - `allProjectsFlag` preprocess — допускает любой truthy string кроме "true" как false. Достаточно для текущего API contract.
 - `z.object({}).passthrough()` — менее strict чем `z.record(z.string(), z.any())`, но работает с Zod v4 без crashes.
+
+---
+
+## Deep Analysis: Architecture Audit (2026-02-18)
+
+> Комплексный аудит архитектуры перед следующей фазой разработки.
+
+### 1. Критическое несоответствие имён: наша "LightRAG" ≠ HKUDS LightRAG
+
+Наша реализация в `server/src/services/lightrag.js` — **standard hybrid RAG**:
+- Vector search (pgvector embeddings) + ILIKE keyword search
+- 4 параллельных запроса: rag_chunks, cw_messages, linear_issues_raw, attio_opportunities_raw
+- Нет knowledge graph, нет entity extraction, нет relationship mapping
+
+Оригинальный [HKUDS LightRAG](https://github.com/HKUDS/LightRAG) (EMNLP2025):
+- Строит knowledge graph при индексации (LLM entity/relation extraction)
+- Dual-level retrieval: low-level (entities) + high-level (themes)
+- Mix mode: knowledge graph + vector search
+
+**Вердикт:** Имя "LightRAG" — внутреннее, не техническое. Для текущих use cases (поиск по CRM/messages/issues) наша реализация достаточна. Для будущих AI-agent use cases (Telegram бот) может потребоваться upgrade.
+
+### 2. KAG Legacy Code Audit
+
+| Компонент | LOC | Статус | Можно удалить? |
+|---|---|---|---|
+| `kag.js` (orchestrator) | 544 | Dead | ДА |
+| `kag/graph/` | 384 | Dead | ДА |
+| `kag/ingest/` | 524 | Dead | ДА |
+| `kag/recommendations/` | 286 | Dead | ДА |
+| `kag/scoring/` | 243 | Dead | ДА |
+| `kag/signals/` | 621 | Dead | ДА |
+| `/kag/*` API routes (index.js) | ~118 | Dead (410 always) | ДА |
+| Scheduler KAG jobs | ~50 | Dead (paused) | ДА |
+| `kag/templates/` | 123 | **Active** | НЕТ — recommendations-v2 import |
+| `kag-process-log.js` | 174 | **Active** | НЕТ — writes to kag_event_log |
+| **Total removable** | **~2,770** | | |
+
+**Критическая зависимость**: `kag_event_log` table — каждый connector sync пишет туда через `event-log.js:insertEvents()` → `connector-sync.js:104`. Удаление таблицы **сломает весь sync pipeline**.
+
+**Рекомендация**: Rename `kag_event_log` → `connector_events` через migration + обновить SQL-запросы в event-log.js, snapshots.js, similarity.js.
+
+### 3. JS → TS Migration Assessment
+
+- 131 JS файлов, ~17,500 LOC, 0 TypeScript, 0 JSDoc
+- Полная миграция: 4-6 недель
+- **Рекомендация**: инкрементальный подход (tsconfig checkJs + новые файлы на TS)
+- Zod schemas уже дают runtime type safety на 32 POST endpoints
+
+### 4. Telegram Bot + HKUDS LightRAG + MCP Architecture (v2)
+
+Решение обновлено: вместо обёртки над custom RAG — **миграция на HKUDS LightRAG** из форка [`lemone112/lightrag`](https://github.com/lemone112/lightrag).
+
+```
+Telegram Bot (LLM) → daniel-lightrag-mcp (22 tools) → LightRAG Server (Python) → PostgreSQL
+Labpics Web (Next.js) → Fastify API (proxy endpoints) → LightRAG Server → PostgreSQL (shared DB)
+Connector Sync (worker) → data ingestion → LightRAG Server /documents API → PostgreSQL
+```
+
+HKUDS LightRAG даёт: knowledge graph, entity extraction, dual-level retrieval, PostgreSQL backend (PGKVStorage + PGVectorStorage + PGGraphStorage). Запланировано в Iter 11.

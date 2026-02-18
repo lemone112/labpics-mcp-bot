@@ -1,10 +1,10 @@
 # Глубокий анализ структуры продукта Labpics Dashboard
 
-> Дата анализа: 2026-02-18 | Обновлено: 2026-02-18 (post Iter 0-9)
+> Дата анализа: 2026-02-18 | Обновлено: 2026-02-18 (post Iter 0-9 + Architecture Audit)
 > Метод: 3-цикловый ресёрч (structure → hotpaths → self-criticism)
 > Scope: backend, frontend, infrastructure, data model, Redis, production readiness
 >
-> **Статус:** Iter 0-9 завершены. Wave 2 (Iter 10-12) запланирован. Оценки зрелости обновлены.
+> **Статус:** Iter 0-9 завершены. Architecture Audit проведён. Wave 2 (Iter 10-13) пересмотрен. KAG legacy cleanup → CRITICAL.
 
 ---
 
@@ -61,9 +61,9 @@
 
 ---
 
-### 1.3 Intelligence слой (LightRAG) — зрелость: 65% → **90%**
+### 1.3 Intelligence слой (Custom Hybrid RAG) — зрелость: 65% → **90%**
 
-**Текущее состояние:** Production-ready. Vector search + ILIKE + caching + quality score + feedback loop.
+**Текущее состояние:** Production-ready custom hybrid RAG (vector search + ILIKE keyword search). **Внутреннее имя "LightRAG"** — это custom реализация, НЕ [HKUDS LightRAG](https://github.com/HKUDS/LightRAG). Наша система не строит knowledge graph.
 
 **Проблемы:**
 
@@ -596,7 +596,7 @@ session UPDATE (login/logout/project switch):
 | 8 | Security Hardening II | 7/7 | ✅ Done | — |
 | 9 | Extended Input Validation | 5/5 | ✅ Done | — |
 
-**Итого:** 58/60 задач завершено в Iter 0-9. Wave 2 (Iter 10-12, 16 задач) запланирован.
+**Итого:** 58/60 задач завершено в Iter 0-9. Wave 2 пересмотрен v2: Iter 10-13 (22 задачи) + Later (3 задачи).
 
 **Рекомендуемый порядок выполнения:**
 ```
@@ -610,7 +610,15 @@ session UPDATE (login/logout/project switch):
 ✅ Iter 7 (validation) ─────── DONE
 ✅ Iter 8 (security II) ────── DONE
 ✅ Iter 9 (ext. validation) ── DONE
-⬜ Iter 10 (frontend res.) ─── PLANNED
-⬜ Iter 11 (CI/CD) ──────────── PLANNED
-⬜ Iter 12 (connectors) ────── PLANNED
+⬜ Iter 10 (KAG cleanup) ───── CRITICAL — удаление ~2,770 LOC мёртвого кода
+⬜ Iter 11 (LightRAG + MCP) ── HIGH ★ — миграция на HKUDS LightRAG + MCP для Telegram бота
+⬜ Iter 12 (frontend res.) ─── MEDIUM — error boundaries, SSE reconnect
+⬜ Iter 13 (CI/CD) ──────────── MEDIUM — audit, backup, rollback
+⬜ Later (TypeScript Phase 1) ─ LOW — tsconfig checkJs, новые файлы на TS
 ```
+
+**Архитектурные решения (Architecture Audit v2, 2026-02-18):**
+- Custom hybrid RAG → миграция на [HKUDS LightRAG](https://github.com/HKUDS/LightRAG) из форка `lemone112/lightrag`
+- KAG = deprecated, удаляется в Iter 10. `kag_event_log` → `connector_events`
+- Telegram Bot = [daniel-lightrag-mcp](https://github.com/desimpkins/daniel-lightrag-mcp) (22 tools) → LightRAG Server → PostgreSQL
+- JS → TS = инкрементальный подход (checkJs + новые файлы на TS)

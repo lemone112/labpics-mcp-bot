@@ -1,22 +1,31 @@
-# Спека 0018 — LightRAG-only режим и API-контракт
+# Спека 0018 — Intelligence Layer: RAG-only режим
 
-Статус: **implemented (MVP, mandatory)**
+> Обновлено: 2026-02-18 (post Architecture Audit)
+
+Статус: **implemented (MVP, mandatory)**. KAG cleanup запланирован в Iter 10.
+
+## Архитектурный контекст
+
+Продукт использует custom hybrid RAG (vector search + keyword search):
+- `server/src/services/lightrag.js` — основной query engine
+- `server/src/services/embeddings.js` — OpenAI embeddings → pgvector
+- Внутреннее имя "LightRAG" — custom реализация, НЕ HKUDS LightRAG
 
 ## Цель
 
-Зафиксировать, что продукт работает в едином контуре LightRAG без активных `/kag/*` API.
+Зафиксировать, что продукт работает в едином контуре RAG без активных `/kag/*` API.
 
 ## Инварианты
 
-1. Маршруты `/kag/*` не входят в контракт разработки.
-2. При `LIGHTRAG_ONLY=1` они недоступны (`410 kag_disabled`).
-3. Frontend не должен использовать `/kag/*`.
-4. Поисковая поверхность работает через:
+1. Маршруты `/kag/*` **удаляются** в Iter 10 (legacy cleanup).
+2. Frontend не должен использовать `/kag/*`.
+3. Поисковая поверхность работает через:
    - `POST /lightrag/query`
    - alias `POST /search` (совместимость).
-5. Scheduler не выполняет legacy jobs, связанные с `/kag/*`, в LightRAG-only режиме.
+4. Scheduler не выполняет KAG-related jobs.
+5. Таблица `kag_event_log` переименовывается в `connector_events` (Iter 10).
 
-## API-контракт LightRAG query
+## API-контракт RAG query
 
 ### Request
 
@@ -24,7 +33,8 @@
 {
   "query": "string, required",
   "topK": 10,
-  "sourceLimit": 8
+  "sourceLimit": 8,
+  "sourceFilter": ["messages", "issues", "deals", "chunks"]
 }
 ```
 
@@ -34,6 +44,9 @@
 {
   "query": "string",
   "topK": 10,
+  "query_run_id": 123,
+  "quality_score": 75,
+  "source_diversity": 3,
   "answer": "string",
   "chunks": [],
   "evidence": [],
@@ -51,3 +64,5 @@
 - Search page возвращает answer + chunks + evidence.
 - После запроса создаётся запись в `lightrag_query_runs`.
 - UI не показывает ошибок `kag_disabled` в штатных пользовательских сценариях.
+- Quality score и source_diversity включены в response.
+- Feedback endpoint (`POST /lightrag/feedback`) принимает rating и comment.
