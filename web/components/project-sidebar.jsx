@@ -29,7 +29,6 @@ export function ProjectSidebarPanel({ onRequestClose = null }) {
     activationError,
     selectAllProjects,
     activateProject,
-    refreshProjects,
   } = useProjectPortfolio();
   const { theme, setTheme } = useTheme();
 
@@ -72,16 +71,7 @@ export function ProjectSidebarPanel({ onRequestClose = null }) {
         <div className="space-y-2 pb-3">
           <p className="text-sm font-semibold text-sidebar-foreground">Проекты</p>
           <p className="text-xs text-sidebar-foreground/70">Выбор: {isAllProjects ? "Все проекты" : selectedProject?.name || "-"}</p>
-          <div className="flex items-center gap-2">
-            <Button type="button" size="sm" variant="outline" onClick={refreshProjects} disabled={loadingProjects}>
-              Обновить
-            </Button>
-            {inPortfolio && canSelectAll ? (
-              <Button type="button" size="sm" variant="outline" onClick={onSelectAllProjects} disabled={!projects.length || isAllProjects}>
-                Все проекты
-              </Button>
-            ) : null}
-          </div>
+          <p className="text-[11px] text-sidebar-foreground/60">Список обновляется автоматически.</p>
         </div>
 
         <div className="flex-1 space-y-2 overflow-y-auto pr-1">

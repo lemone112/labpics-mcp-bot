@@ -141,6 +141,8 @@ function parseProjectIdsInput(value, max = 50) {
   return deduped;
 }
 
+const LEGACY_SCOPE_PROJECT_NAME = "__legacy_scope__";
+
 function parseProjectIdsFromUrl(rawUrl) {
   const queryString = String(rawUrl || "").split("?")[1] || "";
   if (!queryString) return [];
@@ -198,10 +200,11 @@ async function pickSessionFallbackProject(pool, preferredProjectIds = []) {
           account_scope_id::text AS account_scope_id
         FROM projects
         WHERE id::text = ANY($1::text[])
+          AND lower(btrim(name)) <> $2
         ORDER BY array_position($1::text[], id::text)
         LIMIT 1
       `,
-      [preferredIds]
+      [preferredIds, LEGACY_SCOPE_PROJECT_NAME]
     );
     if (preferredMatch.rows[0]) return preferredMatch.rows[0];
   }
@@ -212,9 +215,11 @@ async function pickSessionFallbackProject(pool, preferredProjectIds = []) {
         id::text AS id,
         account_scope_id::text AS account_scope_id
       FROM projects
+      WHERE lower(btrim(name)) <> $1
       ORDER BY created_at DESC
       LIMIT 1
-    `
+    `,
+    [LEGACY_SCOPE_PROJECT_NAME]
   );
   return fallback.rows[0] || null;
 }
@@ -630,7 +635,13 @@ async function main() {
 
   registerGet("/projects", async (request, reply) => {
     const { rows } = await pool.query(
-      "SELECT id, name, account_scope_id, created_at FROM projects ORDER BY created_at DESC"
+      `
+        SELECT id, name, account_scope_id, created_at
+        FROM projects
+        WHERE lower(btrim(name)) <> $1
+        ORDER BY created_at DESC
+      `,
+      [LEGACY_SCOPE_PROJECT_NAME]
     );
     return sendOk(reply, request.requestId, {
       projects: rows,
@@ -644,6 +655,9 @@ async function main() {
     const name = String(body?.name || "").trim();
     if (name.length < 2 || name.length > 160) {
       return sendError(reply, request.requestId, new ApiError(400, "invalid_name", "Invalid project name"));
+    }
+    if (name.toLowerCase() === LEGACY_SCOPE_PROJECT_NAME) {
+      return sendError(reply, request.requestId, new ApiError(400, "reserved_name", "Project name is reserved"));
     }
 
     const desiredScopeKey = String(body?.account_scope_key || "").trim().toLowerCase() || null;
@@ -713,6 +727,9 @@ async function main() {
       [projectId]
     );
     if (!project.rows[0]) {
+      return sendError(reply, request.requestId, new ApiError(404, "project_not_found", "Project not found"));
+    }
+    if (String(project.rows[0].name || "").trim().toLowerCase() === LEGACY_SCOPE_PROJECT_NAME) {
       return sendError(reply, request.requestId, new ApiError(404, "project_not_found", "Project not found"));
     }
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 
 import { apiFetch } from "@/lib/api";
@@ -9,12 +9,28 @@ import { parsePortfolioSectionFromPath, sectionAllowsAllProjects } from "@/lib/p
 const STORAGE_SCOPE_KEY = "labpics:portfolio:selected-scope";
 const STORAGE_LAST_PROJECT_KEY = "labpics:portfolio:last-concrete-project";
 const ALL_PROJECTS_SCOPE = "__all_projects__";
+const PROJECTS_AUTO_REFRESH_MS = 60_000;
 
 const ProjectPortfolioContext = createContext(null);
 
 function normalizeProjectId(value) {
   const normalized = String(value || "").trim();
   return normalized || null;
+}
+
+function isLegacyScopeProject(project) {
+  const name = String(project?.name || "").trim().toLowerCase();
+  return name === "__legacy_scope__";
+}
+
+function humanizeProjectError(rawError, fallbackMessage) {
+  const message = String(rawError?.message || fallbackMessage || "").trim();
+  if (!message) return "Не удалось обработать запрос по проектам";
+  const normalized = message.toLowerCase();
+  if (normalized === "internal_error") return "Временная ошибка сервера. Повторим автоматически.";
+  if (normalized.includes("account_scope_mismatch")) return "Выбранные проекты относятся к разным рабочим областям.";
+  if (normalized.includes("project_not_found")) return "Проект больше не доступен. Обновим список автоматически.";
+  return message;
 }
 
 function readStorageValue(key, fallback = null) {
@@ -41,6 +57,7 @@ export function ProjectPortfolioProvider({ children }) {
   const [activationError, setActivationError] = useState("");
   const [loadingProjects, setLoadingProjects] = useState(true);
   const [error, setError] = useState("");
+  const autoRepairAttemptRef = useRef("");
 
   const projectIds = useMemo(() => projects.map((project) => String(project.id)), [projects]);
   const projectIdSet = useMemo(() => new Set(projectIds), [projectIds]);
@@ -61,18 +78,23 @@ export function ProjectPortfolioProvider({ children }) {
     [projectIdSet, projectIds, activeProjectId]
   );
 
-  const refreshProjects = useCallback(async () => {
-    setLoadingProjects(true);
-    setError("");
-    setActivationError("");
+  const refreshProjects = useCallback(async (options = {}) => {
+    const silent = Boolean(options?.silent);
+    if (!silent) {
+      setLoadingProjects(true);
+      setError("");
+      setActivationError("");
+    }
     try {
       const data = await apiFetch("/projects");
-      const nextProjects = Array.isArray(data?.projects) ? data.projects : [];
+      const sourceProjects = Array.isArray(data?.projects) ? data.projects : [];
+      const nextProjects = sourceProjects.filter((project) => !isLegacyScopeProject(project));
       const nextProjectIds = nextProjects.map((project) => String(project.id));
       const nextProjectIdSet = new Set(nextProjectIds);
       const nextActiveProjectId = normalizeProjectId(data?.active_project_id);
       setProjects(nextProjects);
       setActiveProjectId(nextActiveProjectId);
+      setError("");
 
       const fallbackConcrete =
         (nextActiveProjectId && nextProjectIdSet.has(nextActiveProjectId) ? nextActiveProjectId : null) || nextProjectIds[0] || null;
@@ -93,18 +115,43 @@ export function ProjectPortfolioProvider({ children }) {
       setLastConcreteProjectId(nextLastConcrete);
       setSelectedScopeId(nextScope);
     } catch (requestError) {
-      setError(requestError?.message || "Не удалось загрузить список проектов");
-      setProjects([]);
-      setSelectedScopeId(null);
-      setLastConcreteProjectId(null);
-      setActiveProjectId(null);
+      const message = humanizeProjectError(requestError, "Не удалось загрузить список проектов");
+      if (!silent) {
+        setError(message);
+      }
+      if (!silent) {
+        setProjects([]);
+        setSelectedScopeId(null);
+        setLastConcreteProjectId(null);
+        setActiveProjectId(null);
+      }
     } finally {
-      setLoadingProjects(false);
+      if (!silent) {
+        setLoadingProjects(false);
+      }
     }
   }, [canSelectAll]);
 
   useEffect(() => {
     refreshProjects();
+  }, [refreshProjects]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return undefined;
+    const refreshSilently = () => {
+      if (document.visibilityState !== "visible") return;
+      refreshProjects({ silent: true }).catch(() => {});
+    };
+    const intervalId = window.setInterval(refreshSilently, PROJECTS_AUTO_REFRESH_MS);
+    const onFocus = () => refreshSilently();
+    const onVisibilityChange = () => refreshSilently();
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    return () => {
+      window.clearInterval(intervalId);
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+    };
   }, [refreshProjects]);
 
   useEffect(() => {
@@ -165,7 +212,7 @@ export function ProjectPortfolioProvider({ children }) {
         setSelectedScopeId(normalized);
         setLastConcreteProjectId(normalized);
       } catch (requestError) {
-        const message = requestError?.message || "Не удалось переключить проект";
+        const message = humanizeProjectError(requestError, "Не удалось переключить проект");
         setActivationError(message);
         throw requestError;
       } finally {
@@ -180,6 +227,27 @@ export function ProjectPortfolioProvider({ children }) {
     setActivationError("");
     setSelectedScopeId(ALL_PROJECTS_SCOPE);
   }, [canSelectAll, projectIds.length]);
+
+  useEffect(() => {
+    if (!projectIds.length) return;
+    if (activatingProjectId) return;
+    const normalizedActive = normalizeProjectId(activeProjectId);
+    if (normalizedActive && projectIdSet.has(normalizedActive)) return;
+    const fallbackConcrete = ensureConcreteSelection(lastConcreteProjectId);
+    if (!fallbackConcrete) return;
+    const repairKey = `${normalizedActive || "none"}->${fallbackConcrete}|${projectIds.join(",")}`;
+    if (autoRepairAttemptRef.current === repairKey) return;
+    autoRepairAttemptRef.current = repairKey;
+    activateProject(fallbackConcrete).catch(() => {});
+  }, [
+    projectIds,
+    projectIdSet,
+    activeProjectId,
+    activatingProjectId,
+    ensureConcreteSelection,
+    lastConcreteProjectId,
+    activateProject,
+  ]);
 
   const selectedProjectIds = useMemo(() => {
     if (!projectIds.length) return [];

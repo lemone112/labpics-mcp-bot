@@ -295,6 +295,7 @@ export async function getPortfolioOverview(pool, options = {}) {
             FROM risk_pattern_events AS rp
             LEFT JOIN projects AS p ON p.id = rp.project_id
             WHERE rp.account_scope_id = $1
+              AND rp.project_id::text = ANY($2::text[])
               AND rp.status = 'open'
           ) AS combined
           ORDER BY severity DESC, updated_at DESC

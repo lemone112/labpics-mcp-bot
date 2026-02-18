@@ -14,6 +14,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
+import { AlertTriangle, Clock3 } from "lucide-react";
 
 import { useAuthGuard } from "@/hooks/use-auth-guard";
 import { usePortfolioMessages } from "@/hooks/use-portfolio-messages";
@@ -62,6 +63,106 @@ function numberValue(value) {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
+function seriesHasVisibleValues(items, keys = ["value"]) {
+  if (!Array.isArray(items) || !items.length) return false;
+  return items.some((item) => keys.some((key) => Math.abs(numberValue(item?.[key])) > 0));
+}
+
+function ChartNoData({ message = "Недостаточно данных для графика", hint = "После следующего цикла синхронизации график заполнится автоматически." }) {
+  return (
+    <div className="flex h-[240px] flex-col items-center justify-center rounded-md border border-dashed px-4 text-center">
+      <p className="text-sm font-medium text-foreground">{message}</p>
+      <p className="mt-1 text-xs text-muted-foreground">{hint}</p>
+    </div>
+  );
+}
+
+function formatRiskSourceRu(source) {
+  const key = String(source || "").trim().toLowerCase();
+  if (key === "risk_radar") return "Радар риска";
+  if (key === "risk_pattern") return "Паттерн";
+  if (key === "signal") return "Сигнал";
+  return "Источник";
+}
+
+function formatRiskSeverityMeta(severityValue) {
+  const severity = Math.max(0, Math.round(numberValue(severityValue)));
+  if (severity >= 5) return { label: "Критическое влияние", className: "border-red-500/30 bg-red-500/15 text-red-300" };
+  if (severity >= 4) return { label: "Высокое влияние", className: "border-orange-500/30 bg-orange-500/15 text-orange-300" };
+  if (severity >= 3) return { label: "Среднее влияние", className: "border-amber-500/30 bg-amber-500/15 text-amber-300" };
+  if (severity >= 2) return { label: "Низкое влияние", className: "border-emerald-500/30 bg-emerald-500/15 text-emerald-300" };
+  return { label: "Минимальное влияние", className: "border-emerald-500/30 bg-emerald-500/15 text-emerald-300" };
+}
+
+function formatRiskProbabilityMeta(probabilityValue) {
+  const probabilityPct = Math.round(numberValue(probabilityValue) * 100);
+  if (probabilityPct >= 70) {
+    return { label: `Вероятность ${probabilityPct}%`, className: "border-red-500/30 bg-red-500/15 text-red-300" };
+  }
+  if (probabilityPct >= 40) {
+    return { label: `Вероятность ${probabilityPct}%`, className: "border-orange-500/30 bg-orange-500/15 text-orange-300" };
+  }
+  return { label: `Вероятность ${Math.max(0, probabilityPct)}%`, className: "border-emerald-500/30 bg-emerald-500/15 text-emerald-300" };
+}
+
+function formatRiskTitleRu(rawTitle) {
+  const title = String(rawTitle || "").trim();
+  if (!title) return "Риск без названия";
+  if (title === "Project delivery/commercial risk composite") return "Комбинированный риск delivery и коммерции";
+  if (title === "Delivery risk pattern cluster") return "Кластер паттернов delivery-риска";
+  return title;
+}
+
+function formatHumanDateRu(value) {
+  if (!value) return "-";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "-";
+  return date.toLocaleString("ru-RU", {
+    day: "numeric",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function formatRelativeTimeRu(value) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  const diffMs = date.getTime() - Date.now();
+  const diffHours = Math.round(diffMs / (1000 * 60 * 60));
+  const rtf = new Intl.RelativeTimeFormat("ru-RU", { numeric: "auto" });
+  if (Math.abs(diffHours) < 24) return rtf.format(diffHours, "hour");
+  const diffDays = Math.round(diffHours / 24);
+  if (Math.abs(diffDays) < 30) return rtf.format(diffDays, "day");
+  const diffMonths = Math.round(diffDays / 30);
+  return rtf.format(diffMonths, "month");
+}
+
+function compactUniqueRisks(risks, max = 12) {
+  if (!Array.isArray(risks)) return [];
+  const sorted = [...risks].sort((left, right) => {
+    const rightTs = right?.updated_at ? Date.parse(right.updated_at) : 0;
+    const leftTs = left?.updated_at ? Date.parse(left.updated_at) : 0;
+    if (rightTs !== leftTs) return rightTs - leftTs;
+    return numberValue(right?.severity) - numberValue(left?.severity);
+  });
+  const seen = new Set();
+  const compacted = [];
+  for (const risk of sorted) {
+    const dedupeKey = [
+      String(risk?.project_id || ""),
+      String(risk?.source || ""),
+      String(risk?.title || "").trim().toLowerCase(),
+    ].join("|");
+    if (seen.has(dedupeKey)) continue;
+    seen.add(dedupeKey);
+    compacted.push(risk);
+    if (compacted.length >= max) break;
+  }
+  return compacted;
+}
+
 function useFormatters() {
   const moneyFormatter = useMemo(
     () =>
@@ -98,6 +199,7 @@ function LinkifiedText({ text }) {
 }
 
 function renderDashboardCharts(payload, moneyFormatter, numberFormatter) {
+  const totals = payload?.dashboard?.totals || {};
   const charts = payload?.dashboard?.charts || {};
   const health = Array.isArray(charts.health_score) ? charts.health_score : [];
   const velocity = Array.isArray(charts.velocity_completed_issues) ? charts.velocity_completed_issues : [];
@@ -111,22 +213,44 @@ function renderDashboardCharts(payload, moneyFormatter, numberFormatter) {
     ? charts.sync_reconciliation_completeness
     : [];
 
+  const hasHealth = seriesHasVisibleValues(health);
+  const hasVelocity = seriesHasVisibleValues(velocity);
+  const hasOverdue = seriesHasVisibleValues(overdueIssues);
+  const hasResponsiveness = seriesHasVisibleValues(responsiveness);
+  const hasAgreements = seriesHasVisibleValues(agreements, ["agreements", "signed_offers"]);
+  const hasRisks = seriesHasVisibleValues(risks, ["count", "severity_avg"]);
+  const hasBurnBudget = seriesHasVisibleValues(burnBudget, ["burn", "budget"]);
+  const hasUpsell = seriesHasVisibleValues(upsell);
+  const hasSync = seriesHasVisibleValues(syncReconciliation, ["completeness_pct", "missing_count"]);
+
   return (
-    <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 xl:grid-cols-3">
+    <div className="space-y-4">
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+        <StatTile label="Активные проекты" value={numberFormatter.format(numberValue(totals.selected_projects))} />
+        <StatTile label="Сообщений за 7 дней" value={numberFormatter.format(numberValue(totals.messages_7d))} />
+        <StatTile label="Открытые риски" value={numberFormatter.format(numberValue(totals.risks_open))} />
+        <StatTile label="Полнота синка" value={`${Math.round(numberValue(totals.sync_completeness_pct))}%`} />
+      </div>
+
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 xl:grid-cols-3">
       <Card data-motion-item>
         <CardHeader>
           <CardTitle>Индекс здоровья проекта</CardTitle>
         </CardHeader>
         <CardContent>
-          <ChartContainer config={{ value: { label: "Индекс", markerClassName: "bg-primary" } }}>
-            <AreaChart data={health.map((item) => ({ ...item, label: toRuDateLabel(item.point) }))}>
-              <CartesianGrid vertical={false} />
-              <XAxis dataKey="label" tickLine={false} axisLine={false} minTickGap={24} />
-              <YAxis tickLine={false} axisLine={false} domain={[0, 100]} />
-              <ChartTooltip content={<ChartTooltipContent formatter={(value) => numberFormatter.format(numberValue(value))} />} />
-              <Area dataKey="value" type="monotone" stroke="hsl(var(--primary))" fill="hsl(var(--primary))" fillOpacity={0.15} />
-            </AreaChart>
-          </ChartContainer>
+          {hasHealth ? (
+            <ChartContainer config={{ value: { label: "Индекс", markerClassName: "bg-primary" } }}>
+              <AreaChart data={health.map((item) => ({ ...item, label: toRuDateLabel(item.point) }))}>
+                <CartesianGrid vertical={false} />
+                <XAxis dataKey="label" tickLine={false} axisLine={false} minTickGap={24} />
+                <YAxis tickLine={false} axisLine={false} domain={[0, 100]} />
+                <ChartTooltip content={<ChartTooltipContent formatter={(value) => numberFormatter.format(numberValue(value))} />} />
+                <Area dataKey="value" type="monotone" stroke="hsl(var(--primary))" fill="hsl(var(--primary))" fillOpacity={0.15} dot={{ r: 2 }} />
+              </AreaChart>
+            </ChartContainer>
+          ) : (
+            <ChartNoData message="Индекс здоровья появится после накопления истории сигналов." />
+          )}
         </CardContent>
       </Card>
 
@@ -135,15 +259,19 @@ function renderDashboardCharts(payload, moneyFormatter, numberFormatter) {
           <CardTitle>Скорость выполнения задач</CardTitle>
         </CardHeader>
         <CardContent>
-          <ChartContainer config={{ value: { label: "Завершено", markerClassName: "bg-chart-2" } }}>
-            <BarChart data={velocity.map((item) => ({ ...item, label: toRuDateLabel(item.point) }))}>
-              <CartesianGrid vertical={false} />
-              <XAxis dataKey="label" tickLine={false} axisLine={false} minTickGap={24} />
-              <YAxis tickLine={false} axisLine={false} />
-              <ChartTooltip content={<ChartTooltipContent formatter={(value) => numberFormatter.format(numberValue(value))} />} />
-              <Bar dataKey="value" fill="hsl(var(--chart-2))" radius={[4, 4, 0, 0]} />
-            </BarChart>
-          </ChartContainer>
+          {hasVelocity ? (
+            <ChartContainer config={{ value: { label: "Завершено", markerClassName: "bg-chart-2" } }}>
+              <BarChart data={velocity.map((item) => ({ ...item, label: toRuDateLabel(item.point) }))}>
+                <CartesianGrid vertical={false} />
+                <XAxis dataKey="label" tickLine={false} axisLine={false} minTickGap={24} />
+                <YAxis tickLine={false} axisLine={false} />
+                <ChartTooltip content={<ChartTooltipContent formatter={(value) => numberFormatter.format(numberValue(value))} />} />
+                <Bar dataKey="value" fill="hsl(var(--chart-2))" radius={[4, 4, 0, 0]} />
+              </BarChart>
+            </ChartContainer>
+          ) : (
+            <ChartNoData message="Нет завершённых задач за выбранный период." hint="Проверьте синхронизацию Linear." />
+          )}
         </CardContent>
       </Card>
 
@@ -152,15 +280,19 @@ function renderDashboardCharts(payload, moneyFormatter, numberFormatter) {
           <CardTitle>Просроченные задачи (Linear)</CardTitle>
         </CardHeader>
         <CardContent>
-          <ChartContainer config={{ value: { label: "Просрочено", markerClassName: "bg-destructive" } }}>
-            <LineChart data={overdueIssues.map((item) => ({ ...item, label: toRuDateLabel(item.point) }))}>
-              <CartesianGrid vertical={false} />
-              <XAxis dataKey="label" tickLine={false} axisLine={false} minTickGap={24} />
-              <YAxis tickLine={false} axisLine={false} />
-              <ChartTooltip content={<ChartTooltipContent formatter={(value) => numberFormatter.format(numberValue(value))} />} />
-              <Line dataKey="value" type="monotone" stroke="hsl(var(--destructive))" strokeWidth={2} dot={false} />
-            </LineChart>
-          </ChartContainer>
+          {hasOverdue ? (
+            <ChartContainer config={{ value: { label: "Просрочено", markerClassName: "bg-destructive" } }}>
+              <LineChart data={overdueIssues.map((item) => ({ ...item, label: toRuDateLabel(item.point) }))}>
+                <CartesianGrid vertical={false} />
+                <XAxis dataKey="label" tickLine={false} axisLine={false} minTickGap={24} />
+                <YAxis tickLine={false} axisLine={false} />
+                <ChartTooltip content={<ChartTooltipContent formatter={(value) => numberFormatter.format(numberValue(value))} />} />
+                <Line dataKey="value" type="monotone" stroke="hsl(var(--destructive))" strokeWidth={2} dot={{ r: 2 }} />
+              </LineChart>
+            </ChartContainer>
+          ) : (
+            <ChartNoData message="Просроченных задач пока нет." />
+          )}
         </CardContent>
       </Card>
 
@@ -169,15 +301,19 @@ function renderDashboardCharts(payload, moneyFormatter, numberFormatter) {
           <CardTitle>Скорость ответа клиенту (мин)</CardTitle>
         </CardHeader>
         <CardContent>
-          <ChartContainer config={{ value: { label: "Среднее, мин", markerClassName: "bg-chart-3" } }}>
-            <LineChart data={responsiveness.map((item) => ({ ...item, label: toRuDateLabel(item.point) }))}>
-              <CartesianGrid vertical={false} />
-              <XAxis dataKey="label" tickLine={false} axisLine={false} minTickGap={24} />
-              <YAxis tickLine={false} axisLine={false} />
-              <ChartTooltip content={<ChartTooltipContent formatter={(value) => numberFormatter.format(numberValue(value))} />} />
-              <Line dataKey="value" type="monotone" stroke="hsl(var(--chart-3))" strokeWidth={2} dot={false} />
-            </LineChart>
-          </ChartContainer>
+          {hasResponsiveness ? (
+            <ChartContainer config={{ value: { label: "Среднее, мин", markerClassName: "bg-chart-3" } }}>
+              <LineChart data={responsiveness.map((item) => ({ ...item, label: toRuDateLabel(item.point) }))}>
+                <CartesianGrid vertical={false} />
+                <XAxis dataKey="label" tickLine={false} axisLine={false} minTickGap={24} />
+                <YAxis tickLine={false} axisLine={false} />
+                <ChartTooltip content={<ChartTooltipContent formatter={(value) => numberFormatter.format(numberValue(value))} />} />
+                <Line dataKey="value" type="monotone" stroke="hsl(var(--chart-3))" strokeWidth={2} dot={{ r: 2 }} />
+              </LineChart>
+            </ChartContainer>
+          ) : (
+            <ChartNoData message="Нет данных по времени ответа клиента." />
+          )}
         </CardContent>
       </Card>
 
@@ -186,22 +322,26 @@ function renderDashboardCharts(payload, moneyFormatter, numberFormatter) {
           <CardTitle>Договоренности vs подписанные офферы</CardTitle>
         </CardHeader>
         <CardContent>
-          <ChartContainer
-            config={{
-              agreements: { label: "Договоренности", markerClassName: "bg-chart-1" },
-              signed_offers: { label: "Подписанные офферы", markerClassName: "bg-chart-4" },
-            }}
-          >
-            <BarChart data={agreements.map((item) => ({ ...item, label: toRuDateLabel(item.point) }))}>
-              <CartesianGrid vertical={false} />
-              <XAxis dataKey="label" tickLine={false} axisLine={false} minTickGap={24} />
-              <YAxis tickLine={false} axisLine={false} />
-              <ChartTooltip content={<ChartTooltipContent formatter={(value) => numberFormatter.format(numberValue(value))} />} />
-              <ChartLegend content={<ChartLegendContent />} />
-              <Bar dataKey="agreements" stackId="a" fill="hsl(var(--chart-1))" radius={[4, 4, 0, 0]} />
-              <Bar dataKey="signed_offers" stackId="a" fill="hsl(var(--chart-4))" radius={[4, 4, 0, 0]} />
-            </BarChart>
-          </ChartContainer>
+          {hasAgreements ? (
+            <ChartContainer
+              config={{
+                agreements: { label: "Договоренности", markerClassName: "bg-chart-1" },
+                signed_offers: { label: "Подписанные офферы", markerClassName: "bg-chart-4" },
+              }}
+            >
+              <BarChart data={agreements.map((item) => ({ ...item, label: toRuDateLabel(item.point) }))}>
+                <CartesianGrid vertical={false} />
+                <XAxis dataKey="label" tickLine={false} axisLine={false} minTickGap={24} />
+                <YAxis tickLine={false} axisLine={false} />
+                <ChartTooltip content={<ChartTooltipContent formatter={(value) => numberFormatter.format(numberValue(value))} />} />
+                <ChartLegend content={<ChartLegendContent />} />
+                <Bar dataKey="agreements" stackId="a" fill="hsl(var(--chart-1))" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="signed_offers" stackId="a" fill="hsl(var(--chart-4))" radius={[4, 4, 0, 0]} />
+              </BarChart>
+            </ChartContainer>
+          ) : (
+            <ChartNoData message="Пока нет связанной истории по договорённостям и офферам." />
+          )}
         </CardContent>
       </Card>
 
@@ -210,22 +350,26 @@ function renderDashboardCharts(payload, moneyFormatter, numberFormatter) {
           <CardTitle>Динамика рисков</CardTitle>
         </CardHeader>
         <CardContent>
-          <ChartContainer
-            config={{
-              count: { label: "Количество рисков", markerClassName: "bg-destructive" },
-              severity_avg: { label: "Средняя критичность", markerClassName: "bg-chart-5" },
-            }}
-          >
-            <LineChart data={risks.map((item) => ({ ...item, label: toRuDateLabel(item.point) }))}>
-              <CartesianGrid vertical={false} />
-              <XAxis dataKey="label" tickLine={false} axisLine={false} minTickGap={24} />
-              <YAxis tickLine={false} axisLine={false} />
-              <ChartTooltip content={<ChartTooltipContent formatter={(value) => numberFormatter.format(numberValue(value))} />} />
-              <ChartLegend content={<ChartLegendContent />} />
-              <Line dataKey="count" type="monotone" stroke="hsl(var(--destructive))" strokeWidth={2} dot={false} />
-              <Line dataKey="severity_avg" type="monotone" stroke="hsl(var(--chart-5))" strokeWidth={2} dot={false} />
-            </LineChart>
-          </ChartContainer>
+          {hasRisks ? (
+            <ChartContainer
+              config={{
+                count: { label: "Количество рисков", markerClassName: "bg-destructive" },
+                severity_avg: { label: "Средняя критичность", markerClassName: "bg-chart-5" },
+              }}
+            >
+              <LineChart data={risks.map((item) => ({ ...item, label: toRuDateLabel(item.point) }))}>
+                <CartesianGrid vertical={false} />
+                <XAxis dataKey="label" tickLine={false} axisLine={false} minTickGap={24} />
+                <YAxis tickLine={false} axisLine={false} />
+                <ChartTooltip content={<ChartTooltipContent formatter={(value) => numberFormatter.format(numberValue(value))} />} />
+                <ChartLegend content={<ChartLegendContent />} />
+                <Line dataKey="count" type="monotone" stroke="hsl(var(--destructive))" strokeWidth={2} dot={{ r: 2 }} />
+                <Line dataKey="severity_avg" type="monotone" stroke="hsl(var(--chart-5))" strokeWidth={2} dot={{ r: 2 }} />
+              </LineChart>
+            </ChartContainer>
+          ) : (
+            <ChartNoData message="История рисков ещё не накоплена." />
+          )}
         </CardContent>
       </Card>
 
@@ -234,22 +378,26 @@ function renderDashboardCharts(payload, moneyFormatter, numberFormatter) {
           <CardTitle>Факт затрат vs pipeline</CardTitle>
         </CardHeader>
         <CardContent>
-          <ChartContainer
-            config={{
-              burn: { label: "Факт затрат", markerClassName: "bg-destructive" },
-              budget: { label: "Пайплайн", markerClassName: "bg-primary" },
-            }}
-          >
-            <AreaChart data={burnBudget.map((item) => ({ ...item, label: toRuDateLabel(item.point) }))}>
-              <CartesianGrid vertical={false} />
-              <XAxis dataKey="label" tickLine={false} axisLine={false} minTickGap={24} />
-              <YAxis tickLine={false} axisLine={false} />
-              <ChartTooltip content={<ChartTooltipContent formatter={(value) => moneyFormatter.format(numberValue(value))} />} />
-              <ChartLegend content={<ChartLegendContent />} />
-              <Area dataKey="burn" type="monotone" stroke="hsl(var(--destructive))" fill="hsl(var(--destructive))" fillOpacity={0.12} />
-              <Area dataKey="budget" type="monotone" stroke="hsl(var(--primary))" fill="hsl(var(--primary))" fillOpacity={0.1} />
-            </AreaChart>
-          </ChartContainer>
+          {hasBurnBudget ? (
+            <ChartContainer
+              config={{
+                burn: { label: "Факт затрат", markerClassName: "bg-destructive" },
+                budget: { label: "Пайплайн", markerClassName: "bg-primary" },
+              }}
+            >
+              <AreaChart data={burnBudget.map((item) => ({ ...item, label: toRuDateLabel(item.point) }))}>
+                <CartesianGrid vertical={false} />
+                <XAxis dataKey="label" tickLine={false} axisLine={false} minTickGap={24} />
+                <YAxis tickLine={false} axisLine={false} />
+                <ChartTooltip content={<ChartTooltipContent formatter={(value) => moneyFormatter.format(numberValue(value))} />} />
+                <ChartLegend content={<ChartLegendContent />} />
+                <Area dataKey="burn" type="monotone" stroke="hsl(var(--destructive))" fill="hsl(var(--destructive))" fillOpacity={0.12} dot={{ r: 2 }} />
+                <Area dataKey="budget" type="monotone" stroke="hsl(var(--primary))" fill="hsl(var(--primary))" fillOpacity={0.1} dot={{ r: 2 }} />
+              </AreaChart>
+            </ChartContainer>
+          ) : (
+            <ChartNoData message="Недостаточно данных по затратам и пайплайну." />
+          )}
         </CardContent>
       </Card>
 
@@ -258,15 +406,19 @@ function renderDashboardCharts(payload, moneyFormatter, numberFormatter) {
           <CardTitle>Потенциал апсейла</CardTitle>
         </CardHeader>
         <CardContent>
-          <ChartContainer config={{ value: { label: "Индекс апсейла", markerClassName: "bg-primary" } }}>
-            <BarChart data={upsell.map((item) => ({ ...item, label: toRuDateLabel(item.point), value: numberValue(item.value) * 100 }))}>
-              <CartesianGrid vertical={false} />
-              <XAxis dataKey="label" tickLine={false} axisLine={false} minTickGap={24} />
-              <YAxis tickLine={false} axisLine={false} domain={[0, 100]} />
-              <ChartTooltip content={<ChartTooltipContent formatter={(value) => `${Math.round(numberValue(value))}%`} />} />
-              <Bar dataKey="value" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
-            </BarChart>
-          </ChartContainer>
+          {hasUpsell ? (
+            <ChartContainer config={{ value: { label: "Индекс апсейла", markerClassName: "bg-primary" } }}>
+              <BarChart data={upsell.map((item) => ({ ...item, label: toRuDateLabel(item.point), value: numberValue(item.value) * 100 }))}>
+                <CartesianGrid vertical={false} />
+                <XAxis dataKey="label" tickLine={false} axisLine={false} minTickGap={24} />
+                <YAxis tickLine={false} axisLine={false} domain={[0, 100]} />
+                <ChartTooltip content={<ChartTooltipContent formatter={(value) => `${Math.round(numberValue(value))}%`} />} />
+                <Bar dataKey="value" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
+              </BarChart>
+            </ChartContainer>
+          ) : (
+            <ChartNoData message="Сигналы апсейла пока не обнаружены." />
+          )}
         </CardContent>
       </Card>
 
@@ -275,24 +427,29 @@ function renderDashboardCharts(payload, moneyFormatter, numberFormatter) {
           <CardTitle>Полнота синхронизации источников</CardTitle>
         </CardHeader>
         <CardContent>
-          <ChartContainer
-            config={{
-              completeness_pct: { label: "Полнота, %", markerClassName: "bg-primary" },
-              missing_count: { label: "Пропуски", markerClassName: "bg-destructive" },
-            }}
-          >
-            <LineChart data={syncReconciliation.map((item) => ({ ...item, label: toRuDateLabel(item.point) }))}>
-              <CartesianGrid vertical={false} />
-              <XAxis dataKey="label" tickLine={false} axisLine={false} minTickGap={24} />
-              <YAxis tickLine={false} axisLine={false} domain={[0, 100]} />
-              <ChartTooltip content={<ChartTooltipContent formatter={(value) => numberFormatter.format(numberValue(value))} />} />
-              <ChartLegend content={<ChartLegendContent />} />
-              <Line dataKey="completeness_pct" type="monotone" stroke="hsl(var(--primary))" strokeWidth={2} dot={false} />
-              <Line dataKey="missing_count" type="monotone" stroke="hsl(var(--destructive))" strokeWidth={2} dot={false} />
-            </LineChart>
-          </ChartContainer>
+          {hasSync ? (
+            <ChartContainer
+              config={{
+                completeness_pct: { label: "Полнота, %", markerClassName: "bg-primary" },
+                missing_count: { label: "Пропуски", markerClassName: "bg-destructive" },
+              }}
+            >
+              <LineChart data={syncReconciliation.map((item) => ({ ...item, label: toRuDateLabel(item.point) }))}>
+                <CartesianGrid vertical={false} />
+                <XAxis dataKey="label" tickLine={false} axisLine={false} minTickGap={24} />
+                <YAxis tickLine={false} axisLine={false} domain={[0, 100]} />
+                <ChartTooltip content={<ChartTooltipContent formatter={(value) => numberFormatter.format(numberValue(value))} />} />
+                <ChartLegend content={<ChartLegendContent />} />
+                <Line dataKey="completeness_pct" type="monotone" stroke="hsl(var(--primary))" strokeWidth={2} dot={{ r: 2 }} />
+                <Line dataKey="missing_count" type="monotone" stroke="hsl(var(--destructive))" strokeWidth={2} dot={{ r: 2 }} />
+              </LineChart>
+            </ChartContainer>
+          ) : (
+            <ChartNoData message="Метрики полноты появятся после цикла reconciliation." />
+          )}
         </CardContent>
       </Card>
+      </div>
     </div>
   );
 }
@@ -320,24 +477,48 @@ function renderAgreements(agreements, isAllProjects) {
 }
 
 function renderRisks(risks, isAllProjects) {
+  const visibleRisks = compactUniqueRisks(risks, 12);
   return (
-    <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
-      {risks.map((risk) => (
+    <div className="space-y-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-xs text-muted-foreground">
+          Показано {visibleRisks.length} из {Array.isArray(risks) ? risks.length : 0} рисков. Дубликаты автоматически свернуты.
+        </p>
+      </div>
+      <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+      {visibleRisks.map((risk) => {
+        const severityMeta = formatRiskSeverityMeta(risk.severity);
+        const probabilityMeta = formatRiskProbabilityMeta(risk.probability);
+        const updatedAt = formatHumanDateRu(risk.updated_at);
+        const relativeTime = formatRelativeTimeRu(risk.updated_at);
+        return (
         <Card key={`${risk.source}-${risk.id}`} data-motion-item>
-          <CardContent className="space-y-2 pt-4">
-            <div className="flex flex-wrap items-center gap-2">
+          <CardContent className="space-y-3 pt-4">
+            <div className="flex flex-wrap items-center justify-between gap-2">
               {isAllProjects ? <ProjectBadge projectId={risk.project_id} projectName={risk.project_name} /> : <Badge variant="outline">{risk.project_name}</Badge>}
-              <Badge variant={numberValue(risk.severity) >= 4 ? "destructive" : "secondary"}>Критичность {Math.round(numberValue(risk.severity))}</Badge>
-              <Badge variant="outline">{risk.source}</Badge>
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge variant="outline">{formatRiskSourceRu(risk.source)}</Badge>
+                <Badge className={cn("border", severityMeta.className)}>{severityMeta.label}</Badge>
+              </div>
             </div>
-            <p className="text-sm">{risk.title}</p>
-            <p className="text-xs text-muted-foreground">
-              Вероятность: {Math.round(numberValue(risk.probability) * 100)}% • {risk.updated_at ? new Date(risk.updated_at).toLocaleDateString("ru-RU") : "-"}
-            </p>
+            <p className="text-sm font-medium leading-snug">{formatRiskTitleRu(risk.title)}</p>
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge className={cn("border", probabilityMeta.className)}>
+                <AlertTriangle className="mr-1 size-3.5" />
+                {probabilityMeta.label}
+              </Badge>
+              <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+                <Clock3 className="size-3.5" />
+                {updatedAt}
+                {relativeTime ? ` (${relativeTime})` : ""}
+              </span>
+            </div>
           </CardContent>
         </Card>
-      ))}
-      {!risks.length ? <p className="text-sm text-muted-foreground">Риски по выбранному фильтру не найдены.</p> : null}
+      );
+      })}
+      {!visibleRisks.length ? <p className="text-sm text-muted-foreground">Риски по выбранному фильтру не найдены.</p> : null}
+      </div>
     </div>
   );
 }
