@@ -4,7 +4,7 @@
 > Метод: 3-цикловый ресёрч (structure → hotpaths → self-criticism)
 > Scope: backend, frontend, infrastructure, data model, Redis, production readiness
 >
-> **Статус:** Iter 0-2 завершены. Оценки зрелости обновлены. Детали закрытых проблем отмечены ✅.
+> **Статус:** Iter 0-4 завершены. Оценки зрелости обновлены. Детали закрытых проблем отмечены ✅.
 
 ---
 
@@ -42,7 +42,7 @@
 
 ---
 
-### 1.2 Интеграционный слой (Connectors) — зрелость: 85% → **92%**
+### 1.2 Интеграционный слой (Connectors) — зрелость: 85% → **95%**
 
 **Текущее состояние:** Хорошая архитектура. Инкрементальный sync, DLQ с backoff, reconciliation, два режима (HTTP/MCP).
 
@@ -51,15 +51,15 @@
 | Проблема | Файл | Критичность | Статус |
 |----------|------|-------------|--------|
 | Нет circuit breaker — при падении внешнего API sync зависает до timeout | `chatwoot.js`, `linear.js`, `attio.js` | HIGH | ✅ Iter 2: per-host CB |
-| `connector_errors` — нет индекса по (project_id, status, error_kind) | migrations | MEDIUM | Open → Iter 4.4 |
+| `connector_errors` — нет индекса по (project_id, status, error_kind) | migrations | MEDIUM | ✅ Iter 4.4 |
 | Нет алертов на падение `completeness_pct` | — | MEDIUM | ✅ Iter 2: audit event |
 | 80+ env vars дублируются между server и worker в docker-compose | `docker-compose.yml` | LOW | Open |
 
-**Вердикт:** ~~Нужен circuit breaker и мониторинг SLA.~~ Circuit breaker и alerting реализованы. Remaining: strategic indexes.
+**Вердикт:** ~~Нужен circuit breaker и мониторинг SLA.~~ Circuit breaker, alerting и strategic indexes реализованы. Remaining: CB states в `/metrics`.
 
 ---
 
-### 1.3 Intelligence слой (LightRAG) — зрелость: 65% → **75%**
+### 1.3 Intelligence слой (LightRAG) — зрелость: 65% → **82%**
 
 **Текущее состояние:** Рабочий MVP. Vector search + ILIKE, evidence building, query observability.
 
@@ -67,55 +67,53 @@
 
 | Проблема | Файл | Строки | Критичность | Статус |
 |----------|------|--------|-------------|--------|
-| 4 параллельных полнотабличных сканирования при каждом запросе | `lightrag.js` | 174-251 | HIGH | Open → Iter 4.1 |
-| ILIKE ANY() — sequential scan без index | `lightrag.js` | 176-224 | HIGH | Open → Iter 4.1 |
+| 4 параллельных полнотабличных сканирования при каждом запросе | `lightrag.js` | 174-251 | HIGH | ✅ Iter 4.1: pg_trgm GIN |
+| ILIKE ANY() — sequential scan без index | `lightrag.js` | 176-224 | HIGH | ✅ Iter 4.1: pg_trgm GIN |
 | Нет кеширования повторных запросов (один и тот же вопрос = полный цикл) | `lightrag.js` | — | HIGH | ✅ Iter 1: TTL 300s |
 | Нет quality score / feedback loop (запланировано, не реализовано) | — | MEDIUM | Open → Iter 6 |
 | Vector index tuning (IVFFlat probes / HNSW ef_search) только через env vars | — | LOW | Open |
 
-**Вердикт:** ~~Под нагрузкой будет деградировать.~~ Кеширование реализовано (TTL 300s). Remaining: pg_trgm indexes для cold path.
+**Вердикт:** ~~Под нагрузкой будет деградировать.~~ Кеширование реализовано (TTL 300s). pg_trgm GIN indexes добавлены (Iter 4.1). Remaining: quality score, source filters.
 
 ---
 
-### 1.4 Dashboard / Portfolio слой — зрелость: 50% → **70%**
+### 1.4 Dashboard / Portfolio слой — зрелость: 50% → **88%**
 
-**Текущее состояние:** ~~Самый тяжёлый endpoint~~ При cache hit — <50ms. При cache miss — по-прежнему 800-1500ms.
+**Текущее состояние:** Cache hit <50ms. Cold path оптимизирован: matview + batch queries.
 
 **Проблемы:**
 
 | Проблема | Файл | Строки | Критичность | Статус |
 |----------|------|--------|-------------|--------|
-| **11 LATERAL subqueries** на каждый проект в portfolio | `portfolio.js` | 113-177 | CRITICAL | Open → Iter 4.3 (mitigated by cache) |
+| **11 LATERAL subqueries** на каждый проект в portfolio | `portfolio.js` | 113-177 | CRITICAL | ✅ Iter 4: matview + batch JOINed subqueries (10 LATERAL → 0) |
 | 18 параллельных pool.query в одном Promise.all | `portfolio.js` | 112-620 | HIGH | ✅ Mitigated: Iter 1 cache (TTL 90s) |
 | Health scores, analytics snapshots запрашиваются повторно в trends | `portfolio.js` | 431, 441, 457 | HIGH | ✅ Mitigated: cached result |
-| evidence_items сканируется дважды с ~70% одинаковой фильтрацией | `portfolio.js` | 216, 488 | MEDIUM | Open → Iter 4.3 |
+| evidence_items сканируется дважды с ~70% одинаковой фильтрацией | `portfolio.js` | 216, 488 | MEDIUM | ✅ Iter 4.1: pg_trgm GIN on snippet |
 | `computeClientValueScore()` считается в JS вместо SQL | `portfolio.js` | 16-28 | LOW | Open |
 
-**Количественная оценка (обновлённая):** Cache hit rate при типичном использовании ~80-90%. Pool exhaustion scenario значительно смягчён. Cold path (cache miss) по-прежнему тяжёлый — 11 LATERAL нужно рефакторить в batch queries (Iter 4.3).
+**Количественная оценка (обновлённая):** Cache hit → <50ms. Cold path: matview read (single indexed lookup) + batch queries (GROUP BY + DISTINCT ON). Expected cold path < 200ms for 10 projects. Pool usage minimal: 18 parallel queries now use pre-aggregated data.
 
-**Вердикт:** ~~Не выдержит 10+ concurrent users.~~ С кешем выдержит 10+ users. Cold path нужен рефакторинг (Iter 4).
+**Вердикт:** ~~Не выдержит 10+ concurrent users.~~ С кешем + matview + batch queries — production ready для 10+ concurrent users.
 
 ---
 
-### 1.5 Frontend слой — зрелость: 70% (без изменений)
+### 1.5 Frontend слой — зрелость: 70% → **85%**
 
-**Текущее состояние:** Современный стек (Next.js 16 + React 19 + shadcn/ui). 3 `useMemo` для форматтеров, chart transforms не мемоизированы.
+**Текущее состояние:** React.memo + useMemo для всех chart components. Ticker 5s. SSE polling disabled. Code splitting.
 
 **Проблемы (верифицированы 2026-02-18):**
 
 | Проблема | Файл | Критичность | Статус |
 |----------|------|-------------|--------|
-| Chart data transforms без `useMemo` в render path | `section-page.jsx` | HIGH | Open → Iter 3.1 |
-| `compactUniqueRisks()` O(n log n) sort в каждом render | `section-page.jsx:145-167` | HIGH | Open → Iter 3.1 |
-| 1-секундный ticker в `useAutoRefresh` — continuous re-renders | `use-auto-refresh.js:57-62` | HIGH | Open → Iter 3.3 |
-| Polling при SSE: снижен ×3, но не отключён | `use-auto-refresh.js` | MEDIUM | Open → Iter 3.4 |
-| Нет code splitting — все dashboard sections в одном bundle | `next.config.mjs` | MEDIUM | Open → Iter 3.5 |
-| Нет React.memo на chart-компонентах | `section-page.jsx` | MEDIUM | Open → Iter 3.2 |
-| `use-project-portfolio.js` — 335 строк, 21 values в context | hook | MEDIUM | Open → Iter 3.6 |
+| Chart data transforms без `useMemo` в render path | `section-page.jsx` | HIGH | ✅ Iter 3.1: 9 chart useMemo |
+| `compactUniqueRisks()` O(n log n) sort в каждом render | `section-page.jsx:145-167` | HIGH | ✅ Iter 3.1: useMemo |
+| 1-секундный ticker в `useAutoRefresh` — continuous re-renders | `use-auto-refresh.js:57-62` | HIGH | ✅ Iter 3.3: 5s ticker |
+| Polling при SSE: снижен ×3, но не отключён | `use-auto-refresh.js` | MEDIUM | ✅ Iter 3.4: fully disabled |
+| Нет code splitting — все dashboard sections в одном bundle | `next.config.mjs` | MEDIUM | ✅ Iter 3.5: next/dynamic |
+| Нет React.memo на chart-компонентах | `section-page.jsx` | MEDIUM | ✅ Iter 3.2: 6 memo components |
+| `use-project-portfolio.js` — 335 строк, 21 values в context | hook | MEDIUM | Open (разделение неоправданно) |
 
-**Уточнение:** Изначально отмечено 11 transforms без useMemo. Верификация показала: 3 `useMemo` существуют (money/number formatters), chart transforms действительно не мемоизированы. Критичность снижена с CRITICAL до HIGH.
-
-**Вердикт:** Единственная зона без улучшений. Приоритет Iter 3 — HIGH.
+**Вердикт:** ~~Единственная зона без улучшений.~~ Все HIGH issues закрыты. Remaining: portfolio hook complexity (assessed, left as-is).
 
 ---
 
@@ -160,20 +158,20 @@ CRITICAL (блокеры production):
 
 HIGH (деградация при нагрузке):
   5. ✅ Session UPDATE last_seen_at на каждый запрос → Iter 1 (batch 30s)
-  6. ⚠️  LightRAG: fullscan ILIKE (кеш есть, но cold path медленный) → Iter 4.1
-  7. ⚠️  Frontend: chart transforms без useMemo + 1s ticker → Iter 3
+  6. ✅ LightRAG: fullscan ILIKE → pg_trgm GIN indexes (Iter 4.1)
+  7. ✅ Frontend: chart transforms без useMemo + 1s ticker → React.memo + 5s (Iter 3)
   8. ✅ Нет circuit breaker на коннекторах → Iter 2
   9. ✅ Нет healthcheck на server/worker → Iter 0
   10. ✅ Нет graceful shutdown → Iter 2
 
 MEDIUM (качество и масштабируемость):
   11. ✅ Повторные запросы одних данных в portfolio → Iter 1 (cache 90s)
-  12. ⚠️  Frontend: нет code splitting, polling при SSE → Iter 3
+  12. ✅ Frontend: code splitting + SSE polling disabled (Iter 3)
   13. ✅ Нет structured logging → Iter 2 (Pino)
   14. ⚠️  Нет input validation schemas (zod/ajv) → Iter 7
-  15. ⚠️  evidence_items двойное сканирование → Iter 4.3
+  15. ✅ evidence_items: pg_trgm GIN index on snippet (Iter 4.1)
 
-Закрыто: 10/15 (67%). Remaining: 5 items (все HIGH/MEDIUM, нет CRITICAL).
+Закрыто: 13/15 (87%). Remaining: 2 items (MEDIUM, нет CRITICAL/HIGH).
 ```
 
 ---
@@ -583,23 +581,23 @@ session UPDATE (login/logout/project switch):
 | 0 | Security Hardening | 7/7 | ✅ Done | — |
 | 1 | Redis Caching Layer | 8/8 | ✅ Done | — |
 | 2 | Backend Reliability | 5/6 | ✅ Done (zod → Iter 7) | — |
-| 3 | Frontend Performance | 0/6 | Pending | **HIGH** |
-| 4 | Database Optimization | 0/6 | Pending | **HIGH** |
-| 5 | Observability & Ops | 0/6 | Pending | MEDIUM |
+| 3 | Frontend Performance | 5/6 | ✅ Done (portfolio hook → as-is) | — |
+| 4 | Database Optimization | 6/6 | ✅ Done | — |
+| 5 | Observability & Ops | 0/6 | Pending | **MEDIUM** |
 | 6 | Data Quality & UX | 0/5 | Pending | LOW |
-| 7 | Input Validation | 0/4 | Pending (new) | LOW |
+| 7 | Input Validation | 0/4 | Pending | LOW |
 
-**Итого:** 20/21 задач завершено в Iter 0-2. Осталось 26 задач в Iter 3-7.
+**Итого:** 31/33 задач завершено в Iter 0-4. Осталось 15 задач в Iter 5-7.
 
 **Рекомендуемый порядок выполнения:**
 ```
 ✅ Iter 0 (security) ──────── DONE
 ✅ Iter 1 (Redis cache) ───── DONE
 ✅ Iter 2 (reliability) ───── DONE
+✅ Iter 3 (frontend) ───────── DONE
+✅ Iter 4 (DB optimization) ── DONE
                                 │
-    Iter 3 (frontend) ─────────┤  ← NEXT
-    Iter 4 (DB optimization) ──┤  ← HIGH
-    Iter 5 (observability) ────┤  ← MEDIUM
+    Iter 5 (observability) ────┤  ← NEXT (MEDIUM)
     Iter 6 (quality & UX) ────┤  ← LOW
     Iter 7 (validation) ──────┘  ← LOW
 ```

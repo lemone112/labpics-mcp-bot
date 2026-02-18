@@ -187,6 +187,12 @@ export async function runAllConnectorsSync(pool, scope, logger = console) {
       payload: summary,
     });
   }
+  try {
+    await pool.query('REFRESH MATERIALIZED VIEW CONCURRENTLY mv_portfolio_dashboard');
+  } catch {
+    // matview may not exist yet (pre-migration) — swallow
+  }
+
   let reconciliation = null;
   try {
     reconciliation = await runSyncReconciliation(pool, scope, { source: "sync_cycle" });

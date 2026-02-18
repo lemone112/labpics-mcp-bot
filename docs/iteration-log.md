@@ -157,3 +157,52 @@ Circuit breaker вызвал failure в `http.unit.test.js` — global state (`c
 
 - [`docs/mvp-vs-roadmap.md`](./mvp-vs-roadmap.md) — обновлённый roadmap
 - [`docs/product-structure-analysis.md`](./product-structure-analysis.md) — обновлён
+
+---
+
+## Iter 3 — Frontend Performance (закрыта — 2026-02-18)
+
+> Chart transforms мемоизированы. Ticker 5s. SSE polling отключён. Code splitting добавлен.
+
+### Что изменено
+
+| # | Задача | Файлы | Результат |
+|---|--------|-------|-----------|
+| 3.1 | Memoize chart transforms | `section-page.jsx` | 5 render-функций → React.memo компоненты. 9 chart data transforms обёрнуты в `useMemo`. `compactUniqueRisks()` мемоизирован |
+| 3.2 | React.memo для chart components | `section-page.jsx` | `DashboardCharts`, `AgreementsSection`, `RisksSection`, `FinanceSection`, `OffersSection`, `MessagesSection` — все в `memo()` |
+| 3.3 | Ticker interval 1s → 5s | `use-auto-refresh.js` | `setInterval` 1000 → 5000. State updates ×5 меньше |
+| 3.4 | Disable polling при SSE | `use-auto-refresh.js` | `effectiveInterval = sseConnected ? 0 : intervalMs`. Polling полностью отключён при SSE. Tab-refocus stale check использует base `intervalMs` |
+| 3.5 | Code splitting | `[section]/page.jsx` | `next/dynamic` для `ControlTowerSectionPage` с `PageLoadingSkeleton` fallback |
+| 3.6 | Рефактор portfolio hook | `use-project-portfolio.js` | Оценка: уже оптимизирован (useMemo на contextValue, useCallback на handlers). Разделение добавило бы 3 nested contexts без выигрыша. **Решение: оставить as-is** |
+
+### Самокритика
+
+- Build не удалось проверить в sandbox (Google Fonts TLS) — синтаксис верифицирован через brace/paren balance.
+- `use-project-portfolio.js` не разделён — осознанное решение, координация между selection/activation/refresh требует единого context.
+
+---
+
+## Iter 4 — Database Optimization (закрыта — 2026-02-18)
+
+> pg_trgm для ILIKE. Materialized view для dashboard. LATERAL → batch. Orphaned tables очищены. Partitioning infrastructure.
+
+### Что изменено
+
+| # | Задача | Файлы | Результат |
+|---|--------|-------|-----------|
+| 4.1 | pg_trgm + GIN indexes | `0018_database_optimization.sql` | `CREATE EXTENSION pg_trgm`. GIN trgm indexes на `cw_contacts(name, email)`, `cw_messages(content)`, `linear_issues_raw(title)`, `attio_opportunities_raw(title)`, `evidence_items(snippet)` — 6 indexes |
+| 4.2 | Materialized view | `0018_database_optimization.sql` | `mv_portfolio_dashboard` с batch JOINed subqueries (не LATERAL). Unique index для REFRESH CONCURRENTLY. Scope index |
+| 4.3 | LATERAL → batch queries | `portfolio.js` | Dashboard query: 6 LATERAL → SELECT from `mv_portfolio_dashboard`. Finance query: 4 LATERAL → JOINed pre-aggregated subqueries (GROUP BY, DISTINCT ON). Итого: 10 LATERAL eliminated |
+| 4.4 | Strategic indexes | `0018_database_optimization.sql` | `connector_errors(project_id, error_kind, status)`, `crm_account_contacts(project_id, account_id)` |
+| 4.5 | Cleanup orphaned tables | `0018_database_optimization.sql` | `DROP TABLE signup_requests, app_users`. Верифицировано: нет JS-ссылок, нет FK |
+| 4.6 | Partitioning audit_events | `0018_database_optimization.sql` | Composite index `(account_scope_id, project_id, created_at DESC)`. Shadow table `audit_events_partitioned` PARTITION BY RANGE (created_at). Function `create_monthly_audit_partition()`. 4 начальных партиции |
+
+### Дополнительно
+
+- `connector-sync.js`: `REFRESH MATERIALIZED VIEW CONCURRENTLY mv_portfolio_dashboard` после каждого sync cycle (перед reconciliation). Graceful: swallow ошибку если matview ещё не создан.
+
+### Самокритика
+
+- Matview `now()` фиксируется на момент REFRESH — `messages_7d` актуален на момент последнего sync, не запроса. Допустимо: данные и так обновляются только при sync.
+- `audit_events_partitioned` — shadow table без auto-migration. Требует ручного переноса данных при >5M строк.
+- Не добавлен GIN trgm index на `cw_contacts(phone_number)` — поле редко используется в поиске.

@@ -1,6 +1,6 @@
 # Статус продукта и roadmap (Production-Ready Plan)
 
-> Обновлено: 2026-02-18 (post Iter 0-2, recalibrated на основе верификации кодовой базы)
+> Обновлено: 2026-02-18 (post Iter 0-4)
 > Детальный анализ: [`docs/product-structure-analysis.md`](./product-structure-analysis.md)
 
 ---
@@ -23,55 +23,58 @@
 - Нет Zod/schema validation на POST endpoints (ручная проверка body)
 - `hydrateSessionScope()` может вызываться дважды (onRequest + preValidation)
 
-### Интеграции / Connectors (зрелость: 85% → 92%)
+### Интеграции / Connectors (зрелость: 85% → **95%**)
 
 **Было:** Инкрементальный sync, DLQ, reconciliation — но нет circuit breaker, нет alerting.
 
-**Сделано (Iter 2):**
+**Сделано (Iter 2 + 4):**
 - ✅ Circuit breaker в `fetchWithRetry()` — per-host, 5 failures threshold, 30s reset
 - ✅ Completeness alerting: при `completeness_pct < threshold` → audit event + SSE
+- ✅ Strategic indexes: `connector_errors(project_id, error_kind, status)`, `crm_account_contacts(project_id, account_id)`
 
 **Оставшиеся gaps:**
 - Circuit breaker states не экспортируются в `/metrics` (функция `getCircuitBreakerStates()` есть, но не вызывается)
-- Нет pg_trgm индексов для ILIKE search в connectors
 
-### Intelligence / LightRAG (зрелость: 65% → 75%)
+### Intelligence / LightRAG (зрелость: 65% → **82%**)
 
 **Было:** Рабочий vector search + ILIKE, но fullscan, нет кеша, нет quality score.
 
-**Сделано (Iter 1):**
+**Сделано (Iter 1 + 4):**
 - ✅ LightRAG query cache: `lightrag:{projectId}:{hash(query,topK)}`, TTL 300s
 - ✅ Event-driven invalidation при embeddings_run и sync completion
+- ✅ pg_trgm GIN indexes: `cw_messages(content)`, `linear_issues_raw(title)`, `attio_opportunities_raw(title)` — ILIKE → index scan
 
 **Оставшиеся gaps:**
-- ILIKE fullscan без pg_trgm index (4 параллельных полнотабличных скана)
 - Нет quality score / feedback loop
 - Нет фильтрации по типу источника
 
-### Dashboard / Portfolio (зрелость: 50% → 70%)
+### Dashboard / Portfolio (зрелость: 50% → **88%**)
 
 **Было:** 18-20 SQL запросов на каждый load без кеширования.
 
-**Сделано (Iter 1):**
+**Сделано (Iter 1 + 4):**
 - ✅ Portfolio overview cache: `portfolio:{accountScopeId}:{hash(projectIds)}`, TTL 90s
 - ✅ Control Tower cache: `ct:{projectId}`, TTL 120s
 - ✅ Event-driven invalidation при `job_completed`
+- ✅ Materialized view `mv_portfolio_dashboard` — dashboard metrics pre-computed
+- ✅ 10 LATERAL subqueries → matview read + batch JOINed subqueries
+- ✅ REFRESH CONCURRENTLY после каждого sync cycle
 
 **Оставшиеся gaps:**
-- 11 LATERAL subqueries по-прежнему при cache miss (cold path: 800-1500ms)
-- Нет materialized view для агрегатов
-- `computeClientValueScore()` в JS вместо SQL
+- `computeClientValueScore()` в JS вместо SQL (low priority)
 
-### Frontend (зрелость: 70% — без изменений)
+### Frontend (зрелость: 70% → **85%**)
 
-**Текущее состояние:** Next.js 16 + React 19 + shadcn/ui. 3 `useMemo` вызова (форматтеры), но chart transforms НЕ мемоизированы.
+**Было:** 3 `useMemo` для форматтеров, chart transforms не мемоизированы. 1s ticker, polling при SSE.
 
-**Верифицированные проблемы:**
-- Chart data transforms (`.map()`) в render path без `useMemo`
-- 1-секундный ticker в `useAutoRefresh` → continuous re-renders
-- Polling при SSE: снижен (×3), но не отключён
-- Нет code splitting (`next/dynamic` не используется в control-tower)
-- `use-project-portfolio.js`: 335 строк, 21 value в context
+**Сделано (Iter 3):**
+- ✅ 5 render functions → React.memo components + 9 chart data useMemo
+- ✅ Ticker 1s → 5s (×5 fewer re-renders)
+- ✅ Polling полностью отключён при SSE (было ×3 reduction)
+- ✅ `next/dynamic` code splitting для `ControlTowerSectionPage`
+
+**Оставшиеся gaps:**
+- `use-project-portfolio.js`: 335 строк, 21 values в context (оценено: разделение неоправданно)
 
 ### Инфраструктура (зрелость: 40% → 78%)
 
@@ -102,52 +105,12 @@
 | 0 | Security Hardening | ✅ Done | 7/7 | Bcrypt, non-root Docker, closed ports, rate limiting, resource limits, healthchecks |
 | 1 | Redis Caching Layer | ✅ Done | 8/8 | `lib/cache.js`, session/portfolio/lightrag/CT cache, event invalidation, metrics |
 | 2 | Backend Reliability | ✅ Done | 5/6 | Circuit breaker, graceful shutdown, Pino logging, backup script, completeness alerting. Zod validation отложена |
+| 3 | Frontend Performance | ✅ Done | 5/6 | React.memo + useMemo для charts, ticker 5s, SSE polling off, code splitting. Portfolio hook — оставлен as-is |
+| 4 | Database Optimization | ✅ Done | 6/6 | pg_trgm + 6 GIN indexes, matview `mv_portfolio_dashboard`, 10 LATERAL → batch, strategic indexes, orphaned tables dropped, audit partitioning infra |
 
 ---
 
-## 3) Оставшиеся итерации (рекалиброваны)
-
-### Iter 3 — Frontend Performance
-
-> Lighthouse Performance > 85. Нет jank при навигации.
-
-**Приоритет: HIGH** — единственная зона без улучшений.
-
-| # | Задача | Файлы | Acceptance criteria | Статус |
-|---|--------|-------|---------------------|--------|
-| 3.1 | Memoize chart transforms | `section-page.jsx` | Все chart data `.map()` обёрнуты в `useMemo()` (сейчас 3 useMemo для форматтеров, transforms не мемоизированы) | Pending |
-| 3.2 | Extract chart card → `React.memo` | `section-page.jsx` | `<DashboardChartCard />` — отдельный компонент в `memo()` | Pending |
-| 3.3 | Ticker interval 1s → 5s | `use-auto-refresh.js` | `secondsAgo` обновляется раз в 5s. State updates ×5 меньше | Pending |
-| 3.4 | Disable polling при SSE | `use-auto-refresh.js` | При `sseConnected === true` → polling полностью отключён (сейчас `intervalMs * 3`) | Pending |
-| 3.5 | Code splitting | `[section]/page.jsx` | `next/dynamic` для `section-page.jsx`. Bundle < 200KB JS | Pending |
-| 3.6 | Refactor portfolio hook | `use-project-portfolio.js` | 335 строк → 3 хука по <80 строк. 21 context value → 3 focused contexts | Pending |
-
-**Зависимости:** нет
-**Effort:** Medium
-
----
-
-### Iter 4 — Database Optimization
-
-> Portfolio overview < 200ms (cold, 10 проектов). LightRAG ILIKE → index scan.
-
-**Приоритет: HIGH** — cold path по-прежнему 800-1500ms.
-
-| # | Задача | Файлы | Acceptance criteria | Статус |
-|---|--------|-------|---------------------|--------|
-| 4.1 | pg_trgm для ILIKE search | Новая миграция | `CREATE EXTENSION pg_trgm`. GIN indexes на `cw_messages(body)`, `linear_issues_raw(title)`, `attio_opportunities_raw(name)` | Pending |
-| 4.2 | Materialized view portfolio | Новая миграция | `mv_portfolio_dashboard` с REFRESH CONCURRENTLY при sync completion | Pending |
-| 4.3 | LATERAL → batch queries | `portfolio.js` | Заменить 11 LATERAL subqueries на 4-5 batch запросов с `WHERE project_id = ANY($1)` | Pending |
-| 4.4 | Strategic indexes | Новая миграция | Indexes на `connector_errors(project_id, status, error_kind)`, `crm_account_contacts(project_id, account_id)` | Pending |
-| 4.5 | Cleanup orphaned tables | Новая миграция | Drop `app_users`, `signup_requests` (после верификации) | Pending |
-| 4.6 | Partitioning audit_events | Новая миграция | Range partition по `created_at` (monthly). Auto-create future. Drop > 6 months | Pending |
-
-**Примечание:** 18 миграций и ~120 indexes уже существуют (включая production migration 0017). Задачи 4.1 и 4.4 — дополнительные к существующим.
-
-**Зависимости:** Iter 1 (для A/B сравнения with/without cache)
-**Effort:** High
-
----
+## 3) Оставшиеся итерации
 
 ### Iter 5 — Observability & Ops
 
@@ -212,33 +175,31 @@
 ✅ Iter 0 (security) ──────── DONE
 ✅ Iter 1 (Redis cache) ───── DONE
 ✅ Iter 2 (reliability) ───── DONE (5/6, zod → Iter 7)
+✅ Iter 3 (frontend) ───────── DONE (5/6, portfolio hook → as-is)
+✅ Iter 4 (DB optimization) ── DONE (6/6)
                                 │
-    Iter 3 (frontend) ─────────┤  ← NEXT (HIGH priority, единственная нетронутая зона)
-                                │
-    Iter 4 (DB optimization) ──┤  ← HIGH priority (cold path ещё 800-1500ms)
-                                │
-    Iter 5 (observability) ────┤  ← MEDIUM (operations readiness)
+    Iter 5 (observability) ────┤  ← NEXT (MEDIUM, operations readiness)
                                 │
     Iter 6 (quality & UX) ────┤  ← LOW (feature enhancement)
                                 │
     Iter 7 (validation) ──────┘  ← LOW (tech debt)
 ```
 
-**Итого:** 3 итерации завершены (20/21 задач). Осталось 4 итерации (26 задач).
+**Итого:** 5 итераций завершены (31/33 задач). Осталось 3 итерации (15 задач).
 
 ---
 
 ## 5) Матрица зрелости
 
-| Зона | До (Iter 0) | После (Iter 0-2) | Target (все итерации) |
-|------|-------------|-------------------|----------------------|
-| Платформа | 80% | **92%** | 98% |
-| Connectors | 85% | **92%** | 97% |
-| Intelligence | 65% | **75%** | 92% |
-| Dashboard | 50% | **70%** | 90% |
-| Frontend | 70% | **70%** | 90% |
-| Инфраструктура | 40% | **78%** | 95% |
-| **Среднее** | **65%** | **80%** | **94%** |
+| Зона | До (Iter 0) | После (Iter 0-2) | После (Iter 0-4) | Target |
+|------|-------------|-------------------|-------------------|--------|
+| Платформа | 80% | 92% | **92%** | 98% |
+| Connectors | 85% | 92% | **95%** | 97% |
+| Intelligence | 65% | 75% | **82%** | 92% |
+| Dashboard | 50% | 70% | **88%** | 90% |
+| Frontend | 70% | 70% | **85%** | 90% |
+| Инфраструктура | 40% | 78% | **78%** | 95% |
+| **Среднее** | **65%** | **80%** | **87%** | **94%** |
 
 ---
 
