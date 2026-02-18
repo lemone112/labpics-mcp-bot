@@ -1,10 +1,10 @@
 # Глубокий анализ структуры продукта Labpics Dashboard
 
-> Дата анализа: 2026-02-18 | Обновлено: 2026-02-18 (post Iter 0-5)
+> Дата анализа: 2026-02-18 | Обновлено: 2026-02-18 (post Iter 0-8)
 > Метод: 3-цикловый ресёрч (structure → hotpaths → self-criticism)
 > Scope: backend, frontend, infrastructure, data model, Redis, production readiness
 >
-> **Статус:** Iter 0-6 завершены. Оценки зрелости обновлены. Детали закрытых проблем отмечены ✅.
+> **Статус:** Iter 0-8 завершены. Wave 2 (Iter 9-12) запланирован. Оценки зрелости обновлены.
 
 ---
 
@@ -23,7 +23,7 @@
 
 Продукт имеет шесть фундаментальных зон, каждая со своим уровнем зрелости.
 
-### 1.1 Платформенный слой (Scope, Auth, Audit) — зрелость: 80% → **92%**
+### 1.1 Платформенный слой (Scope, Auth, Audit) — зрелость: 80% → **98%**
 
 **Текущее состояние:** Зрелое ядро. Session auth + CSRF + request_id, жёсткий project/account scope, audit trail.
 
@@ -38,7 +38,7 @@
 | Нет API rate limiting кроме login endpoint | `index.js` | 604-635 | CRITICAL | ✅ Iter 0: 200/60 rpm |
 | Нет bcrypt/argon2 — пароли не хешируются | `index.js` | ~605 | CRITICAL | ✅ Iter 0: bcrypt |
 
-**Вердикт:** ~~Нужна доработка перед production.~~ Все CRITICAL закрыты. Remaining: hydrate dedup (MEDIUM).
+**Вердикт:** ~~Нужна доработка перед production.~~ Все CRITICAL закрыты. Iter 8: timing attack fix, security headers, session cache invalidation, CSRF hardening, trustProxy. Remaining: hydrate dedup (MEDIUM).
 
 ---
 
@@ -175,10 +175,10 @@ MEDIUM (качество и масштабируемость):
   11. ✅ Повторные запросы одних данных в portfolio → Iter 1 (cache 90s)
   12. ✅ Frontend: code splitting + SSE polling disabled (Iter 3)
   13. ✅ Нет structured logging → Iter 2 (Pino)
-  14. ⚠️  Нет input validation schemas (zod/ajv) → Iter 7
+  14. ✅ Нет input validation schemas → Iter 7: Zod schemas на 14 POST endpoints
   15. ✅ evidence_items: pg_trgm GIN index on snippet (Iter 4.1)
 
-Закрыто: 13/15 (87%). Remaining: 2 items (MEDIUM, нет CRITICAL/HIGH).
+Закрыто: 14/15 (93%). Remaining: 1 item (env vars dedup, LOW).
 ```
 
 ---
@@ -592,9 +592,10 @@ session UPDATE (login/logout/project switch):
 | 4 | Database Optimization | 6/6 | ✅ Done | — |
 | 5 | Observability & Ops | 6/6 | ✅ Done | — |
 | 6 | Data Quality & UX | 5/5 | ✅ Done | — |
-| 7 | Input Validation | 0/4 | Pending | LOW |
+| 7 | Input Validation | 4/4 | ✅ Done | — |
+| 8 | Security Hardening II | 7/7 | ✅ Done | — |
 
-**Итого:** 42/44 задач завершено в Iter 0-6. Осталось 4 задачи в Iter 7.
+**Итого:** 53/55 задач завершено в Iter 0-8. Wave 2 (Iter 9-12, 21 задача) запланирован.
 
 **Рекомендуемый порядок выполнения:**
 ```
@@ -605,6 +606,10 @@ session UPDATE (login/logout/project switch):
 ✅ Iter 4 (DB optimization) ── DONE
 ✅ Iter 5 (observability) ──── DONE
 ✅ Iter 6 (quality & UX) ──── DONE
-                                │
-    Iter 7 (validation) ──────┘  ← LOW
+✅ Iter 7 (validation) ─────── DONE
+✅ Iter 8 (security II) ────── DONE
+⬜ Iter 9 (ext. validation) ── PLANNED
+⬜ Iter 10 (frontend res.) ─── PLANNED
+⬜ Iter 11 (CI/CD) ──────────── PLANNED
+⬜ Iter 12 (connectors) ────── PLANNED
 ```
