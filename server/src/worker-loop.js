@@ -1,9 +1,12 @@
 import "dotenv/config";
 
 import { createDbPool } from "./lib/db.js";
+import { createLogger } from "./lib/logger.js";
 import { createRedisPubSub } from "./lib/redis-pubsub.js";
 import { requiredEnv } from "./lib/utils.js";
 import { runSchedulerTick } from "./services/scheduler.js";
+
+const logger = createLogger("worker-loop");
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -25,23 +28,12 @@ async function runCycle(pool, limitPerProject, publishFn) {
       projectId: row.project_id,
       accountScopeId: row.account_scope_id,
     };
-    const result = await runSchedulerTick(pool, scope, { limit: limitPerProject, logger: console, publishFn });
+    const result = await runSchedulerTick(pool, scope, { limit: limitPerProject, logger, publishFn });
     processed += result.processed;
     failed += result.failed;
   }
 
-  console.log(
-    JSON.stringify(
-      {
-        ok: true,
-        type: "worker_cycle",
-        projects: rows.length,
-        processed,
-        failed,
-        at: new Date().toISOString(),
-      }
-    )
-  );
+  logger.info({ projects: rows.length, processed, failed }, "worker cycle complete");
 }
 
 async function main() {
@@ -51,25 +43,25 @@ async function main() {
   const pool = createDbPool(databaseUrl);
 
   // Redis for publishing job completion events
-  const redisPubSub = createRedisPubSub({ logger: console });
+  const redisPubSub = createRedisPubSub({ logger });
   const publishFn = redisPubSub.enabled
     ? (channel, message) => redisPubSub.publish(channel, message)
     : null;
 
   if (redisPubSub.enabled) {
-    console.log("worker: redis pub/sub enabled for job completion events");
+    logger.info("redis pub/sub enabled for job completion events");
   } else {
-    console.log("worker: redis unavailable, real-time SSE disabled (polling still active)");
+    logger.warn("redis unavailable, real-time SSE disabled (polling still active)");
   }
 
   // --- Graceful shutdown ---
   let running = true;
   async function gracefulShutdown(signal) {
-    console.log(JSON.stringify({ type: "worker_shutdown", signal, at: new Date().toISOString() }));
+    logger.info({ signal }, "shutdown signal received");
     running = false;
     const deadlineMs = parseInt(process.env.SHUTDOWN_TIMEOUT_MS, 10) || 30_000;
     const forceExit = setTimeout(() => {
-      console.error(JSON.stringify({ type: "worker_force_exit", deadline_ms: deadlineMs, at: new Date().toISOString() }));
+      logger.fatal({ deadline_ms: deadlineMs }, "force exit — shutdown deadline exceeded");
       process.exit(1);
     }, deadlineMs);
     forceExit.unref();
@@ -82,14 +74,14 @@ async function main() {
       try {
         await runCycle(pool, limitPerProject, publishFn);
       } catch (error) {
-        console.error("worker cycle failed:", error);
+        logger.error({ err: error }, "worker cycle failed");
       }
       // Interruptible sleep: check running flag every second
       for (let i = 0; i < intervalSeconds && running; i++) {
         await sleep(1000);
       }
     }
-    console.log(JSON.stringify({ type: "worker_stopped", at: new Date().toISOString() }));
+    logger.info("worker stopped gracefully");
   } finally {
     await redisPubSub.close();
     await pool.end();
@@ -97,6 +89,6 @@ async function main() {
 }
 
 main().catch((error) => {
-  console.error(error);
+  logger.fatal({ err: error }, "worker-loop crashed");
   process.exit(1);
 });

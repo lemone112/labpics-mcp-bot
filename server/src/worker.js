@@ -1,7 +1,10 @@
 import "dotenv/config";
 
 import { createDbPool } from "./lib/db.js";
+import { createLogger } from "./lib/logger.js";
 import { runSchedulerTick } from "./services/scheduler.js";
+
+const logger = createLogger("worker");
 
 function requiredEnv(name) {
   const value = process.env[name];
@@ -29,28 +32,17 @@ async function main() {
         projectId: row.project_id,
         accountScopeId: row.account_scope_id,
       };
-      const result = await runSchedulerTick(pool, scope, { limit: limitPerProject, logger: console });
+      const result = await runSchedulerTick(pool, scope, { limit: limitPerProject, logger });
       totalProcessed += result.processed;
       totalFailed += result.failed;
     }
-    console.log(
-      JSON.stringify(
-        {
-          ok: true,
-          projects: rows.length,
-          processed: totalProcessed,
-          failed: totalFailed,
-        },
-        null,
-        2
-      )
-    );
+    logger.info({ projects: rows.length, processed: totalProcessed, failed: totalFailed }, "worker tick complete");
   } finally {
     await pool.end();
   }
 }
 
 main().catch((error) => {
-  console.error(error);
+  logger.fatal({ err: error }, "worker crashed");
   process.exit(1);
 });

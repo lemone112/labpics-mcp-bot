@@ -1,12 +1,13 @@
-FROM node:22-alpine
-
-RUN addgroup -g 1001 -S app && adduser -S -u 1001 -G app app
-
+# --- deps stage: install all dependencies ---
+FROM node:22-alpine AS deps
 WORKDIR /app
-
 COPY package.json package-lock.json ./
 RUN npm ci
 
+# --- build stage: produce .next output ---
+FROM node:22-alpine AS build
+WORKDIR /app
+COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
 ARG NEXT_PUBLIC_API_BASE_URL=/api
@@ -16,14 +17,21 @@ ENV NEXT_PUBLIC_API_BASE_URL=$NEXT_PUBLIC_API_BASE_URL
 ENV API_UPSTREAM_URL=$API_UPSTREAM_URL
 ENV NEXT_PUBLIC_CSRF_COOKIE_NAME=$NEXT_PUBLIC_CSRF_COOKIE_NAME
 
-RUN npm run build && npm prune --omit=dev
+RUN npm run build
 
-RUN chown -R app:app .next
-
+# --- runner stage: minimal production image ---
+FROM node:22-alpine AS runner
+RUN addgroup -g 1001 -S app && adduser -S -u 1001 -G app app
+WORKDIR /app
 ENV NODE_ENV=production
 
+COPY --from=deps /app/node_modules ./node_modules
+COPY --from=build /app/.next ./.next
+COPY --from=build /app/public ./public
+COPY --chown=app:app package.json ./
+
+RUN npm prune --omit=dev
+
 USER app
-
 EXPOSE 3000
-
 CMD ["npm", "run", "start"]
