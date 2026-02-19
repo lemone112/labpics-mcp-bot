@@ -16,7 +16,7 @@ function buildSourceRef(processName, runId) {
 async function insertProcessEvent(pool, scope, row) {
   await pool.query(
     `
-      INSERT INTO kag_event_log(
+      INSERT INTO connector_events(
         project_id,
         account_scope_id,
         event_type,

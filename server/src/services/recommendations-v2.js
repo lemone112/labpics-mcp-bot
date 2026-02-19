@@ -1,8 +1,8 @@
 import crypto from "node:crypto";
 
-import { KAG_TEMPLATE_KEYS, buildSuggestedTemplate, generateTemplate } from "../kag/templates/index.js";
+import { KAG_TEMPLATE_KEYS, buildSuggestedTemplate, generateTemplate } from "./templates/index.js";
 import { findSimilarCases } from "./similarity.js";
-import { failProcessRun, finishProcessRun, startProcessRun, warnProcess } from "./kag-process-log.js";
+import { failProcessRun, finishProcessRun, startProcessRun, warnProcess } from "./process-log.js";
 
 function clampInt(value, fallback, min = 1, max = 500) {
   const parsed = Number.parseInt(String(value ?? ""), 10);

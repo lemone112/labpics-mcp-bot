@@ -155,24 +155,13 @@ export const IdentitySuggestionApplySchema = z.object({
 });
 
 // ---------------------------------------------------------------------------
-// 9.2  KAG & Forecasting schemas
+// 9.2  Recommendation schemas
 // ---------------------------------------------------------------------------
 
 const allProjectsFlag = z.preprocess(
   (v) => String(v || "").trim().toLowerCase() === "true",
   z.boolean().default(false)
 );
-
-export const KagSimilarityRebuildSchema = z.object({
-  project_id: z.string().optional().default(null).nullable(),
-  window_days: z.coerce.number().int().min(1).max(365).optional(),
-});
-
-export const KagForecastRefreshSchema = z.object({
-  project_id: z.string().optional().default(null).nullable(),
-  window_days: z.coerce.number().int().min(1).max(365).optional(),
-  top_k: z.coerce.number().int().min(1).max(100).optional(),
-});
 
 export const RecommendationsShownSchema = z.object({
   recommendation_ids: z.array(z.string()).default([]),

@@ -4,12 +4,7 @@ import { extractSignalsAndNba } from "./signals.js";
 import { refreshUpsellRadar } from "./upsell.js";
 import { generateDailyDigest, generateWeeklyDigest, refreshAnalytics, refreshRiskAndHealth } from "./intelligence.js";
 import { syncLoopsContacts } from "./loops.js";
-import { runKagRecommendationRefresh } from "./kag.js";
 import { retryConnectorErrors, runAllConnectorsSync, runConnectorSync } from "./connector-sync.js";
-import { buildProjectSnapshot } from "./snapshots.js";
-import { rebuildCaseSignatures } from "./similarity.js";
-import { refreshRiskForecasts } from "./forecasting.js";
-import { refreshRecommendationsV2 } from "./recommendations-v2.js";
 import { runSyncReconciliation } from "./reconciliation.js";
 import { toPositiveInt } from '../lib/utils.js';
 
@@ -18,13 +13,12 @@ import { toPositiveInt } from '../lib/utils.js';
  * by setting their next_run_at to now(). This eliminates the 15-30 min delay
  * between data sync and recommendation/signal updates.
  *
- * Chain: sync → signals + embeddings → health + kag_recs → analytics + kag_v2_recs
+ * Chain: sync → signals + embeddings → health → analytics
  */
 const CASCADE_CHAINS = {
   connectors_sync_cycle: ["signals_extraction", "embeddings_run"],
-  signals_extraction: ["health_scoring", "kag_recommendations_refresh"],
+  signals_extraction: ["health_scoring"],
   health_scoring: ["analytics_aggregates"],
-  kag_recommendations_refresh: ["kag_v2_recommendations_refresh"],
 };
 
 async function triggerCascade(pool, scope, completedJobType, logger) {
@@ -99,17 +93,7 @@ function truncateError(error, max = 1000) {
   return String(error?.message || error || "scheduler_error").slice(0, max);
 }
 
-function toBoolean(value, fallback = false) {
-  if (value == null) return fallback;
-  const normalized = String(value).trim().toLowerCase();
-  if (!normalized) return fallback;
-  if (["1", "true", "yes", "on"].includes(normalized)) return true;
-  if (["0", "false", "no", "off"].includes(normalized)) return false;
-  return fallback;
-}
-
 function createHandlers(customHandlers = {}) {
-  const lightRagOnly = toBoolean(process.env.LIGHTRAG_ONLY, true);
   const handlers = {
     chatwoot_sync: async ({ pool, scope, logger }) => runConnectorSync(pool, scope, "chatwoot", logger),
     attio_sync: async ({ pool, scope, logger }) => runConnectorSync(pool, scope, "attio", logger),
@@ -138,28 +122,10 @@ function createHandlers(customHandlers = {}) {
         }
       ),
   };
-  if (!lightRagOnly) {
-    handlers.project_snapshot_daily = async ({ pool, scope }) => buildProjectSnapshot(pool, scope, {});
-    handlers.case_signatures_refresh = async ({ pool, scope }) => rebuildCaseSignatures(pool, scope, {});
-    handlers.kag_v2_forecast_refresh = async ({ pool, scope }) => refreshRiskForecasts(pool, scope, {});
-    handlers.kag_v2_recommendations_refresh = async ({ pool, scope }) => refreshRecommendationsV2(pool, scope, {});
-    handlers.kag_daily_pipeline = async ({ pool, scope }) => {
-      const snapshot = await buildProjectSnapshot(pool, scope, {});
-      const forecast = await refreshRiskForecasts(pool, scope, {});
-      const recommendations = await refreshRecommendationsV2(pool, scope, {});
-      return {
-        snapshot,
-        forecast,
-        recommendations,
-      };
-    };
-    handlers.kag_recommendations_refresh = async ({ pool, scope }) => runKagRecommendationRefresh(pool, scope);
-  }
   return { ...handlers, ...customHandlers };
 }
 
 export async function ensureDefaultScheduledJobs(pool, scope) {
-  const lightRagOnly = toBoolean(process.env.LIGHTRAG_ONLY, true);
   const defaults = [
     { jobType: "connectors_sync_cycle", cadenceSeconds: 900 },
     { jobType: "connectors_reconciliation_daily", cadenceSeconds: 86400 },
@@ -174,13 +140,6 @@ export async function ensureDefaultScheduledJobs(pool, scope) {
     { jobType: "analytics_aggregates", cadenceSeconds: 1800 },
     { jobType: "loops_contacts_sync", cadenceSeconds: 3600 },
   ];
-  if (!lightRagOnly) {
-    defaults.push({ jobType: "project_snapshot_daily", cadenceSeconds: 86400 });
-    defaults.push({ jobType: "case_signatures_refresh", cadenceSeconds: 604800 });
-    defaults.push({ jobType: "kag_daily_pipeline", cadenceSeconds: 86400 });
-    defaults.push({ jobType: "kag_recommendations_refresh", cadenceSeconds: 900 });
-  }
-
   for (const item of defaults) {
     await pool.query(
       `
@@ -228,31 +187,8 @@ export async function runSchedulerTick(pool, scope, options = {}) {
   const limit = toPositiveInt(options.limit, 10, 1, 100);
   const handlers = createHandlers(options.handlers || {});
   const logger = options.logger || console;
-  const lightRagOnly = toBoolean(process.env.LIGHTRAG_ONLY, true);
 
   await ensureDefaultScheduledJobs(pool, scope);
-  if (lightRagOnly) {
-    await pool.query(
-      `
-        UPDATE scheduled_jobs
-        SET status = 'paused',
-            last_status = 'paused',
-            last_error = 'paused_by_lightrag_only_mode',
-            updated_at = now()
-        WHERE project_id = $1
-          AND account_scope_id = $2
-          AND job_type IN (
-            'project_snapshot_daily',
-            'case_signatures_refresh',
-            'kag_v2_forecast_refresh',
-            'kag_v2_recommendations_refresh',
-            'kag_daily_pipeline',
-            'kag_recommendations_refresh'
-          )
-      `,
-      [scope.projectId, scope.accountScopeId]
-    );
-  }
 
   const dueRows = await pool.query(
     `

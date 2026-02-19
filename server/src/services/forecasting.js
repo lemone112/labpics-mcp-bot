@@ -1,5 +1,5 @@
 import { findSimilarCases } from "./similarity.js";
-import { failProcessRun, finishProcessRun, startProcessRun, warnProcess } from "./kag-process-log.js";
+import { failProcessRun, finishProcessRun, startProcessRun, warnProcess } from "./process-log.js";
 
 function clamp(value, min, max) {
   const n = Number(value);
