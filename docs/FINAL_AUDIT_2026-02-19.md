@@ -29,6 +29,14 @@
 - **Влияние:** Lightrag-версия молча ограничивает `max=200`, в то время как `chunking` и `utils` используют `max=100_000`. При будущем рефакторинге замена импорта может привести к скрытой ошибке.
 - **Решение:** Удалить локальную копию в lightrag.js, импортировать из `lib/utils.js`. Консолидировать utils.js и chunking.js — оставить один canonical export.
 
+> **Статус 1.1–1.3:** ✅ Все три CRITICAL исправлены в коммите `d2ebd19`.
+
+### 1.4 [CRITICAL] Issue #224: `Cache-Control: public` для authenticated endpoints
+- **Issue:** GitHub Issue #224 (Iter 25 — Performance & Caching)
+- **Суть:** Предлагает `Cache-Control: public` для API-ответов, включая аутентифицированные endpoint'ы.
+- **Влияние:** CDN/прокси закешируют данные одного пользователя и отдадут другому → **утечка данных**.
+- **Решение:** При реализации использовать `Cache-Control: private` для всех auth'd endpoints. Обновить Issue с пометкой.
+
 ---
 
 ## 2. ВЫСОКОПРИОРИТЕТНЫЕ ПРОБЛЕМЫ
@@ -262,19 +270,40 @@
 - **Тесты:** 5/10 — Хорошее покрытие инфраструктуры, но сервисы не покрыты, нет integration tests.
 - **Issues/Planning:** 7/10 — 200 issues хорошо структурированы, но есть дубликаты и пробелы в приоритизации.
 
-**Вердикт: НЕ готовы к кодингу.** Нужно сначала:
-1. Починить 3 CRITICAL проблемы (Toast, lang, toPositiveInt duplicate)
-2. Создать comprehensive test plan
-3. Написать базовые тесты перед началом новой функциональности
+**Вердикт после исправлений:** CRITICAL issues (1.1–1.3) исправлены. Можно переходить к кодингу при условии выполнения Phase 1 тестов (см. TEST_PLAN_COMPREHENSIVE.md).
 
 ---
 
-## 9. ПЛАН ДЕЙСТВИЙ (PRE-CODING GATE)
+## 9. АНАЛИЗ КАЧЕСТВА GITHUB ISSUES
 
-### Немедленно (до кодинга):
-- [ ] Починить Toast export (1.1)
-- [ ] Исправить lang="ru" (1.2)
-- [ ] Консолидировать toPositiveInt (1.3)
+### Iter 22-24 (Mobile, Accessibility, Design QA): низкая детализация
+Issues написаны как однострочные заметки, а не как полноценные задачи. Отсутствуют:
+- Конкретные чеклисты подзадач
+- Acceptance criteria / метрики
+- Зависимости от других issues
+- Дизайн-согласования (обязательно по CLAUDE.md)
+
+**Рекомендация:** привести к формату Iter 25-26 перед реализацией.
+
+### Iter 25-26 (Performance, API Architecture): хорошая детализация
+Каждый issue содержит Description, Tasks, Metrics, Dependencies. Качественная основа для работы.
+
+### Специфические проблемы в Issues:
+- **#224 (Cache-Control):** `public` вместо `private` — security vulnerability
+- **#217 (Web Vitals):** FID deprecated → нужен INP (Interaction to Next Paint)
+- **#228 (Route extraction):** Shared dependencies injection не описан
+- **#233 (OpenAPI):** Fastify уже имеет Pino-based swagger — дублирование
+
+---
+
+## 10. ПЛАН ДЕЙСТВИЙ (PRE-CODING GATE)
+
+### Выполнено (коммит d2ebd19):
+- [x] Починить Toast export (1.1)
+- [x] Исправить lang="ru" (1.2)
+- [x] Консолидировать toPositiveInt (1.3)
+- [x] Создать comprehensive test plan
+- [x] Создать аудит-документ
 
 ### Высокий приоритет (первый coding sprint):
 - [ ] Добавить onClick обработчики к CTA кнопкам (2.1)
@@ -282,8 +311,10 @@
 - [ ] Валидировать query-параметры (2.3)
 - [ ] Исправить arbitrary spacing (2.4)
 - [ ] Расширить Redis кеширование (2.5)
+- [ ] Пометить Issue #224 — заменить `public` → `private` для auth'd endpoints (1.4)
+- [ ] Написать Phase 1 тесты (см. TEST_PLAN_COMPREHENSIVE.md §7)
 
 ### Средний приоритет:
 - [ ] Закрыть 8 duplicate issues (3.1)
 - [ ] Расставить priority labels (3.2)
-- [ ] Обновить migration count в docs (3.4)
+- [ ] Детализировать Issues Iter 22-24 до уровня Iter 25-26
