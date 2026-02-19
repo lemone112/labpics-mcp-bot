@@ -110,13 +110,20 @@ function createHandlers(customHandlers = {}) {
     weekly_digest: async ({ pool, scope }) => generateWeeklyDigest(pool, scope),
     campaign_scheduler: async ({ pool, scope }) =>
       processDueOutbounds(pool, scope, "scheduler", `scheduler_campaign_${Date.now()}`, 50),
-    analytics_aggregates: async ({ pool, scope }) => {
+    analytics_aggregates: async ({ pool, scope, logger }) => {
       const result = await refreshAnalytics(pool, scope, 30);
       // Refresh materialized view so dashboard picks up latest health scores
       try {
         await pool.query("REFRESH MATERIALIZED VIEW CONCURRENTLY mv_portfolio_dashboard");
-      } catch {
-        // matview may not exist yet (pre-migration) — swallow
+      } catch (err) {
+        const msg = String(err?.message || "");
+        // Swallow only "relation does not exist" — matview may not exist pre-migration
+        if (msg.includes("does not exist")) {
+          (logger || console).info("mv_portfolio_dashboard does not exist yet, skipping refresh");
+        } else {
+          (logger || console).error({ error: msg }, "mv_portfolio_dashboard refresh failed");
+          throw err;
+        }
       }
       return result;
     },

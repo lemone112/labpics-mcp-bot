@@ -79,4 +79,40 @@ export function registerHealthRoutes(ctx) {
     reply.type("text/plain; version=0.0.4");
     return lines.join("\n");
   });
+
+  // SSE endpoint for real-time job completion events
+  registerGet("/events/stream", async (request, reply) => {
+    const projectId = String(request.auth?.active_project_id || "").trim();
+    if (!projectId) {
+      reply.code(400).send({ ok: false, error: "project_required" });
+      return;
+    }
+
+    reply.raw.writeHead(200, {
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache",
+      Connection: "keep-alive",
+      "X-Accel-Buffering": "no",
+    });
+    reply.raw.write(`event: connected\ndata: ${JSON.stringify({ project_id: projectId })}\n\n`);
+
+    const cleanup = sseBroadcaster.addClient(projectId, reply, request.auth?.session_id || null);
+
+    // Heartbeat every 30s to keep connection alive
+    const heartbeat = setInterval(() => {
+      try {
+        reply.raw.write(": heartbeat\n\n");
+      } catch {
+        clearInterval(heartbeat);
+      }
+    }, 30_000);
+
+    request.raw.on("close", () => {
+      clearInterval(heartbeat);
+      cleanup();
+    });
+
+    // Prevent Fastify from closing the response
+    reply.hijack();
+  });
 }
