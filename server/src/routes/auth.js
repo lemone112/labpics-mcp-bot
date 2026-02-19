@@ -1,4 +1,5 @@
 import { ApiError, sendError, sendOk } from "../lib/api-contract.js";
+import { writeAuditEvent } from "../services/audit.js";
 
 /**
  * @param {object} ctx
@@ -59,11 +60,25 @@ export function registerAuthRoutes(ctx) {
 
     if (!sessionUsername) {
       recordLoginFailure(request.ip, username);
+      writeAuditEvent(pool, {
+        projectId: null, accountScopeId: null,
+        actorUsername: username, action: "auth.login_failed",
+        entityType: "session", entityId: null, status: "failed",
+        requestId: request.requestId,
+        payload: { ip: request.ip }, evidenceRefs: [],
+      }).catch(() => {});
       return sendError(reply, request.requestId, new ApiError(401, "invalid_credentials", "Invalid credentials"));
     }
 
     clearLoginFailures(request.ip, username);
     const { sid, csrfToken } = await createSession(sessionUsername);
+    writeAuditEvent(pool, {
+      projectId: null, accountScopeId: null,
+      actorUsername: sessionUsername, action: "auth.login",
+      entityType: "session", entityId: sid, status: "ok",
+      requestId: request.requestId,
+      payload: { ip: request.ip }, evidenceRefs: [],
+    }).catch(() => {});
 
     reply.setCookie(cookieName, sid, cookieOptions);
     reply.setCookie(csrfCookieName, csrfToken, csrfCookieOptions);
@@ -101,6 +116,13 @@ export function registerAuthRoutes(ctx) {
     if (sid) {
       await pool.query("DELETE FROM sessions WHERE session_id = $1", [sid]);
       await cache.del(`session:${sid}`);
+      writeAuditEvent(pool, {
+        projectId: null, accountScopeId: null,
+        actorUsername: request.auth?.username || null, action: "auth.logout",
+        entityType: "session", entityId: sid, status: "ok",
+        requestId: request.requestId,
+        payload: { ip: request.ip }, evidenceRefs: [],
+      }).catch(() => {});
     }
     reply.clearCookie(cookieName, cookieOptions);
     reply.clearCookie(csrfCookieName, csrfCookieOptions);

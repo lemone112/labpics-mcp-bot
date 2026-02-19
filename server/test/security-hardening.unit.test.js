@@ -209,7 +209,7 @@ test("login response includes csrf_token in body", () => {
   // The login handler should return csrf_token in the response body
   const loginIdx = allRouteSource.indexOf('"/auth/login"');
   assert.ok(loginIdx > -1, "Expected /auth/login endpoint");
-  const loginSlice = allRouteSource.slice(loginIdx, loginIdx + 2000);
+  const loginSlice = allRouteSource.slice(loginIdx, loginIdx + 3000);
   assert.ok(
     loginSlice.includes("csrf_token: csrfToken"),
     "Login response must include csrf_token in body"

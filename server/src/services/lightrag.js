@@ -31,7 +31,7 @@ function tokenizeQuery(query) {
 }
 
 function sanitizeLike(text) {
-  return text.replace(/[%\\]/g, "");
+  return text.replace(/[%\\_]/g, "");
 }
 
 function buildLikePatterns(query) {

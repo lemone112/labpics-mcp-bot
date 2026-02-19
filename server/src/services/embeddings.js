@@ -100,6 +100,7 @@ async function markClaimedAsPending(pool, scope, ids, error) {
       SET
         embedding_status = 'pending',
         embedding_error = $2,
+        embedding_attempts = GREATEST(0, embedding_attempts - 1),
         updated_at = now()
       WHERE id = ANY($1::uuid[])
         AND project_id = $3

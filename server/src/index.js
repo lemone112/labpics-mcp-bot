@@ -107,8 +107,13 @@ function toBoolean(value, fallback = false) {
 function timingSafeStringEqual(a, b) {
   const left = Buffer.from(String(a || ""));
   const right = Buffer.from(String(b || ""));
-  if (left.length !== right.length) return false;
-  return crypto.timingSafeEqual(left, right);
+  const maxLen = Math.max(left.length, right.length);
+  const paddedLeft = Buffer.alloc(maxLen, 0);
+  const paddedRight = Buffer.alloc(maxLen, 0);
+  left.copy(paddedLeft);
+  right.copy(paddedRight);
+  const equal = crypto.timingSafeEqual(paddedLeft, paddedRight);
+  return equal && left.length === right.length;
 }
 
 function normalizeAccountUsername(value) {
@@ -365,6 +370,10 @@ async function main() {
     reply.header(
       "Content-Security-Policy",
       "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'; frame-ancestors 'none'"
+    );
+    reply.header(
+      "Permissions-Policy",
+      "camera=(), microphone=(), geolocation=(), payment=()"
     );
   });
 

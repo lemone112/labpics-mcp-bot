@@ -41,10 +41,10 @@ export function registerCrmRoutes(ctx) {
     const { rows } = await pool.query(
       `
         INSERT INTO crm_accounts(project_id, account_scope_id, name, domain, external_ref, stage, owner_username, updated_at)
-        VALUES ($1, $2, $3, $4, NULL, $5, $6, now())
+        VALUES ($1, $2, $3, $4, $5, $6, $7, now())
         RETURNING id, name, domain, external_ref, stage, owner_username, created_at, updated_at
       `,
-      [scope.projectId, scope.accountScopeId, body.name, body.domain, body.stage, ownerUsername]
+      [scope.projectId, scope.accountScopeId, body.name, body.domain, body.external_ref || null, body.stage, ownerUsername]
     );
     await writeAuditEvent(pool, {
       projectId: scope.projectId,

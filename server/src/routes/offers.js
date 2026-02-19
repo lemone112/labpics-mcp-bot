@@ -89,6 +89,7 @@ export function registerOfferRoutes(ctx) {
         UPDATE offers
         SET status = 'approved', updated_at = now()
         WHERE id = $1 AND project_id = $2 AND account_scope_id = $3
+          AND status = 'draft'
         RETURNING id, title, discount_pct, status, evidence_refs
       `,
       [offerId, scope.projectId, scope.accountScopeId]
@@ -136,7 +137,7 @@ export function registerOfferRoutes(ctx) {
         UPDATE offers
         SET status = 'sent', updated_at = now()
         WHERE id = $1 AND project_id = $2 AND account_scope_id = $3
-          AND status IN ('approved', 'draft')
+          AND status = 'approved'
         RETURNING id, title, status, evidence_refs
       `,
       [offerId, scope.projectId, scope.accountScopeId]

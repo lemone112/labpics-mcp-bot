@@ -56,6 +56,7 @@ export function rateLimitHook(options = {}) {
         message: "Too many requests",
         request_id: request.requestId || request.id || null,
       });
+      return reply;
     }
   };
 }

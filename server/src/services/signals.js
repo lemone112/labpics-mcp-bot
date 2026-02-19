@@ -25,7 +25,7 @@ function detectMessageSignals(messageRow) {
   const signals = [];
   if (!content) return signals;
 
-  if (/(delay|blocked|blocker|stuck|slipped|late)/i.test(content)) {
+  if (/\b(delay|blocked|blocker|stuck|slipped|late)\b/i.test(content)) {
     signals.push({
       signal_type: "delivery_risk",
       severity: 4,
@@ -36,7 +36,7 @@ function detectMessageSignals(messageRow) {
       evidence_refs: [messageRow.id, messageRow.conversation_global_id].filter(Boolean),
     });
   }
-  if (/(budget|pricing|discount|cost|expensive)/i.test(content)) {
+  if (/\b(budget|pricing|discount|cost|expensive)\b/i.test(content)) {
     signals.push({
       signal_type: "commercial_pressure",
       severity: 3,
@@ -47,7 +47,7 @@ function detectMessageSignals(messageRow) {
       evidence_refs: [messageRow.id, messageRow.conversation_global_id].filter(Boolean),
     });
   }
-  if (/(upgrade|add-on|addon|expand|cross[- ]?sell|upsell)/i.test(content)) {
+  if (/\b(upgrade|add-on|addon|expand|cross[- ]?sell|upsell)\b/i.test(content)) {
     signals.push({
       signal_type: "upsell_intent",
       severity: 2,
@@ -58,7 +58,7 @@ function detectMessageSignals(messageRow) {
       evidence_refs: [messageRow.id, messageRow.conversation_global_id].filter(Boolean),
     });
   }
-  if (/(urgent|asap|critical|priority)/i.test(content)) {
+  if (/\b(urgent|asap|critical|priority)\b/i.test(content)) {
     signals.push({
       signal_type: "urgency_increase",
       severity: 4,
