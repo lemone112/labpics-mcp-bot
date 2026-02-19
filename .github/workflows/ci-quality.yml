@@ -33,9 +33,25 @@ jobs:
         working-directory: web
         run: npm ci
 
-      - name: Server tests
+      - name: Security audit (server)
         working-directory: server
-        run: npm test
+        run: npm audit --audit-level=high
+
+      - name: Security audit (web)
+        working-directory: web
+        run: npm audit --audit-level=high
+
+      - name: Server typecheck
+        working-directory: server
+        run: npm run typecheck
+
+      - name: Server tests with coverage
+        working-directory: server
+        run: npm run test:coverage
+
+      - name: Web typecheck
+        working-directory: web
+        run: npm run typecheck
 
       - name: Web lint
         working-directory: web
@@ -58,6 +74,24 @@ jobs:
         env:
           E2E_REQUIRE_DOCKER: "1"
         run: npm run test:e2e:integration
+
+  biome:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install Biome
+        run: npm ci
+
+      - name: Biome lint & format check
+        run: npx biome check .
 
   typecheck-bot:
     runs-on: ubuntu-latest
