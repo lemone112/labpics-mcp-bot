@@ -8,11 +8,9 @@
 > from the original roadmap in [`mvp-vs-roadmap.md`](./mvp-vs-roadmap.md).
 > Those definitions are replaced by this plan.
 >
-> **v5** — expanded Iter 15 (+3 tasks: coverage, Docker multi-stage, bundle size)
-> and restructured Iter 16 as "QA & Release Readiness" (+9 tasks: E2E, rate limiting,
-> env validation, OpenAPI, clean-DB migration test, final regression, query metrics,
-> machine auth API keys, route modularization for multi-product scalability).
-> Total tasks: 59 → 71. v4 changelog preserved below.
+> **v6** — added TypeScript migration, Pino structured logging, Biome linter to Iter 15.
+> Iter 15 renamed "TypeScript, CI/CD & Infrastructure" (9 → 14 tasks, effort M → L).
+> Total tasks: 71 → 76. v5 changelog preserved below.
 
 ---
 
@@ -26,7 +24,7 @@ Iter 10 ──────────┼──→ Iter 11 (LightRAG) ───�
                   └──→ Iter 13 (Frontend) ──→ Iter 14 ─┘  ├──→ Iter 16 (QA & Release)
                           (resilience)       (design)     │
                                                           │
-Iter 15 (CI/CD) — parallel with any iteration ────────────┘
+Iter 15 (TS + CI/CD) — parallel with any iteration ──────┘
 ```
 
 **Critical path:** 10 → 11 (LightRAG requires clean schema)
@@ -45,11 +43,11 @@ Iter 15 (CI/CD) — parallel with any iteration ──────────�
 | **12** | Backend Security & Reliability | ✅ DONE | 10/10 | 10 | M |
 | **13** | Frontend Resilience & Auth | HIGH | 11 | 10 | M |
 | **14** | Design System & Accessibility | MEDIUM | 10 | 13 | M |
-| **15** | CI/CD & Infrastructure | MEDIUM | 9 | — | M |
+| **15** | TypeScript, CI/CD & Infrastructure | MEDIUM | 14 | — | L |
 | **16** | QA & Release Readiness | HIGH | 12 | 11–15 | L |
-| | **Total** | | **71** | | |
+| | **Total** | | **76** | | |
 
-Effort: S = 1-2 days, M = 3-5 days, L = 5-8 days
+Effort: S = 1–2 days, M = 3–5 days, L = 5–8 days
 
 ---
 
@@ -186,10 +184,10 @@ Effort: S = 1-2 days, M = 3-5 days, L = 5-8 days
 
 ---
 
-## Iter 15 — CI/CD & Infrastructure
+## Iter 15 — TypeScript, CI/CD & Infrastructure
 
 **Priority:** MEDIUM
-**Goal:** Harden build/deploy pipeline, reduce incident blast radius.
+**Goal:** Full TypeScript migration, structured logging, linting. Harden build/deploy pipeline.
 **Blocked by:** nothing — can run in parallel with any iteration.
 **Blocks:** nothing
 
@@ -204,8 +202,13 @@ Effort: S = 1-2 days, M = 3-5 days, L = 5-8 days
 | 15.7 | Add code coverage with threshold | new | Configure `c8` (built-in V8 coverage) for `node --test`. Add `npm run test:coverage` script. Enforce 70% line coverage minimum in CI. Fail build on regression. |
 | 15.8 | Multi-stage Docker builds | new | Refactor `server/Dockerfile` and `web/Dockerfile` to multi-stage: build stage (full deps) → production stage (runtime only). Reduce image size ~30-40%. |
 | 15.9 | Bundle size check in CI | new | Add `@next/bundle-analyzer` or `size-limit` to web build. Report bundle size in CI. Warn if total JS exceeds 500KB gzipped. |
+| 15.10 | TypeScript foundation | new | Add `tsconfig.json` for server (`"module": "nodenext"`, `"strict": true`, `"allowJs": true`) and web (`"strict": true`, extend Next.js defaults). Install `typescript` + `tsx` (dev deps). Configure `npm run typecheck` → `tsc --noEmit`. Incremental adoption via `allowJs`. |
+| 15.11 | Server TypeScript migration | new | Rename all `server/src/**/*.js` → `.ts` (38 files, ~17K LOC). Add function signatures, interface/type definitions for all exported functions. Fix all type errors. Update test imports. Zod schemas auto-infer types (`z.infer<typeof Schema>`). Run `tsc --noEmit` clean. |
+| 15.12 | Web TypeScript migration | new | Rename all `web/**/*.jsx` → `.tsx` (63 components). Type all hooks (`useAutoRefresh`, `useProjectPortfolio`, etc.), contexts, and API response types. Type props for all components. Next.js 16 has native TS support — no config changes needed. Run `tsc --noEmit` clean. |
+| 15.13 | Pino structured logging in workers | new | Fastify already includes Pino (`app.log`). Create shared Pino instance for `worker.js` and `worker-loop.js`. Replace all `console.log(JSON.stringify(...))` calls (11 occurrences) with `logger.info()`. Add request-scoped child loggers (`logger.child({ jobType, projectId })`). JSON output to stdout for Loki ingestion. |
+| 15.14 | Biome linter & formatter | new | Install `@biomejs/biome`. Configure: TypeScript strict rules, import sorting, consistent formatting (tabs/spaces, semicolons). Add `npm run lint` to server (currently none). Add `biome check` to CI pipeline (`ci-quality.yml`). Autofix pass on all files. |
 
-**Exit criteria:** CI blocks on `npm audit` high. Deploy creates backup before apply. Rollback tested at least once. docker-compose.yml env duplication eliminated. Code coverage ≥70%. Docker images use multi-stage builds. Bundle size tracked in CI.
+**Exit criteria:** CI blocks on `npm audit` high. Deploy creates backup before apply. Rollback tested at least once. docker-compose.yml env duplication eliminated. Code coverage ≥70%. Docker images use multi-stage builds. Bundle size tracked in CI. `tsc --noEmit` passes clean for server and web. All server/web files are `.ts`/`.tsx`. Zero `console.log` in production code. Biome lint passes in CI.
 
 ---
 
@@ -287,7 +290,7 @@ Remaining: 11 + 13 can start now (parallel), then 14, then 16.
 
 | Item | Rationale |
 |------|-----------|
-| **TypeScript migration** | Phase 1 (tsconfig + .d.ts) deferred until Wave 2 completes. Convention: all new files in TS. See backlog L.1–L.3. |
+| ~~**TypeScript migration**~~ | ~~Deferred~~ → **Moved to Iter 15** (15.10–15.12). Full migration: server + web. |
 | **B-3: computeClientValueScore → SQL** | LOW priority. Works correctly in JS. Move to matview when performance justifies. |
 | **B-4: use-project-portfolio.js split** | Evaluated — splitting not justified. 335 lines is acceptable for a context hook. |
 | **B-6: Grafana dashboards** | Datasources provisioned. Pre-built dashboards are nice-to-have, not blocking. |
@@ -351,6 +354,22 @@ Remaining: 11 + 13 can start now (parallel), then 14, then 16.
 | B-2 | 80+ env vars duplicated | 15 | 15.6 |
 | B-5 | Vector index tuning | 11 | *(resolved by HKUDS LightRAG)* |
 | B-7 | Custom RAG quality score | 11 | *(replaced by HKUDS metrics)* |
+
+---
+
+## Changes v5 → v6
+
+| Change | Reason |
+|--------|--------|
+| Iter 15: added 15.10 (TypeScript foundation) | 17K LOC server + 63 web components without static types. Zod provides runtime validation but no compile-time safety. |
+| Iter 15: added 15.11 (Server TypeScript migration) | Rename 38 .js → .ts, type all function signatures. Eliminates entire class of runtime type bugs. |
+| Iter 15: added 15.12 (Web TypeScript migration) | Rename 63 .jsx → .tsx, type hooks/components/props. Next.js 16 has native TS support. |
+| Iter 15: added 15.13 (Pino structured logging) | Workers use `console.log(JSON.stringify(...))` — manual JSON formatting. Fastify already includes Pino. Unify. |
+| Iter 15: added 15.14 (Biome linter & formatter) | Server has **no linter**. 17K LOC without code style enforcement. Biome (Rust-based) replaces ESLint + Prettier. |
+| Iter 15: renamed "CI/CD & Infrastructure" → "TypeScript, CI/CD & Infrastructure" | Reflects expanded scope. |
+| Iter 15: effort M → L | 9 → 14 tasks. TypeScript migration is the largest single task. |
+| Deferred: TypeScript migration → moved to Iter 15 | No longer deferred — full migration within Wave 2. |
+| Total tasks: 71 → 76 | +5 new tasks in Iter 15. |
 
 ---
 
