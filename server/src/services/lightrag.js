@@ -1,10 +1,5 @@
 import { runEmbeddings, searchChunks } from "./embeddings.js";
-
-function toPositiveInt(value, fallback, min = 1, max = 200) {
-  const parsed = Number.parseInt(String(value ?? ""), 10);
-  if (!Number.isFinite(parsed)) return fallback;
-  return Math.max(min, Math.min(max, parsed));
-}
+import { toPositiveInt } from "../lib/utils.js";
 
 function asText(value, max = 4000) {
   const text = String(value || "").trim();

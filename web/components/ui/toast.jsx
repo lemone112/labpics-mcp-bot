@@ -65,6 +65,22 @@ const TONE = {
   info: "border-border bg-card text-foreground",
 };
 
+/** Standalone toast for inline use: `<Toast type="error" message="..." />` */
+export function Toast({ type = "info", message }) {
+  if (!message) return null;
+  return (
+    <div
+      role="alert"
+      className={cn(
+        "flex w-full max-w-sm items-center gap-3 rounded-lg border px-4 py-3 text-sm shadow-md",
+        TONE[type] || TONE.info
+      )}
+    >
+      <span className="flex-1">{message}</span>
+    </div>
+  );
+}
+
 function ToastItem({ toast, onDismiss }) {
   const timerRef = useRef(null);
 
