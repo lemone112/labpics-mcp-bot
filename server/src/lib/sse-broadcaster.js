@@ -79,6 +79,29 @@ export function createSseBroadcaster(logger = console) {
     return sent;
   }
 
+  function reapDeadClients() {
+    let reaped = 0;
+    for (const [projectId, projectClients] of clients) {
+      for (const entry of projectClients) {
+        if (entry.reply.raw.destroyed) {
+          projectClients.delete(entry);
+          totalConnections = Math.max(0, totalConnections - 1);
+          reaped++;
+        }
+      }
+      if (projectClients.size === 0) {
+        clients.delete(projectId);
+      }
+    }
+    if (reaped > 0) {
+      logger.info({ reaped, total: totalConnections }, "sse reaper cleaned dead clients");
+    }
+    return reaped;
+  }
+
+  const reaperInterval = setInterval(reapDeadClients, 60_000);
+  reaperInterval.unref();
+
   function getStats() {
     return {
       total_connections: totalConnections,
@@ -86,5 +109,9 @@ export function createSseBroadcaster(logger = console) {
     };
   }
 
-  return { addClient, broadcast, broadcastAll, getStats };
+  function shutdown() {
+    clearInterval(reaperInterval);
+  }
+
+  return { addClient, broadcast, broadcastAll, getStats, reapDeadClients, shutdown };
 }

@@ -30,13 +30,17 @@ function tokenizeQuery(query) {
   return deduped;
 }
 
+function sanitizeLike(text) {
+  return text.replace(/[%\\]/g, "");
+}
+
 function buildLikePatterns(query) {
   const tokens = tokenizeQuery(query);
   if (!tokens.length) {
-    const fallback = asText(query, 300);
+    const fallback = sanitizeLike(asText(query, 300));
     return fallback ? [`%${fallback}%`] : [];
   }
-  return tokens.map((token) => `%${token}%`);
+  return tokens.map((token) => `%${sanitizeLike(token)}%`);
 }
 
 function lightragAnswer(query, chunkCount, messageCount, issueCount, opportunityCount) {

@@ -13,7 +13,7 @@ import {
   resolveConnectorErrors,
 } from "./connector-state.js";
 import { syncConnectorEventLog } from "./event-log.js";
-import { failProcessRun, finishProcessRun, startProcessRun, warnProcess } from "./kag-process-log.js";
+import { failProcessRun, finishProcessRun, startProcessRun, warnProcess } from "./process-log.js";
 import { previewIdentitySuggestions } from "./identity-graph.js";
 import { runSyncReconciliation } from "./reconciliation.js";
 

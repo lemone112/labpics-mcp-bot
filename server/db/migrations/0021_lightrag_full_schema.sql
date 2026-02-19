@@ -4,6 +4,17 @@
 -- ingestion_cursors, ingestion_runs, ACL tags, and adapts rag_chunks.
 -- Existing tables (cw_*, linear_*, attio_*) are NOT removed — they stay as
 -- connector-specific raw storage. source_documents is the unified LightRAG layer.
+--
+-- Architecture note: source_documents/entities/entity_links are the LABPICS
+-- canonical data layer. HKUDS LightRAG Server (Iter 11.4) uses its own internal
+-- PGGraphStorage/PGVectorStorage/PGKVStorage tables for knowledge graph + embeddings.
+-- The two schemas are COMPLEMENTARY:
+--   source_documents → ingestion pipeline → LightRAG /documents API → LightRAG internal tables
+--   LightRAG /query API → returns answers → labpics enriches with source_documents metadata (citations)
+-- This means source_documents is the citation/ACL/audit layer, NOT a duplicate of LightRAG storage.
+--
+-- Ingestion order constraint: entities MUST be inserted BEFORE entity_links (FK dependency).
+-- Application code must do two-pass ingestion: 1) upsert entities, 2) create links.
 
 -- ============================================================
 -- 0) Prerequisites
@@ -19,41 +30,31 @@ CREATE TABLE IF NOT EXISTS source_documents (
   source_system    text        NOT NULL CHECK (source_system IN ('attio', 'linear', 'chatwoot')),
   source_type      text        NOT NULL,
   source_id        text        NOT NULL,
-  source_url       text        NOT NULL DEFAULT '',
+  source_url       text        NOT NULL DEFAULT '',  -- empty string = URL unknown; ingestion SHOULD populate
   project_id       uuid        NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
   account_scope_id uuid        NOT NULL REFERENCES account_scopes(id) ON DELETE RESTRICT,
   author_ref       text,
   raw_payload      jsonb       NOT NULL DEFAULT '{}'::jsonb,
   text_content     text        NOT NULL DEFAULT '',
   language         text        NOT NULL DEFAULT 'ru',
-  content_hash     text        NOT NULL DEFAULT '',
+  content_hash     text,       -- NULL = not yet computed; non-NULL = skip re-embedding when unchanged
   is_deleted       boolean     NOT NULL DEFAULT false,
   acl_tags         text[]      NOT NULL DEFAULT '{}',
   created_at       timestamptz NOT NULL DEFAULT now(),
   updated_at       timestamptz NOT NULL DEFAULT now()
 );
 
--- Validate source_type enum
-DO $$
-BEGIN
-  IF NOT EXISTS (
-    SELECT 1 FROM pg_constraint WHERE conname = 'source_documents_source_type_check'
-  ) THEN
-    ALTER TABLE source_documents
-      ADD CONSTRAINT source_documents_source_type_check
-      CHECK (source_type IN (
-        'company', 'deal', 'note', 'person', 'activity',
-        'issue', 'comment', 'project', 'cycle',
-        'conversation', 'message', 'contact', 'inbox', 'attachment'
-      ));
-  END IF;
-END $$;
+-- source_type: NO CHECK constraint — intentionally open-ended (spec uses "...").
+-- Known types: company, deal, note, person, activity, issue, comment, project,
+-- cycle, conversation, message, contact, inbox, attachment, task, label, team.
+-- New source types can be added without DDL migration.
 
 CREATE INDEX IF NOT EXISTS source_documents_system_type_updated_idx
   ON source_documents (source_system, source_type, updated_at DESC);
 
 CREATE INDEX IF NOT EXISTS source_documents_content_hash_idx
-  ON source_documents (content_hash);
+  ON source_documents (content_hash)
+  WHERE content_hash IS NOT NULL;
 
 CREATE INDEX IF NOT EXISTS source_documents_project_updated_idx
   ON source_documents (project_id, updated_at DESC);
@@ -79,8 +80,6 @@ ALTER TABLE rag_chunks
   ADD COLUMN IF NOT EXISTS end_offset   int,
   ADD COLUMN IF NOT EXISTS acl_tags     text[] NOT NULL DEFAULT '{}';
 
--- Generate chunk_ref for new rows (existing rows get backfilled below)
--- chunk_ref format: "chunk:<document_ref>:<chunk_index>"
 DO $$
 BEGIN
   IF NOT EXISTS (
@@ -92,6 +91,30 @@ BEGIN
   END IF;
 END $$;
 
+-- Backfill chunk_ref for existing rows: "chunk:<id>::<chunk_index>"
+-- Uses the row's own UUID id as a stable fallback when document_ref is NULL.
+UPDATE rag_chunks
+SET chunk_ref = 'chunk:' || COALESCE(document_ref, id::text) || ':' || COALESCE(chunk_index, 0)
+WHERE chunk_ref IS NULL;
+
+-- Keep chunk_ref nullable: existing INSERT paths (chatwoot.js insertChunkRows)
+-- do not supply chunk_ref yet. NOT NULL will be enforced after Iter 11 updates
+-- all writers. UNIQUE constraint still applied (NULLs are distinct in PG unique).
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'rag_chunks_chunk_ref_unique'
+  ) THEN
+    ALTER TABLE rag_chunks
+      ADD CONSTRAINT rag_chunks_chunk_ref_unique UNIQUE (chunk_ref);
+  END IF;
+END $$;
+
+-- Backfill chunk_hash from existing text_hash
+UPDATE rag_chunks
+SET chunk_hash = text_hash
+WHERE chunk_hash IS NULL AND text_hash IS NOT NULL;
+
 CREATE INDEX IF NOT EXISTS rag_chunks_document_ref_idx
   ON rag_chunks (document_ref, chunk_index);
 
@@ -102,10 +125,14 @@ CREATE INDEX IF NOT EXISTS rag_chunks_chunk_hash_idx
 CREATE INDEX IF NOT EXISTS rag_chunks_acl_tags_gin_idx
   ON rag_chunks USING gin (acl_tags);
 
--- Rename existing text_hash → populate chunk_hash for consistency
-UPDATE rag_chunks
-SET chunk_hash = text_hash
-WHERE chunk_hash IS NULL AND text_hash IS NOT NULL;
+-- Verify vector index exists (created in 0003 conditionally; re-attempt here)
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_am WHERE amname = 'hnsw')
+     AND NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'rag_chunks_embedding_hnsw_idx') THEN
+    EXECUTE 'CREATE INDEX rag_chunks_embedding_hnsw_idx ON rag_chunks USING hnsw (embedding vector_cosine_ops)';
+  END IF;
+END $$;
 
 -- ============================================================
 -- 3) entities  — canonical entity store
@@ -126,19 +153,10 @@ CREATE TABLE IF NOT EXISTS entities (
   updated_at      timestamptz NOT NULL DEFAULT now()
 );
 
-DO $$
-BEGIN
-  IF NOT EXISTS (
-    SELECT 1 FROM pg_constraint WHERE conname = 'entities_entity_kind_check'
-  ) THEN
-    ALTER TABLE entities
-      ADD CONSTRAINT entities_entity_kind_check
-      CHECK (entity_kind IN (
-        'company', 'deal', 'person', 'issue', 'project',
-        'conversation', 'message', 'contact', 'cycle', 'inbox'
-      ));
-  END IF;
-END $$;
+-- entity_kind: NO CHECK constraint — intentionally open-ended (spec uses "...").
+-- Known kinds: company, deal, person, issue, project, conversation, message,
+-- contact, cycle, inbox, note, activity, attachment, team.
+-- Validated at application layer (Zod schema).
 
 CREATE INDEX IF NOT EXISTS entities_kind_normalized_name_idx
   ON entities (entity_kind, normalized_name);
@@ -177,6 +195,7 @@ CREATE TABLE IF NOT EXISTS entity_links (
   created_by    text        NOT NULL DEFAULT 'system' CHECK (created_by IN ('system', 'user', 'admin')),
   status        text        NOT NULL DEFAULT 'proposed' CHECK (status IN ('proposed', 'confirmed', 'rejected')),
   expires_at    timestamptz,
+  acl_tags      text[]      NOT NULL DEFAULT '{}',
   created_at    timestamptz NOT NULL DEFAULT now(),
   updated_at    timestamptz NOT NULL DEFAULT now()
 );
@@ -194,6 +213,9 @@ BEGIN
       ));
   END IF;
 END $$;
+
+CREATE INDEX IF NOT EXISTS entity_links_acl_tags_gin_idx
+  ON entity_links USING gin (acl_tags);
 
 CREATE INDEX IF NOT EXISTS entity_links_from_ref_type_status_idx
   ON entity_links (from_ref, link_type, status);
@@ -235,8 +257,12 @@ CREATE TABLE IF NOT EXISTS document_entity_mentions (
   mention_type  text        NOT NULL DEFAULT 'metadata'
     CHECK (mention_type IN ('explicit', 'inferred', 'metadata')),
   confidence    numeric(5,4) NOT NULL DEFAULT 1.0 CHECK (confidence >= 0 AND confidence <= 1),
+  acl_tags      text[]      NOT NULL DEFAULT '{}',  -- inherited from document or explicit
   created_at    timestamptz NOT NULL DEFAULT now()
 );
+
+CREATE INDEX IF NOT EXISTS document_entity_mentions_acl_tags_gin_idx
+  ON document_entity_mentions USING gin (acl_tags);
 
 CREATE INDEX IF NOT EXISTS document_entity_mentions_entity_created_idx
   ON document_entity_mentions (entity_ref, created_at DESC);
@@ -363,7 +389,8 @@ SELECT
 FROM source_documents sd
 WHERE sd.is_deleted = false;
 
--- View: entity context — entity + links + latest document mention
+-- View: entity context — entity + pre-aggregated link/mention counts
+-- Uses LEFT JOIN + GROUP BY instead of correlated subqueries for performance.
 CREATE OR REPLACE VIEW v_entity_context AS
 SELECT
   e.entity_ref,
@@ -374,18 +401,23 @@ SELECT
   e.project_id,
   e.account_scope_id,
   e.acl_tags,
-  (
-    SELECT count(*)
-    FROM entity_links el
-    WHERE (el.from_ref = e.entity_ref OR el.to_ref = e.entity_ref)
-      AND el.status IN ('proposed', 'confirmed')
-  )::int AS link_count,
-  (
-    SELECT count(*)
-    FROM document_entity_mentions dem
-    WHERE dem.entity_ref = e.entity_ref
-  )::int AS mention_count
+  COALESCE(lc.link_count, 0)::int AS link_count,
+  COALESCE(mc.mention_count, 0)::int AS mention_count
 FROM entities e
+LEFT JOIN (
+  SELECT ref, count(*)::int AS link_count
+  FROM (
+    SELECT from_ref AS ref FROM entity_links WHERE status IN ('proposed', 'confirmed')
+    UNION ALL
+    SELECT to_ref AS ref FROM entity_links WHERE status IN ('proposed', 'confirmed')
+  ) sub
+  GROUP BY ref
+) lc ON lc.ref = e.entity_ref
+LEFT JOIN (
+  SELECT entity_ref, count(*)::int AS mention_count
+  FROM document_entity_mentions
+  GROUP BY entity_ref
+) mc ON mc.entity_ref = e.entity_ref
 WHERE e.is_deleted = false;
 
 -- ============================================================
@@ -396,7 +428,48 @@ CREATE OR REPLACE FUNCTION make_global_ref(
   p_source_type   text,
   p_source_id     text
 ) RETURNS text
-LANGUAGE sql IMMUTABLE PARALLEL SAFE
+LANGUAGE sql IMMUTABLE PARALLEL SAFE STRICT  -- STRICT: returns NULL if any arg is NULL
 AS $$
   SELECT p_source_system || ':' || p_source_type || ':' || p_source_id;
 $$;
+
+-- ============================================================
+-- 12) Auto-update `updated_at` trigger for LightRAG tables
+--     Prevents stale updated_at when application code forgets to set it.
+-- ============================================================
+CREATE OR REPLACE FUNCTION set_updated_at()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+BEGIN
+  NEW.updated_at = now();
+  RETURN NEW;
+END;
+$$;
+
+DO $$
+DECLARE
+  tbl text;
+  trg text;
+BEGIN
+  FOREACH tbl IN ARRAY ARRAY[
+    'source_documents',
+    'entities',
+    'entity_links'
+  ]
+  LOOP
+    trg := tbl || '_set_updated_at';
+    IF NOT EXISTS (
+      SELECT 1
+      FROM pg_trigger
+      WHERE tgrelid = to_regclass(tbl)
+        AND tgname = trg
+    ) THEN
+      EXECUTE format(
+        'CREATE TRIGGER %I BEFORE UPDATE ON %I FOR EACH ROW EXECUTE FUNCTION set_updated_at()',
+        trg,
+        tbl
+      );
+    END IF;
+  END LOOP;
+END $$;

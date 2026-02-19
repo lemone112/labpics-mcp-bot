@@ -2,8 +2,8 @@ import pg from "pg";
 
 const { Pool } = pg;
 
-export function createDbPool(databaseUrl) {
-  return new Pool({
+export function createDbPool(databaseUrl, logger = console) {
+  const pool = new Pool({
     connectionString: databaseUrl,
     max: parseInt(process.env.PG_POOL_MAX, 10) || 25,
     idleTimeoutMillis: 30_000,
@@ -11,6 +11,10 @@ export function createDbPool(databaseUrl) {
     statement_timeout: parseInt(process.env.PG_STATEMENT_TIMEOUT_MS, 10) || 30_000,
     application_name: process.env.PG_APP_NAME || "labpics-dashboard",
   });
+  pool.on("error", (err) => {
+    logger.error({ err: String(err?.message || err) }, "pg_pool_background_error");
+  });
+  return pool;
 }
 
 export async function withTransaction(pool, fn) {

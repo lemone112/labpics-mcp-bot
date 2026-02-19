@@ -1,5 +1,5 @@
 import crypto from "node:crypto";
-import { failProcessRun, finishProcessRun, startProcessRun, warnProcess } from "./kag-process-log.js";
+import { failProcessRun, finishProcessRun, startProcessRun, warnProcess } from "./process-log.js";
 import { clamp, toDate, toIso } from '../lib/utils.js';
 
 function featureValue(signalsJson, key) {
@@ -147,7 +147,7 @@ async function loadEventTypesWindow(pool, projectId, accountScopeId, windowDays)
   const { rows } = await pool.query(
     `
       SELECT event_type
-      FROM kag_event_log
+      FROM connector_events
       WHERE project_id = $1
         AND account_scope_id = $2
         AND occurred_at >= now() - (($3::int)::text || ' days')::interval

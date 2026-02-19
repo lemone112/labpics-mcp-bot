@@ -392,7 +392,7 @@ async function insertEvents(pool, scope, events) {
   }));
   const result = await pool.query(
     `
-      INSERT INTO kag_event_log(
+      INSERT INTO connector_events(
         project_id,
         account_scope_id,
         event_type,
@@ -496,7 +496,7 @@ export async function listProjectEvents(pool, scope, options = {}) {
         source_attio_record_id,
         payload_json,
         created_at
-      FROM kag_event_log
+      FROM connector_events
       WHERE project_id = $1
         AND account_scope_id = $2
         AND ($3 = '' OR event_type = $3)

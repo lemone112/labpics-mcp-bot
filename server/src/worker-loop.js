@@ -67,6 +67,12 @@ async function main() {
   async function gracefulShutdown(signal) {
     console.log(JSON.stringify({ type: "worker_shutdown", signal, at: new Date().toISOString() }));
     running = false;
+    const deadlineMs = parseInt(process.env.SHUTDOWN_TIMEOUT_MS, 10) || 30_000;
+    const forceExit = setTimeout(() => {
+      console.error(JSON.stringify({ type: "worker_force_exit", deadline_ms: deadlineMs, at: new Date().toISOString() }));
+      process.exit(1);
+    }, deadlineMs);
+    forceExit.unref();
   }
   process.on("SIGTERM", () => gracefulShutdown("SIGTERM"));
   process.on("SIGINT", () => gracefulShutdown("SIGINT"));

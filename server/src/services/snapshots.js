@@ -1,5 +1,5 @@
 import crypto from "node:crypto";
-import { failProcessRun, finishProcessRun, startProcessRun, warnProcess } from "./kag-process-log.js";
+import { failProcessRun, finishProcessRun, startProcessRun, warnProcess } from "./process-log.js";
 
 function clamp(value, min, max) {
   const n = Number(value);
@@ -187,7 +187,7 @@ async function fetchKeyAggregates(pool, scope) {
           count(*) FILTER (WHERE occurred_at > now() - interval '7 days')::int AS events_7d,
           count(*) FILTER (WHERE occurred_at > now() - interval '14 days')::int AS events_14d,
           count(*) FILTER (WHERE occurred_at > now() - interval '30 days')::int AS events_30d
-        FROM kag_event_log
+        FROM connector_events
         WHERE project_id = $1
           AND account_scope_id = $2
       `,
@@ -196,7 +196,7 @@ async function fetchKeyAggregates(pool, scope) {
     pool.query(
       `
         SELECT source, count(*)::int AS count
-        FROM kag_event_log
+        FROM connector_events
         WHERE project_id = $1
           AND account_scope_id = $2
           AND occurred_at > now() - interval '14 days'
@@ -356,7 +356,7 @@ async function deriveDealStageOutcomes(pool, scope, snapshotDate) {
   const { rows } = await pool.query(
     `
       SELECT id, occurred_at, source_ref, payload_json
-      FROM kag_event_log
+      FROM connector_events
       WHERE project_id = $1
         AND account_scope_id = $2
         AND source = 'attio'
