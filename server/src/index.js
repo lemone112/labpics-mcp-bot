@@ -436,27 +436,31 @@ async function main() {
   sessionCleanupTimer.unref();
 
   if (redisPubSub.enabled) {
-    await redisPubSub.subscribe("job_completed", (payload) => {
-      const projectId = payload?.project_id;
-      if (!projectId) return;
-      sseBroadcaster.broadcast(projectId, "job_completed", {
-        job_type: payload.job_type,
-        status: payload.status,
-        at: payload.at,
-      });
+    try {
+      await redisPubSub.subscribe("job_completed", (payload) => {
+        const projectId = payload?.project_id;
+        if (!projectId) return;
+        sseBroadcaster.broadcast(projectId, "job_completed", {
+          job_type: payload.job_type,
+          status: payload.status,
+          at: payload.at,
+        });
 
-      // --- Cache invalidation on job completion ---
-      const accountScopeId = payload?.account_scope_id;
-      const jobType = String(payload?.job_type || "");
-      if (accountScopeId) {
-        cache.invalidateByPrefix(`portfolio:${accountScopeId}`);
-      }
-      cache.invalidateByPrefix(`ct:${projectId}`);
-      if (["connectors_sync_cycle", "embeddings_run"].includes(jobType)) {
-        cache.invalidateByPrefix(`lightrag:${projectId}`);
-      }
-    });
-    app.log.info("redis pub/sub → sse bridge active (with cache invalidation)");
+        // --- Cache invalidation on job completion ---
+        const accountScopeId = payload?.account_scope_id;
+        const jobType = String(payload?.job_type || "");
+        if (accountScopeId) {
+          cache.invalidateByPrefix(`portfolio:${accountScopeId}`);
+        }
+        cache.invalidateByPrefix(`ct:${projectId}`);
+        if (["connectors_sync_cycle", "embeddings_run"].includes(jobType)) {
+          cache.invalidateByPrefix(`lightrag:${projectId}`);
+        }
+      });
+      app.log.info("redis pub/sub → sse bridge active (with cache invalidation)");
+    } catch (err) {
+      app.log.warn({ error: String(err?.message || err) }, "redis subscribe failed — degrading to polling-only mode");
+    }
   } else {
     app.log.info("redis unavailable — SSE will not receive real-time events");
   }

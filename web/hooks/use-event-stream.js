@@ -7,9 +7,10 @@ import { API_BASE } from "@/lib/api";
  * Connects to the SSE endpoint and exposes real-time events.
  * Falls back gracefully if SSE is unavailable.
  *
- * @param {{ enabled?: boolean }} options
+ * @param {{ enabled?: boolean, key?: string }} options
+ * @param options.key — change this value (e.g. projectId) to force reconnect
  */
-export function useEventStream({ enabled = true } = {}) {
+export function useEventStream({ enabled = true, key = "" } = {}) {
   const [connected, setConnected] = useState(false);
   const [lastEvent, setLastEvent] = useState(null);
   const sourceRef = useRef(null);
@@ -59,7 +60,7 @@ export function useEventStream({ enabled = true } = {}) {
       sourceRef.current = null;
       setConnected(false);
     };
-  }, [enabled]);
+  }, [enabled, key]);
 
   return { connected, lastEvent };
 }

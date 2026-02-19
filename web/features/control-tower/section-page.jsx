@@ -952,6 +952,7 @@ export default function ControlTowerSectionPage({ section }) {
   // Real-time: SSE event stream (must be above data hooks so sseConnected is available)
   const eventStream = useEventStream({
     enabled: !loading && !loadingProjects && selectedProjectIds.length > 0,
+    key: selectedProject?.id || "",
   });
 
   const overview = usePortfolioOverview({
