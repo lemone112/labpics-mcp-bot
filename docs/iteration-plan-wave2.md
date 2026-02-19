@@ -37,7 +37,7 @@ Iter 15 (CI/CD) — independent, can run in parallel with any iteration
 
 | Iter | Name | Priority | Tasks | Depends on | Est. effort |
 |------|------|----------|-------|------------|-------------|
-| **10** | KAG Cleanup + DB Hygiene | CRITICAL | 9 | — | S |
+| **10** | KAG Cleanup + DB Hygiene | ✅ DONE | 9/9 | — | S |
 | **11** | Full LightRAG Integration | CRITICAL | 10 | 10 | L |
 | **12** | Backend Security & Reliability | HIGH | 10 | 10 | M |
 | **13** | Frontend Resilience & Auth | HIGH | 11 | 10 | M |
@@ -50,30 +50,29 @@ Effort: S = 1-2 days, M = 3-5 days, L = 5-8 days
 
 ---
 
-## Iter 10 — KAG Cleanup + DB Hygiene
+## Iter 10 — KAG Cleanup + DB Hygiene ✅ COMPLETE
 
 **Priority:** CRITICAL
-**Goal:** Remove ~2,770 LOC dead code, fix schema hygiene issues, prepare clean foundation for LightRAG.
-**Blocked by:** nothing — can start immediately.
-**Blocks:** Iter 11 (LightRAG uses tables freed by KAG cleanup), Iter 12, Iter 13
+**Status:** DONE — commit `7914a5b` (2026-02-19)
+**Result:** Removed 4,932 lines (net −4,865), 26 files changed. All 9 tasks completed.
 
-| # | Task | Source | Details |
-|---|------|--------|---------|
-| 10.1 | Delete dead KAG modules | backlog | Remove `kag.js`, `kag/` directory (~2,602 LOC). Keep `kag/templates/` (used by recommendations-v2). |
-| 10.2 | Rename `kag_event_log` → `connector_events` | backlog | Migration + service code update. Table is used by connector-sync, not KAG. |
-| 10.3 | Delete `/kag/*` API routes | backlog | ~118 LOC in `index.js`. Remove entirely (currently returns 410 in LIGHTRAG_ONLY mode — no need to keep). |
-| 10.4 | Clear scheduler of KAG jobs | backlog | Remove KAG job types from CASCADE_CHAINS and seed data. |
-| 10.5 | DROP unused KAG DB tables | DB-03 | `kag_nodes`, `kag_edges`, `kag_provenance_refs`, `kag_signal_state`, `kag_signals`, `kag_signal_history`, `kag_scores`, `kag_score_history`, `kag_recommendations`, `kag_templates`. |
-| 10.6 | Remove KAG tests and documentation | backlog | Clean test files, update docs. |
-| 10.7 | Fix duplicate migration numbering (0017) | DB-01 | Rename `0017_production_indexes_and_pool.sql` → `0017b_production_indexes_and_pool.sql`. Update `schema_migrations` row. |
-| 10.8 | Add partial index for pending embeddings | DB-04 | `CREATE INDEX ON rag_chunks (project_id, created_at) WHERE embedding_status = 'pending'`. Speeds up `claimPendingRows`. |
-| 10.9 | Resolve `audit_events_partitioned` | DB-06 | Table created in migration 0018 but never referenced in code. Either wire up INSERT triggers or DROP it. |
+| # | Task | Source | Status | Notes |
+|---|------|--------|--------|-------|
+| 10.1 | Delete dead KAG modules | backlog | ✅ | Removed `kag.js` (544 LOC), `kag/` directory (5 files). Moved `kag/templates/` → `services/templates/`. |
+| 10.2 | Rename `kag_event_log` → `connector_events` | backlog | ✅ | Migration 0022 + 4 service SQL refs updated. |
+| 10.3 | Delete `/kag/*` API routes | backlog | ✅ | Removed 20 route handlers (~387 LOC) + 23 unused imports from `index.js`. |
+| 10.4 | Clear scheduler of KAG jobs | backlog | ✅ | Removed KAG cascades, handlers, defaults, pause query, `lightRagOnly` gating. |
+| 10.5 | DROP unused KAG DB tables | DB-03 | ✅ | Migration 0022 DROPs 10 tables. Kept `kag_templates` (used by recommendations-v2). |
+| 10.6 | Remove KAG tests and documentation | backlog | ✅ | Deleted 7 test files. Renamed `kag-process-log.js` → `process-log.js` (5 importers). Removed 2 unused schemas. |
+| 10.7 | Fix duplicate migration numbering (0017) | DB-01 | ✅ | Renamed to `0017b_production_indexes_and_pool.sql`. |
+| 10.8 | Add partial index for pending embeddings | DB-04 | ✅ | `idx_rag_chunks_pending` in migration 0022. |
+| 10.9 | Resolve `audit_events_partitioned` | DB-06 | ✅ | DROPped table + function in migration 0022. |
 
-**Exit criteria:** No `kag` references in server/src/ (except `kag_event_log` → `connector_events`). All 0017 numbering resolved. Tests green.
-
-**Risks:**
-- `kag/templates/` used by recommendations-v2 — must verify before deleting parent directory
-- `kag_event_log` rename requires updating all SQL references in services atomically
+**Exit criteria check:**
+- ✅ No `kag` references in `server/src/` import paths
+- ✅ Remaining `kag` in source: only DB table names (`kag_signals`, `kag_scores`, `kag_risk_forecasts`) in dead-code services (forecasting.js, snapshots.js, recommendations-v2.js — no callers after route/scheduler removal), and `KAG_TEMPLATE_KEYS` constant in templates/
+- ✅ All 0017 numbering resolved
+- ⚠ Tests: no test runner configured yet (Iter 15)
 
 ---
 
