@@ -5,6 +5,9 @@ const ROOT = process.cwd();
 const TARGET_DIRS = ["app", "components", "features"];
 const FILE_EXTENSIONS = new Set([".js", ".jsx", ".ts", ".tsx"]);
 
+// Files where hex colors are expected (CSS token definitions)
+const HEX_WHITELIST = new Set(["globals.css", "tailwind.config.js"]);
+
 const forbiddenRules = [
   {
     name: "legacy-palette-utility",
@@ -37,9 +40,42 @@ const forbiddenRules = [
     description: "Use MOTION easing tokens for Anime.js animations",
     pattern: /\bease:\s*["']/,
   },
+  // --- NEW RULES (hardened 2026-02-19) ---
+  {
+    name: "arbitrary-spacing",
+    description:
+      "Use spacing scale tokens instead of arbitrary px values. See DESIGN_SYSTEM_2026.md section 2",
+    // Matches p-[13px], m-[17px], gap-[23px], px-[10px], etc.
+    // Excludes calc(), env(), var(), %, vh, vw, rem, and z-index bracket values
+    pattern:
+      /\b(?:p|px|py|pl|pr|pt|pb|m|mx|my|ml|mr|mt|mb|gap|gap-x|gap-y|inset|top|left|right|bottom|w|h|min-w|min-h|max-w|max-h)-\[\d+px\]/,
+    exclude: /\b[z]-\[\d+\]/,
+  },
+  {
+    name: "arbitrary-typography",
+    description:
+      "Use typography scale instead of arbitrary text sizes. Allowed: text-[11px] only. See DESIGN_SYSTEM_2026.md section 3",
+    // Matches text-[Npx] but NOT text-[11px] (whitelisted small label)
+    pattern: /\btext-\[\d+px\]/,
+    whitelist: /\btext-\[11px\]/,
+  },
+  {
+    name: "arbitrary-shadow",
+    description:
+      "Use shadow scale tokens (--shadow-card, --shadow-floating, --shadow-modal). See DESIGN_SYSTEM_2026.md section 5",
+    // Matches shadow-[anything] EXCEPT shadow-[var(--shadow-*)]
+    pattern: /\bshadow-\[(?!var\()/,
+  },
+  {
+    name: "font-weight-forbidden",
+    description:
+      "Do not use font-thin or font-light. Minimum weight is font-normal (400). See DESIGN_SYSTEM_2026.md section 3",
+    pattern: /\b(?:font-thin|font-light)\b/,
+  },
 ];
 
 function collectFiles(dirPath, accumulator = []) {
+  if (!fs.existsSync(dirPath)) return accumulator;
   const entries = fs.readdirSync(dirPath, { withFileTypes: true });
   for (const entry of entries) {
     const absolutePath = path.join(dirPath, entry.name);
@@ -58,20 +94,40 @@ function collectFiles(dirPath, accumulator = []) {
 function detectViolations(filePath, source) {
   const lines = source.split("\n");
   const violations = [];
+  const fileName = path.basename(filePath);
 
   lines.forEach((line, index) => {
+    // Skip comment lines
+    const trimmed = line.trim();
+    if (trimmed.startsWith("//") || trimmed.startsWith("*") || trimmed.startsWith("/*")) {
+      return;
+    }
+
     for (const rule of forbiddenRules) {
+      // Skip hex check for CSS/config files where tokens are defined
+      if (rule.name === "raw-hex-in-component" && HEX_WHITELIST.has(fileName)) {
+        continue;
+      }
+
       if (rule.pattern.test(line)) {
+        // Check exclude pattern (e.g., z-index brackets are fine)
+        if (rule.exclude && rule.exclude.test(line)) {
+          continue;
+        }
+        // Check whitelist (e.g., text-[11px] is permitted)
+        if (rule.whitelist && rule.whitelist.test(line)) {
+          continue;
+        }
+
         violations.push({
           filePath,
           line: index + 1,
           rule: rule.name,
           description: rule.description,
-          content: line.trim(),
+          content: trimmed,
         });
       }
     }
-
   });
 
   return violations;
