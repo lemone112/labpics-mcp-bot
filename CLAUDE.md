@@ -8,11 +8,13 @@ After any research, analysis, or audit — always review the result from a posit
 - **Zero fabrications** — if something is unknown, say "unknown", never invent.
 - Prefer outputs that are **provably true** (test passes, file exists, grep confirms) over plausible-sounding assumptions.
 
-## Team context
+## Design & UX standards
 
-- The project owner is a **designer with 10+ years of experience**.
-- All visual/UI decisions (components, layouts, animations, colors, spacing, typography) must be **consulted with the user before implementation**.
-- Do not make autonomous design choices — ask first, implement after approval.
+- **Pixel-perfect** implementation is a top priority — every spacing, alignment, and visual detail matters.
+- Pay special attention to visual **edge-cases**: empty states, overflow, truncation, responsive breakpoints, loading skeletons, error states.
+- Design must be **clean and modern**, following 2026 SaaS design trends.
+- UX must be **logical and intuitive** — minimal friction, clear hierarchy, predictable interactions.
+- UI must match current **SaaS-standard patterns**: consistent component usage, proper density, accessible contrast, smooth transitions.
 
 ## Tech stack
 
