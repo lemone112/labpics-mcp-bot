@@ -61,6 +61,10 @@ jobs:
         working-directory: web
         run: npm run build
 
+      - name: Bundle size check
+        working-directory: web
+        run: npm run bundle:check
+
       - name: Install Playwright browsers
         working-directory: web
         run: npx playwright install --with-deps chromium
