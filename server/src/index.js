@@ -491,6 +491,7 @@ async function main() {
     responses_total: 0,
     errors_total: 0,
     status_counts: {},
+    route_times: {},
   };
 
   function loginAttemptKey(ip, username) {
@@ -713,11 +714,22 @@ async function main() {
     request._resolvedProjectIds = preferredProjectIds;
   });
 
-  app.addHook("onResponse", async (_request, reply) => {
+  app.addHook("onResponse", async (request, reply) => {
     metrics.responses_total += 1;
     const code = Number(reply.statusCode || 0);
     const key = Number.isFinite(code) ? String(code) : "0";
     metrics.status_counts[key] = (metrics.status_counts[key] || 0) + 1;
+
+    // Track response time per route
+    const elapsedMs = reply.elapsedTime;
+    if (Number.isFinite(elapsedMs)) {
+      const route = request.routeOptions?.url || request.url.split("?")[0];
+      const bucket = metrics.route_times[route] || { count: 0, total_ms: 0, max_ms: 0 };
+      bucket.count += 1;
+      bucket.total_ms += elapsedMs;
+      if (elapsedMs > bucket.max_ms) bucket.max_ms = elapsedMs;
+      metrics.route_times[route] = bucket;
+    }
   });
 
   registerGet("/health", async (request, reply) => {
@@ -771,6 +783,13 @@ async function main() {
     // --- HTTP status breakdown ---
     for (const [statusCode, count] of Object.entries(metrics.status_counts)) {
       lines.push(`app_response_status_total{status="${statusCode}"} ${count}`);
+    }
+    // --- Route response times ---
+    for (const [route, t] of Object.entries(metrics.route_times)) {
+      const avgMs = t.count > 0 ? (t.total_ms / t.count).toFixed(1) : "0";
+      lines.push(`app_route_response_avg_ms{route="${route}"} ${avgMs}`);
+      lines.push(`app_route_response_max_ms{route="${route}"} ${t.max_ms.toFixed(1)}`);
+      lines.push(`app_route_requests_total{route="${route}"} ${t.count}`);
     }
     // --- Circuit breakers ---
     for (const cb of cbStates) {
@@ -1224,6 +1243,8 @@ async function main() {
         payload: result,
         evidenceRefs: [],
       });
+      // Invalidate lightrag cache directly (covers case where Redis pub/sub is unavailable)
+      cache.invalidateByPrefix(`lightrag:${scope.projectId}`);
       return sendOk(reply, request.requestId, { result });
     } catch (error) {
       const errMsg = String(error?.message || error);
@@ -1404,6 +1425,10 @@ async function main() {
   registerPost("/connectors/sync", async (request, reply) => {
     const scope = requireProjectScope(request);
     const result = await runAllConnectorsSync(pool, scope, request.log);
+    // Invalidate caches directly (covers case where Redis pub/sub is unavailable)
+    cache.invalidateByPrefix(`lightrag:${scope.projectId}`);
+    cache.invalidateByPrefix(`ct:${scope.projectId}`);
+    if (scope.accountScopeId) cache.invalidateByPrefix(`portfolio:${scope.accountScopeId}`);
     await writeAuditEvent(pool, {
       projectId: scope.projectId,
       accountScopeId: scope.accountScopeId,
