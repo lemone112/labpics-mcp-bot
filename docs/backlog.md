@@ -5,11 +5,12 @@
 > Wave 2: [`docs/iteration-plan-wave2.md`](./iteration-plan-wave2.md)
 > Wave 3: [`docs/iteration-plan-wave3-design.md`](./iteration-plan-wave3-design.md)
 > Wave 4: [`docs/iteration-plan-wave4-growth.md`](./iteration-plan-wave4-growth.md)
+> Wave 5: [`docs/iteration-plan-wave5-intelligence.md`](./iteration-plan-wave5-intelligence.md)
 > **Source of truth:** [GitHub Issues & Milestones](https://github.com/lemone112/labpics-dashboard/milestones)
 
 ---
 
-## Roadmap Overview (4 волны, 30 итераций, 292 задачи)
+## Roadmap Overview (5 волн, 35 итераций, 307 задач)
 
 | Wave | Iterations | Issues | Статус | Фокус |
 |------|-----------|--------|--------|-------|
@@ -17,6 +18,7 @@
 | **Wave 2** | Iter 11–16 | #46–#119 | ⬜ In progress | LightRAG, resilience, TS, QA |
 | **Wave 3** | Iter 17–24 | #125–#220 | ⬜ Planned | Design overhaul |
 | **Wave 4** | Iter 25–30 | #221–#271 | ⬜ Planned | Strategic growth |
+| **Wave 5** | Iter 31–35 | #272–#286 | ⬜ Planned | Client intelligence |
 
 ---
 
@@ -71,6 +73,18 @@
 | 28 | Engagement & Notifications | [18](https://github.com/lemone112/labpics-dashboard/milestone/18) | #247–#256 | DAU +30% |
 | 29 | Platform & Integrations | [19](https://github.com/lemone112/labpics-dashboard/milestone/19) | #255–#263 | Platform play |
 | 30 | Offline, Personalization & Enterprise | [20](https://github.com/lemone112/labpics-dashboard/milestone/20) | #264–#271 | Enterprise compliance |
+
+---
+
+## Planned Iterations (Wave 5 — Client Intelligence)
+
+| Iter | Название | Milestone | Issues | Бизнес-impact |
+|------|----------|-----------|--------|---------------|
+| 31 | Client Health & Signals | [21](https://github.com/lemone112/labpics-dashboard/milestone/21) | #272–#279 | Proactive client management |
+| 32 | Predictive Intelligence | [22](https://github.com/lemone112/labpics-dashboard/milestone/22) | #274–#278 | Churn reduction -25% |
+| 33 | Revenue & Operations Analytics | [23](https://github.com/lemone112/labpics-dashboard/milestone/23) | #280–#282 | Margin visibility |
+| 34 | Automation & Workflows | [24](https://github.com/lemone112/labpics-dashboard/milestone/24) | #283–#286 | Team efficiency +30% |
+| 35 | Reporting & Executive Layer | [25](https://github.com/lemone112/labpics-dashboard/milestone/25) | #284 | QBR time: 4h → 60s |
 
 ---
 

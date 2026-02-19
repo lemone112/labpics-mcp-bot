@@ -279,6 +279,7 @@ Telegram Bot (LLM) → daniel-lightrag-mcp (22 tools) → LightRAG Server → Po
 
 ### Ключевые бизнес-метрики Wave 4
 
+
 | Задача | Impact | Целевая метрика |
 |--------|--------|-----------------|
 | RSC + Streaming (#221–#223) | LCP -50% | LCP < 1.5s |
@@ -292,7 +293,30 @@ Telegram Bot (LLM) → daniel-lightrag-mcp (22 tools) → LightRAG Server → Po
 
 ---
 
-## 9) Явно вне scope (MVP)
+## 9) Wave 5 — Client Intelligence (Iter 31–35, 15 задач)
+
+> Предиктивная аналитика клиентов, автоматизация, AI-powered reporting.
+> Детальный план: [`docs/iteration-plan-wave5-intelligence.md`](./iteration-plan-wave5-intelligence.md)
+
+| Iter | Название | Issues | Milestone | Фокус |
+|------|----------|--------|-----------|-------|
+| 31 | Client Health & Signals | [#272–#279](https://github.com/lemone112/labpics-dashboard/milestone/21) | 21 | Health Score DEAR, sentiment analysis, timeline, surveys |
+| 32 | Predictive Intelligence | [#274–#278](https://github.com/lemone112/labpics-dashboard/milestone/22) | 22 | Churn prediction, upsell, scope creep, onboarding |
+| 33 | Revenue & Operations Analytics | [#280–#282](https://github.com/lemone112/labpics-dashboard/milestone/23) | 23 | P&L per client, utilization, renewal calendar |
+| 34 | Automation & Workflows | [#283–#286](https://github.com/lemone112/labpics-dashboard/milestone/24) | 24 | Playbooks, AI Copilot, stakeholder map |
+| 35 | Reporting & Executive Layer | [#284](https://github.com/lemone112/labpics-dashboard/milestone/25) | 25 | QBR auto-generator (unique) |
+
+### Уникальные дифференциаторы Wave 5
+
+| Фича | Почему уникальна | Impact |
+|------|------------------|--------|
+| AI Sentiment Analysis (#273) | Анализ живой переписки в мессенджерах (не CRM-тикеты) | Early warning, churn prevention |
+| Scope Creep Detector (#277) | Автоматическое сравнение план vs факт по объёму работ | Margin protection |
+| QBR Auto-Generator (#284) | Полная автогенерация квартальных отчётов с AI narrative | 4 hours → 60 seconds |
+
+---
+
+## 10) Явно вне scope (MVP)
 
 - KAG pipeline (удалён в Iter 10).
 - Black-box рекомендационные агенты без evidence.
@@ -302,7 +326,7 @@ Telegram Bot (LLM) → daniel-lightrag-mcp (22 tools) → LightRAG Server → Po
 
 ---
 
-## 10) Полный roadmap (4 волны)
+## 11) Полный roadmap (5 волн)
 
 ```
 Wave 1 (Iter 0–10, 12) ✅ DONE ─── Platform hardening, 77/79 задач
@@ -313,12 +337,14 @@ Wave 3 (Iter 17–24) ⬜ PLANNED ─── Design overhaul, 96 задач
   │
 Wave 4 (Iter 25–30) ⬜ PLANNED ─── Strategic growth, 51 задач
   │
-Total: 292 задач across 30 итераций
+Wave 5 (Iter 31–35) ⬜ PLANNED ─── Client intelligence, 15 задач
+  │
+Total: 307 задач across 35 итераций
 ```
 
 ---
 
-## 11) Связанные документы
+## 12) Связанные документы
 
 - Детальный анализ: [`docs/product-structure-analysis.md`](./product-structure-analysis.md)
 - Iteration log: [`docs/iteration-log.md`](./iteration-log.md)
@@ -329,4 +355,5 @@ Total: 292 задач across 30 итераций
 - Wave 2 plan: [`docs/iteration-plan-wave2.md`](./iteration-plan-wave2.md)
 - Wave 3 design plan: [`docs/iteration-plan-wave3-design.md`](./iteration-plan-wave3-design.md)
 - Wave 4 strategic plan: [`docs/iteration-plan-wave4-growth.md`](./iteration-plan-wave4-growth.md)
+- Wave 5 intelligence plan: [`docs/iteration-plan-wave5-intelligence.md`](./iteration-plan-wave5-intelligence.md)
 - Бэклог: [`docs/backlog.md`](./backlog.md)

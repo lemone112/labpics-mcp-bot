@@ -92,6 +92,23 @@ health_scoring → analytics_aggregates
 - Circuit breaker: disable webhook после 10 consecutive failures.
 - Превращает продукт из closed dashboard в open platform.
 
+## 13) Client Intelligence Engine (Wave 5, Iter 31–35)
+
+- **Health Score (DEAR model):** Delivery + Engagement + Attio + Revenue = 0–100 score.
+- **AI Sentiment Analysis:** LLM-классификация тональности сообщений из Chatwoot.
+- **Predictive Churn:** Logistic regression на 15+ features, прогноз за 30 дней.
+- **Scope Creep Detection:** Автоматическое сравнение baseline vs current (Linear data).
+- **Automated Playbooks:** trigger → conditions → actions chain (sequential/parallel).
+- **AI Copilot:** Natural language queries → structured data via LightRAG + function calling.
+- **QBR Auto-Generator:** 8-section quarterly report с AI narrative → PDF.
+
+## 14) Revenue Analytics (Wave 5, Iter 33)
+
+- P&L per client: revenue (Attio) - cost (Linear hours × rate card) = margin.
+- Resource utilization: billable vs non-billable, capacity planning alerts.
+- Renewal calendar: contract lifecycle, auto-reminders at 90/60/30/14/7 days.
+- Materialized views для fast reads, weekly scheduler refresh.
+
 ---
 
 Ссылки:
@@ -102,3 +119,4 @@ health_scoring → analytics_aggregates
 - Wave 2 plan: [`docs/iteration-plan-wave2.md`](./iteration-plan-wave2.md)
 - Wave 3 design plan: [`docs/iteration-plan-wave3-design.md`](./iteration-plan-wave3-design.md)
 - Wave 4 strategic plan: [`docs/iteration-plan-wave4-growth.md`](./iteration-plan-wave4-growth.md)
+- Wave 5 intelligence plan: [`docs/iteration-plan-wave5-intelligence.md`](./iteration-plan-wave5-intelligence.md)
