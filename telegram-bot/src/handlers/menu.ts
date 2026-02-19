@@ -7,6 +7,7 @@ import { bestEffortAudit } from "../services/audit";
 import { loadProfile } from "../services/profile";
 import { renderProfile } from "../ui/templates";
 import { profileKeyboard } from "../ui/keyboards";
+import { db } from "../db/client";
 
 export async function handleMenuCallback(
   env: Env,
@@ -28,7 +29,13 @@ export async function handleMenuCallback(
   }
 
   if (key === "tasks" || key === "clients" || key === "design") {
-    const draftId = await createStubDraft(env, null, chatId, `menu:${key}`);
+    const { data: userRow } = await db(env)
+      .from("telegram_users")
+      .select("id")
+      .eq("telegram_user_id", fromId)
+      .maybeSingle();
+    const userPk = (userRow as { id: string } | null)?.id ?? null;
+    const draftId = await createStubDraft(env, userPk, chatId, `menu:${key}`);
     await bestEffortAudit(env, draftId, "menu.open", { key });
     await tgSendMessage(env, chatId, renderDraftPreview(draftId), draftKeyboard(draftId));
     return;

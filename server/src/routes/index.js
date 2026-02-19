@@ -1,0 +1,12 @@
+export { registerHealthRoutes } from "./health.js";
+export { registerAuthRoutes } from "./auth.js";
+export { registerProjectRoutes } from "./projects.js";
+export { registerDataRoutes } from "./data.js";
+export { registerJobRoutes } from "./jobs.js";
+export { registerConnectorRoutes } from "./connectors.js";
+export { registerLightragRoutes } from "./lightrag.js";
+export { registerIntelligenceRoutes } from "./intelligence.js";
+export { registerCrmRoutes } from "./crm.js";
+export { registerOfferRoutes } from "./offers.js";
+export { registerSignalRoutes } from "./signals.js";
+export { registerOutboundRoutes } from "./outbound.js";

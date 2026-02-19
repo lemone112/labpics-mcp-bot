@@ -28,6 +28,15 @@ export default {
     if (url.pathname !== "/telegram/webhook") return text("not found", 404);
     if (request.method !== "POST") return text("method not allowed", 405);
 
+    // Validate webhook secret to prevent spoofed updates (P1 security)
+    const webhookSecret = env.TELEGRAM_WEBHOOK_SECRET;
+    if (webhookSecret) {
+      const headerSecret = request.headers.get("x-telegram-bot-api-secret-token") ?? "";
+      if (headerSecret !== webhookSecret) {
+        return json({ ok: false, error: "unauthorized" }, 401);
+      }
+    }
+
     let update: TelegramUpdate;
     try {
       update = (await request.json()) as TelegramUpdate;
