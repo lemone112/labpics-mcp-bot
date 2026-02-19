@@ -97,10 +97,9 @@ UPDATE rag_chunks
 SET chunk_ref = 'chunk:' || COALESCE(document_ref, id::text) || ':' || COALESCE(chunk_index, 0)
 WHERE chunk_ref IS NULL;
 
--- Now enforce NOT NULL + UNIQUE on chunk_ref
-ALTER TABLE rag_chunks
-  ALTER COLUMN chunk_ref SET NOT NULL;
-
+-- Keep chunk_ref nullable: existing INSERT paths (chatwoot.js insertChunkRows)
+-- do not supply chunk_ref yet. NOT NULL will be enforced after Iter 11 updates
+-- all writers. UNIQUE constraint still applied (NULLs are distinct in PG unique).
 DO $$
 BEGIN
   IF NOT EXISTS (
