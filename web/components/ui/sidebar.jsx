@@ -107,13 +107,9 @@ const SidebarProvider = React.forwardRef(
         <TooltipProvider delayDuration={0}>
           <div
             ref={ref}
-            style={{
-              ...style,
-              "--sidebar-width": SIDEBAR_WIDTH,
-              "--sidebar-width-icon": SIDEBAR_WIDTH_ICON,
-            }}
+            style={undefined}
             className={cn(
-              "group/sidebar-wrapper flex min-h-svh w-full has-[[data-variant=inset]]:bg-sidebar",
+              "group/sidebar-wrapper flex min-h-svh w-full [--sidebar-width:16rem] [--sidebar-width-icon:3rem] has-[[data-variant=inset]]:bg-sidebar",
               className
             )}
             {...props}
@@ -411,7 +407,7 @@ const sidebarMenuButtonVariants = cva(
       variant: {
         default: "hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
         outline:
-          "bg-background shadow-[0_0_0_1px_hsl(var(--sidebar-border))] hover:bg-sidebar-accent hover:text-sidebar-accent-foreground hover:shadow-[0_0_0_1px_hsl(var(--sidebar-border))]",
+          "bg-background shadow-card hover:bg-sidebar-accent hover:text-sidebar-accent-foreground hover:shadow-card",
       },
       size: {
         default: "h-8 text-sm",
@@ -532,12 +528,7 @@ const SidebarMenuSkeleton = React.forwardRef(
           <div className="h-4 w-4 rounded-md bg-sidebar-accent" />
         ) : null}
         <div className="flex flex-1 items-center">
-          <div
-            className="h-4 rounded-md bg-sidebar-accent"
-            style={{
-              width,
-            }}
-          />
+          <div className="h-4 w-2/3 rounded-md bg-sidebar-accent" />
         </div>
       </div>
     )

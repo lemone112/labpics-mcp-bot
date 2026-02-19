@@ -21,11 +21,11 @@ const ChartContainer = React.forwardRef(({ id, className, children, config = {},
         ref={ref}
         data-chart={containerId}
         className={cn(
-          "h-[240px] w-full text-xs",
-          "[&_.recharts-cartesian-axis-tick_text]:fill-muted-foreground",
-          "[&_.recharts-cartesian-grid_line]:stroke-border/60",
-          "[&_.recharts-curve.recharts-tooltip-cursor]:stroke-border",
-          "[&_.recharts-polar-grid_line]:stroke-border/70",
+          "h-60 w-full text-xs",
+          "[&_\.recharts-cartesian-axis-tick_text]:fill-muted-foreground",
+          "[&_\.recharts-cartesian-grid_line]:stroke-border/60",
+          "[&_\.recharts-curve\.recharts-tooltip-cursor]:stroke-border",
+          "[&_\.recharts-polar-grid_line]:stroke-border/70",
           className
         )}
         {...props}
@@ -50,7 +50,10 @@ const ChartTooltipContent = React.forwardRef(
     return (
       <div
         ref={ref}
-        className={cn("min-w-40 rounded-md border bg-popover px-3 py-2 text-xs text-popover-foreground", className)}
+        className={cn(
+          "min-w-40 rounded-md border bg-popover px-3 py-2 text-xs text-popover-foreground",
+          className
+        )}
       >
         {!hideLabel && label ? <div className="mb-1 text-[11px] text-muted-foreground">{label}</div> : null}
         <div className="space-y-1">
