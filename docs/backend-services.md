@@ -32,8 +32,8 @@ server/src/
 │   ├── sources.js              # Project source bindings
 │   ├── embeddings.js           # OpenAI embeddings
 │   ├── openai.js               # OpenAI API client
-│   ├── kag.js                  # KAG pipeline orchestration
-│   ├── kag-process-log.js      # Process run logging
+│   ├── process-log.js           # Process run logging
+│   ├── event-log.js             # Event logging (connector_events)
 │   ├── forecasting.js          # Risk forecasting
 │   ├── recommendations-v2.js   # Enhanced recommendations
 │   ├── recommendation-actions.js # Action execution
@@ -51,13 +51,6 @@ server/src/
 │   ├── jobs.js                 # Job status tracking
 │   ├── audit.js                # Audit trail
 │   └── ...
-└── kag/
-    ├── ingest/index.js         # Data → graph artifacts
-    ├── graph/index.js          # Graph persistence
-    ├── signals/index.js        # Signal computation
-    ├── scoring/index.js        # Score computation
-    ├── recommendations/index.js # Recommendation rules
-    └── templates/index.js      # Template generation
 ```
 
 ---
@@ -130,7 +123,7 @@ server/src/
 |-|-|
 | **Назначение** | Оркестрация всех коннекторов |
 | **Exported** | `runConnectorSync(pool, scope, connectorName)`, `runAllConnectorsSync(pool, scope)` |
-| **Зависимости** | chatwoot.js, linear.js, attio.js, connector-state.js, kag-process-log.js |
+| **Зависимости** | chatwoot.js, linear.js, attio.js, connector-state.js, process-log.js |
 
 #### sources.js
 | | |
@@ -141,16 +134,8 @@ server/src/
 
 ### 3.2 Intelligence Pipeline
 
-> Код и таблицы используют prefix `kag_` (legacy). Концептуально — **Project Intelligence Pipeline**.
-
-#### kag.js (orchestrator)
-| | |
-|-|-|
-| **Назначение** | Оркестрация полного intelligence pipeline |
-| **Exported** | `runKagRecommendationRefresh`, `listKagSignals`, `listKagScores`, `listKagRecommendations`, `listProjectEvents` |
-| **Tables** | kag_events, kag_signal_state, kag_signals, kag_signal_history, kag_scores, kag_score_history, kag_recommendations, recommendations_v2, kag_risk_forecasts |
-| **Зависимости** | kag/ingest, kag/graph, kag/signals, kag/scoring, kag/recommendations, kag/templates, forecasting.js, recommendations-v2.js, snapshots.js |
-| **Cadence** | ~15 min (kag_recommendations_refresh) |
+> KAG pipeline (kag.js + kag/ directory) полностью удалён в Iter 10.
+> Сохранённые сервисы ниже работают автономно через scheduler.
 
 #### forecasting.js
 | | |
@@ -301,12 +286,12 @@ server/src/
 | **Exported** | `writeAuditEvent`, `listAuditEvents`, `indexEvidenceRefs`, `normalizeEvidenceRefs` |
 | **Tables** | audit_events, evidence_items |
 
-#### kag-process-log.js
+#### process-log.js
 | | |
 |-|-|
-| **Назначение** | Логирование intelligence pipeline процессов |
+| **Назначение** | Логирование pipeline процессов |
 | **Exported** | `startProcessRun`, `finishProcessRun`, `failProcessRun`, `warnProcess` |
-| **Tables** | kag_event_log |
+| **Tables** | connector_events |
 
 #### loops.js
 | | |
@@ -369,39 +354,7 @@ server/src/
 | GET | `/conversations` | Chatwoot conversations |
 | GET | `/messages` | Chatwoot messages |
 
-### Intelligence v1 (routes: `/kag/*` — legacy prefix)
-| Method | Path | Handler |
-|--------|------|---------|
-| POST | `/kag/refresh` | Full intelligence pipeline refresh |
-| GET | `/kag/signals` | Project signals |
-| GET | `/kag/scores` | Project scores |
-| GET | `/kag/recommendations` | Recommendations v1 |
-| GET | `/kag/events` | Intelligence events |
-
-### Intelligence v2 (routes: `/kag/v2/*` — legacy prefix)
-| Method | Path | Handler |
-|--------|------|---------|
-| POST | `/kag/v2/forecast/refresh` | Refresh risk forecasts |
-| GET | `/kag/v2/forecast` | List risk forecasts |
-| POST | `/kag/v2/recommendations/refresh` | Refresh recommendations v2 |
-| GET | `/kag/v2/recommendations` | List recommendations v2 |
-| POST | `/kag/v2/recommendations/shown` | Mark as shown |
-| POST | `/kag/v2/recommendations/:id/status` | Update status |
-| POST | `/kag/v2/recommendations/:id/feedback` | Record feedback |
-| GET | `/kag/v2/recommendations/:id/actions` | List actions |
-| POST | `/kag/v2/recommendations/:id/actions` | Execute action |
-| POST | `/kag/v2/recommendations/actions/:actionId/retry` | Retry action |
-
-### Snapshots & Similarity
-| Method | Path | Handler |
-|--------|------|---------|
-| POST | `/kag/snapshots/refresh` | Build snapshot |
-| GET | `/kag/snapshots` | List snapshots |
-| GET | `/kag/outcomes` | Past case outcomes |
-| POST | `/kag/similarity/rebuild` | Rebuild signatures |
-| GET | `/kag/similar-cases` | Find similar cases |
-
-### Signals & NBA (legacy)
+### Signals & NBA
 | Method | Path | Handler |
 |--------|------|---------|
 | POST | `/signals/extract` | Extract signals |
@@ -533,18 +486,13 @@ index.js (routes)
        │    ├── attio.js → Attio API
        │    └── connector-state.js → connector_sync_state, connector_errors
        │
-       ├── kag.js (intelligence orchestrator)
-       │    ├── kag/ingest → kag_nodes, kag_edges, kag_events
-       │    ├── kag/signals → kag_signal_state, kag_signals
-       │    ├── kag/scoring → kag_scores
-       │    ├── kag/recommendations → kag_recommendations
-       │    ├── forecasting.js → kag_risk_forecasts
-       │    ├── recommendations-v2.js → recommendations_v2
-       │    └── snapshots.js → project_snapshots
-       │
-       ├── embeddings.js → rag_chunks → openai.js → OpenAI API
+       ├── lightrag.js → embeddings.js → rag_chunks → openai.js → OpenAI API
        │
        ├── intelligence.js → analytics_*, health_scores, risk_radar_items
+       │
+       ├── forecasting.js → kag_risk_forecasts, case_signatures
+       │
+       ├── recommendations-v2.js → recommendations_v2
        │
        └── scheduler.js → scheduled_jobs, worker_runs
             └── triggers all jobs above on cadence

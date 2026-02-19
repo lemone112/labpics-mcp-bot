@@ -59,18 +59,9 @@ npm run test:e2e:integration    # С полным стеком (Docker Compose)
 | `services/portfolio.js` | `portfolio.unit.test.js` | computeClientValueScore, toDiscountLimit, uniqueProjectIds, normalizeMessageAttachments |
 | `services/jobs.js` | `jobs.unit.test.js` | Storage budget calculation logic |
 | `services/scheduler.js` | `scheduler.cascade.unit.test.js` | CASCADE_CHAINS topology, circular reference detection |
-| KAG signals | `kag.signals.unit.test.js` | Signal state machine, 10 signal types, edge cases |
-| KAG scoring | `kag.scoring.unit.test.js` | 4 score types, level mapping, evidence collection |
-| KAG recommendations | `kag.recommendations.unit.test.js` | 5 categories, evidence gating, priority escalation |
-| KAG templates | `kag.templates.unit.test.js` | Variable substitution, LLM fallback |
-| KAG graph | `kag.graph.unit.test.js` | Node/edge/event building, provenance |
-
-### Backend — integration tests
-
-| Модуль | Файл теста | Что проверяется |
-|--------|-----------|-----------------|
-| Full pipeline | `kag.integration.test.js` | Events → signals → scores → recommendations |
-| Forecasting | `kag.forecasting.integration.test.js` | Full forecast pipeline + similar cases |
+| Extended schemas | `extended-schemas.unit.test.js` | Validation schemas for signals, NBA, identity, recommendations, connectors, outbound, loops, upsell, continuity |
+| Zod schemas | `schemas.unit.test.js` | Schema definitions and parseBody |
+| Security hardening | `security-hardening.unit.test.js` | Auth, CSRF, rate limiting |
 
 ### Frontend — E2E
 

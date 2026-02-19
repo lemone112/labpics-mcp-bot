@@ -17,8 +17,6 @@
 - `DATABASE_URL`
 - `AUTH_CREDENTIALS`
 - `CORS_ORIGIN`
-- `LIGHTRAG_ONLY=1`
-
 ### Integrations
 
 - `CHATWOOT_*`
@@ -73,7 +71,5 @@ Redis используется для Pub/Sub (уведомления о зав�
 
 ## 5) Примечание по legacy routes
 
-В production режиме `LIGHTRAG_ONLY=1`:
-
-- `/kag/*` отключены;
-- legacy scheduler jobs, связанные с `/kag/*`, ставятся в `paused`.
+Маршруты `/kag/*` и связанные scheduler jobs полностью удалены (Iter 10).
+Флаг `LIGHTRAG_ONLY` больше не используется.

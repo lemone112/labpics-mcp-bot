@@ -7,8 +7,6 @@ import {
   NbaStatusSchema,
   IdentityPreviewSchema,
   IdentitySuggestionApplySchema,
-  KagSimilarityRebuildSchema,
-  KagForecastRefreshSchema,
   RecommendationsShownSchema,
   RecommendationStatusSchema,
   RecommendationFeedbackSchema,
@@ -69,28 +67,8 @@ test("IdentitySuggestionApplySchema accepts string array", () => {
 });
 
 // ---------------------------------------------------------------------------
-// 9.2 KAG & Forecasting
+// 9.2 Recommendations
 // ---------------------------------------------------------------------------
-
-test("KagSimilarityRebuildSchema accepts empty body", () => {
-  const result = parseBody(KagSimilarityRebuildSchema, {});
-  assert.equal(result.project_id, null);
-  assert.equal(result.window_days, undefined);
-});
-
-test("KagSimilarityRebuildSchema rejects window_days > 365", () => {
-  assert.throws(() => parseBody(KagSimilarityRebuildSchema, { window_days: 999 }), (err) => err.code === "validation_error");
-});
-
-test("KagForecastRefreshSchema accepts valid parameters", () => {
-  const result = parseBody(KagForecastRefreshSchema, { window_days: 30, top_k: 10 });
-  assert.equal(result.window_days, 30);
-  assert.equal(result.top_k, 10);
-});
-
-test("KagForecastRefreshSchema rejects top_k > 100", () => {
-  assert.throws(() => parseBody(KagForecastRefreshSchema, { top_k: 200 }), (err) => err.code === "validation_error");
-});
 
 test("RecommendationsShownSchema defaults to empty ids", () => {
   const result = parseBody(RecommendationsShownSchema, {});
@@ -226,10 +204,7 @@ test("index.js imports all new schemas", async () => {
 
   const expectedSchemas = [
     "SignalStatusSchema", "NbaStatusSchema", "IdentityPreviewSchema",
-    "IdentitySuggestionApplySchema", "KagSimilarityRebuildSchema",
-    "KagForecastRefreshSchema", "RecommendationsShownSchema",
-    "RecommendationStatusSchema", "RecommendationFeedbackSchema",
-    "RecommendationActionSchema", "RecommendationActionRetrySchema",
+    "IdentitySuggestionApplySchema",
     "ConnectorRetrySchema", "AnalyticsRefreshSchema",
     "OutboundApproveSchema", "OutboundProcessSchema",
     "LoopsSyncSchema", "UpsellStatusSchema", "ContinuityApplySchema",

@@ -25,6 +25,7 @@ import { useRealtimeRefresh } from "@/hooks/use-realtime-refresh";
 import { PageShell } from "@/components/page-shell";
 import { ProjectBadge } from "@/components/project-badge";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ChartContainer, ChartLegend, ChartLegendContent, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -52,6 +53,24 @@ const SUBTITLES = {
   risks: "Карточки рисков и паттернов",
   finance: "Финансовые и юнит-экономические метрики",
   offers: "Офферы и допродажи по ценности клиента",
+};
+
+const PRIMARY_CTA = {
+  dashboard: "Синхронизировать",
+  messages: "Запустить дайджест",
+  agreements: "Запустить извлечение",
+  risks: "Запустить сканирование",
+  finance: "Сгенерировать отчёт",
+  offers: "Создать оффер",
+};
+
+const EMPTY_WIZARD = {
+  dashboard: { reason: "Подключите источники данных для отображения дашборда.", steps: ["Подключите источники данных", "Запустите синхронизацию", "Дождитесь накопления данных"] },
+  messages: { reason: "Нет подключённых источников сообщений.", steps: ["Подключите Chatwoot", "Запустите синхронизацию", "Дождитесь загрузки переписок"] },
+  agreements: { reason: "Извлечение договорённостей ещё не запускалось.", steps: ["Подключите источники данных", "Запустите извлечение", "Дождитесь анализа"] },
+  risks: { reason: "Сканирование рисков ещё не запускалось.", steps: ["Подключите источники данных", "Запустите сканирование", "Дождитесь анализа"] },
+  finance: { reason: "Подключите Attio для финансовых данных.", steps: ["Подключите Attio", "Запустите синхронизацию", "Дождитесь анализа"] },
+  offers: { reason: "Нет офферов для отображения.", steps: ["Подключите источники данных", "Запустите синхронизацию", "Создайте первый оффер"] },
 };
 
 function toRuDateLabel(point, options = { month: "short", day: "numeric" }) {
@@ -91,10 +110,10 @@ function formatRiskSourceRu(source) {
 function formatRiskSeverityMeta(severityValue) {
   const severity = Math.max(0, Math.round(numberValue(severityValue)));
   if (severity >= 5) return { label: "Критическое влияние", className: "border-destructive/35 bg-destructive/10 text-destructive" };
-  if (severity >= 4) return { label: "Высокое влияние", className: "border-chart-4/35 bg-chart-4/10 text-chart-4" };
-  if (severity >= 3) return { label: "Среднее влияние", className: "border-chart-5/35 bg-chart-5/10 text-chart-5" };
-  if (severity >= 2) return { label: "Низкое влияние", className: "border-chart-2/35 bg-chart-2/10 text-chart-2" };
-  return { label: "Минимальное влияние", className: "border-chart-2/35 bg-chart-2/10 text-chart-2" };
+  if (severity >= 4) return { label: "Высокое влияние", className: "border-warning/30 bg-warning/10 text-warning" };
+  if (severity >= 3) return { label: "Среднее влияние", className: "border-warning/20 bg-warning/5 text-warning" };
+  if (severity >= 2) return { label: "Низкое влияние", className: "border-border bg-muted text-muted-foreground" };
+  return { label: "Минимальное влияние", className: "border-border bg-muted text-muted-foreground" };
 }
 
 function formatRiskProbabilityMeta(probabilityValue) {
@@ -103,9 +122,9 @@ function formatRiskProbabilityMeta(probabilityValue) {
     return { label: `Вероятность ${probabilityPct}%`, className: "border-destructive/35 bg-destructive/10 text-destructive" };
   }
   if (probabilityPct >= 40) {
-    return { label: `Вероятность ${probabilityPct}%`, className: "border-chart-4/35 bg-chart-4/10 text-chart-4" };
+    return { label: `Вероятность ${probabilityPct}%`, className: "border-warning/30 bg-warning/10 text-warning" };
   }
-  return { label: `Вероятность ${Math.max(0, probabilityPct)}%`, className: "border-chart-2/35 bg-chart-2/10 text-chart-2" };
+  return { label: `Вероятность ${Math.max(0, probabilityPct)}%`, className: "border-border bg-muted text-muted-foreground" };
 }
 
 function formatRiskTitleRu(rawTitle) {
@@ -494,7 +513,14 @@ const AgreementsSection = memo(function AgreementsSection({ agreements, isAllPro
           </CardContent>
         </Card>
       ))}
-      {!agreements.length ? <p className="text-sm text-muted-foreground">По выбранному фильтру договоренности не найдены.</p> : null}
+      {!agreements.length ? (
+        <EmptyState
+          title="Договоренности"
+          reason={EMPTY_WIZARD.agreements.reason}
+          steps={EMPTY_WIZARD.agreements.steps}
+          primaryAction={<Button>{PRIMARY_CTA.agreements}</Button>}
+        />
+      ) : null}
     </div>
   );
 });
@@ -540,7 +566,14 @@ const RisksSection = memo(function RisksSection({ risks, isAllProjects }) {
         </Card>
       );
       })}
-      {!visibleRisks.length ? <p className="text-sm text-muted-foreground">Риски по выбранному фильтру не найдены.</p> : null}
+      {!visibleRisks.length ? (
+        <EmptyState
+          title="Риски"
+          reason={EMPTY_WIZARD.risks.reason}
+          steps={EMPTY_WIZARD.risks.steps}
+          primaryAction={<Button>{PRIMARY_CTA.risks}</Button>}
+        />
+      ) : null}
       </div>
     </div>
   );
@@ -749,7 +782,14 @@ const OffersSection = memo(function OffersSection({ payload, isAllProjects, mone
                 <p className="text-xs text-muted-foreground">{item.rationale || "Без описания"}</p>
               </div>
             ))}
-            {!offers.upsell?.length ? <p className="text-sm text-muted-foreground">Пока нет возможностей допродажи.</p> : null}
+            {!offers.upsell?.length ? (
+              <EmptyState
+                title="Возможности допродажи"
+                reason={EMPTY_WIZARD.offers.reason}
+                steps={EMPTY_WIZARD.offers.steps}
+                primaryAction={<Button>{PRIMARY_CTA.offers}</Button>}
+              />
+            ) : null}
           </CardContent>
         </Card>
 
@@ -788,7 +828,14 @@ const OffersSection = memo(function OffersSection({ payload, isAllProjects, mone
               </div>
             </div>
           ))}
-          {!offers.recent_offers?.length ? <p className="text-sm text-muted-foreground">Офферы не найдены.</p> : null}
+          {!offers.recent_offers?.length ? (
+            <EmptyState
+              title="Последние офферы"
+              reason={EMPTY_WIZARD.offers.reason}
+              steps={EMPTY_WIZARD.offers.steps}
+              primaryAction={<Button>{PRIMARY_CTA.offers}</Button>}
+            />
+          ) : null}
         </CardContent>
       </Card>
     </div>
@@ -879,7 +926,14 @@ const MessagesSection = memo(function MessagesSection({ messagesPayload, selecte
                   </div>
                 );
               })}
-            {!loadingMessages && !messages.length ? <p className="text-sm text-muted-foreground">Сообщений не найдено.</p> : null}
+            {!loadingMessages && !messages.length ? (
+              <EmptyState
+                title="Переписки"
+                reason={EMPTY_WIZARD.messages.reason}
+                steps={EMPTY_WIZARD.messages.steps}
+                primaryAction={<Button>{PRIMARY_CTA.messages}</Button>}
+              />
+            ) : null}
             <div ref={bottomRef} />
           </div>
         </div>
@@ -945,11 +999,12 @@ export default function ControlTowerSectionPage({ section }) {
   if (!selectedProjectIds.length) {
     return (
       <PageShell title={TITLES[normalizedSection]} subtitle={SUBTITLES[normalizedSection]}>
-        <Card data-motion-item>
-          <CardContent>
-            <EmptyState title="Нет доступных проектов" description="Создайте проект и выберите его в правом сайдбаре." />
-          </CardContent>
-        </Card>
+        <EmptyState
+          title={TITLES[normalizedSection]}
+          reason="Нет доступных проектов."
+          steps={["Создайте проект", "Выберите его в правом сайдбаре"]}
+          primaryAction={<Button>Создать проект</Button>}
+        />
       </PageShell>
     );
   }
@@ -971,11 +1026,16 @@ export default function ControlTowerSectionPage({ section }) {
   return (
     <PageShell title={TITLES[normalizedSection]} subtitle={SUBTITLES[normalizedSection]}>
       <div className="space-y-4">
-        <LastUpdatedIndicator
-          secondsAgo={activeAutoRefresh?.secondsAgo}
-          onRefresh={activeReload}
-          loading={overview.loading || messages.loading}
-        />
+        <div data-testid="ct-hero" className="flex flex-wrap items-center justify-between gap-3">
+          <Button data-testid="primary-cta">{PRIMARY_CTA[normalizedSection]}</Button>
+          <div data-testid="trust-bar">
+            <LastUpdatedIndicator
+              secondsAgo={activeAutoRefresh?.secondsAgo}
+              onRefresh={activeReload}
+              loading={overview.loading || messages.loading}
+            />
+          </div>
+        </div>
         {normalizedSection === "dashboard" ? <DashboardCharts payload={overviewPayload} moneyFormatter={moneyFormatter} numberFormatter={numberFormatter} /> : null}
         {normalizedSection === "messages"
           ? (

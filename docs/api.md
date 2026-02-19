@@ -96,11 +96,11 @@ Legacy compatibility:
 - Digests: `/digests/daily*`, `/digests/weekly*`
 - Analytics: `/analytics/*`, `/risk/*`
 
-## 7) Запрещённые legacy маршруты
+## 7) Удалённые legacy маршруты
 
-- `/kag/*` не входят в текущий API-контракт для разработки.
-- В runtime они возвращают `410 kag_disabled`.
-- Любые новые интеграции должны использовать только LightRAG и operational endpoints.
+Маршруты `/kag/*` были полностью удалены из кодовой базы (Iter 10).
+Код, роуты и связанные scheduler jobs удалены. Любые новые интеграции
+используют только LightRAG и operational endpoints.
 
 См. также:
 
