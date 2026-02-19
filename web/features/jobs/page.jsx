@@ -19,7 +19,7 @@ import { useProjectGate } from "@/hooks/use-project-gate";
 
 export default function JobsFeaturePage() {
   const { loading, session } = useAuthGuard();
-  const { hasProject, loadingProjects } = useProjectGate();
+  const { hasProject, projectId: gateProjectId, loadingProjects } = useProjectGate();
   const [status, setStatus] = useState(null);
   const [toast, setToast] = useState({ type: "info", message: "" });
   const [busyJob, setBusyJob] = useState("");
@@ -40,6 +40,7 @@ export default function JobsFeaturePage() {
   // Real-time: refresh job status when any job completes via SSE (500ms debounce)
   const eventStream = useEventStream({
     enabled: !loading && !loadingProjects && session?.authenticated && hasProject,
+    key: gateProjectId || "",
   });
   const sseTimerRef = useRef(null);
   useEffect(() => {
