@@ -3,6 +3,8 @@
  * No external dependencies — suitable for single-instance deployment.
  */
 
+import { ApiError, sendError } from "./api-contract.js";
+
 const windows = new Map();
 
 /**
@@ -50,13 +52,7 @@ export function rateLimitHook(options = {}) {
 
     if (!result.allowed) {
       reply.header("Retry-After", Math.ceil(result.retryAfterMs / 1000));
-      reply.code(429).send({
-        ok: false,
-        error: "rate_limit_exceeded",
-        message: "Too many requests",
-        request_id: request.requestId || request.id || null,
-      });
-      return reply;
+      return sendError(reply, request.requestId || request.id, new ApiError(429, "rate_limit_exceeded", "Too many requests"));
     }
   };
 }

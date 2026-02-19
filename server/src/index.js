@@ -729,6 +729,18 @@ async function main() {
     }
 
     const isMutating = !["GET", "HEAD", "OPTIONS"].includes(String(request.method || "GET").toUpperCase());
+
+    // API key auth: enforce scopes on mutating requests, skip CSRF
+    if (request.apiKey) {
+      if (isMutating) {
+        const scopes = request.apiKey.scopes || [];
+        if (!scopes.includes("write") && !scopes.includes("admin")) {
+          return sendError(reply, requestId, new ApiError(403, "scope_insufficient", "API key lacks 'write' scope for this operation"));
+        }
+      }
+      return; // API keys don't use CSRF
+    }
+
     if (isMutating) {
       const csrfHeader = String(request.headers["x-csrf-token"] || "");
       if (!csrfHeader || !timingSafeStringEqual(csrfHeader, request.auth.csrf_token)) {
