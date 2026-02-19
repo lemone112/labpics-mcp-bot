@@ -14,6 +14,10 @@ test-results/
 .env.*
 !.env.example
 
+# Wrangler
+.wrangler/
+.dev.vars
+
 # OS / editor
 .DS_Store
 *.swp

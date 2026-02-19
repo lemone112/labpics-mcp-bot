@@ -43,7 +43,48 @@
 | `/search` | POST | Compatibility alias для /lightrag/query |
 | `/lightrag/ingest` | POST | **Planned (Iter 11)** — добавить текст в RAG базу |
 
-## 5) Проверка соответствия
+## 5) API Schema (Spec 0018)
+
+### Query request
+
+```json
+{
+  "query": "string, required",
+  "topK": 10,
+  "sourceLimit": 8,
+  "sourceFilter": ["messages", "issues", "deals", "chunks"]
+}
+```
+
+### Query response
+
+```json
+{
+  "query": "string",
+  "topK": 10,
+  "query_run_id": 123,
+  "quality_score": 75,
+  "source_diversity": 3,
+  "answer": "string",
+  "chunks": [],
+  "evidence": [],
+  "stats": {
+    "chunks": 0,
+    "messages": 0,
+    "issues": 0,
+    "opportunities": 0
+  }
+}
+```
+
+### Acceptance criteria
+
+- Search page возвращает answer + chunks + evidence.
+- После запроса создаётся запись в `lightrag_query_runs`.
+- Quality score и source_diversity включены в response.
+- Feedback endpoint (`POST /lightrag/feedback`) принимает rating и comment.
+
+## 6) Проверка соответствия
 
 Перед merge необходимо подтвердить:
 
@@ -52,7 +93,7 @@
 3. API reference и runbooks соответствуют RAG-only.
 4. Новые intelligence features используют `/lightrag/*` endpoints.
 
-## 6) Что делать при конфликте требований
+## 7) Что делать при конфликте требований
 
 Если бизнес-задача требует функциональность вне текущего контракта:
 
@@ -60,7 +101,7 @@
 2. RFC должен явно изменить этот контракт.
 3. До утверждения RFC реализация блокируется.
 
-## 7) Миграция на HKUDS LightRAG (Iter 11 — запланировано)
+## 8) Миграция на HKUDS LightRAG (Iter 11 — запланировано)
 
 Решение принято: миграция на [HKUDS LightRAG](https://github.com/HKUDS/LightRAG) из форка [`lemone112/lightrag`](https://github.com/lemone112/lightrag).
 
