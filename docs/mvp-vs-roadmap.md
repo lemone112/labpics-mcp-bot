@@ -246,17 +246,79 @@ Telegram Bot (LLM) → daniel-lightrag-mcp (22 tools) → LightRAG Server → Po
 
 ---
 
-## 7) Явно вне scope
+## 7) Wave 3 — Full Design Overhaul (Iter 17–24, 96 задач)
 
-- KAG pipeline (удалён в Iter 10).
-- Black-box рекомендационные агенты без evidence.
-- RBAC / multi-user auth (single-user auth + scope достаточен для MVP).
-- Дорогие LLM-решения в критических операционных циклах.
-- Полная TypeScript миграция (только инкрементальный подход).
+> Детальный план: [`docs/iteration-plan-wave3-design.md`](./iteration-plan-wave3-design.md)
+
+| Iter | Название | Issues | Milestone | Фокус |
+|------|----------|--------|-----------|-------|
+| 17 | Analytics Instrumentation | [#125–#134](https://github.com/lemone112/labpics-dashboard/milestone/6) | 6 | PostHog/Mixpanel SDK, event tracking, baseline metrics |
+| 18 | Design System Foundations | [#131–#153](https://github.com/lemone112/labpics-dashboard/milestone/7) | 7 | Shadow/spacing/typography/radius tokens в коде |
+| 19 | Component Library Overhaul | [#147–#198](https://github.com/lemone112/labpics-dashboard/milestone/8) | 8 | StatTile, touch targets, EmptyState, Button loading |
+| 20 | UX Logic & Information Architecture | [#138–#171](https://github.com/lemone112/labpics-dashboard/milestone/9) | 9 | Action Queue, guided setup, navigation badges |
+| 20.5 | Charts & Data Visualization | [#152–#196](https://github.com/lemone112/labpics-dashboard/milestone/10) | 10 | Chart type matrix, dimensions, spacing, performance |
+| 21 | Page-Level Redesign | [#158–#200](https://github.com/lemone112/labpics-dashboard/milestone/11) | 11 | Monolith split, section redesign, Cmd+K |
+| 22 | Mobile & Responsive | [#175–#201](https://github.com/lemone112/labpics-dashboard/milestone/12) | 12 | Bottom tabbar, mobile Action Queue, safe area |
+| 23 | Accessibility, Polish & Dark Mode | [#202–#211](https://github.com/lemone112/labpics-dashboard/milestone/13) | 13 | WCAG AA, axe-core, visual regression, polish |
+| 24 | Design Validation & QA | [#212–#220](https://github.com/lemone112/labpics-dashboard/milestone/14) | 14 | User interviews, analytics comparison, Lighthouse |
 
 ---
 
-## 8) Связанные документы
+## 8) Wave 4 — Strategic Growth (Iter 25–30, 51 задач)
+
+> Стратегические задачи для масштабирования: performance, multi-user, notifications, platform API, offline, enterprise.
+
+| Iter | Название | Issues | Milestone | Фокус |
+|------|----------|--------|-----------|-------|
+| 25 | Performance & Caching | [#221–#231](https://github.com/lemone112/labpics-dashboard/milestone/15) | 15 | RSC streaming, multi-tier cache, bundle optimization |
+| 26 | API Architecture & DX | [#228–#240](https://github.com/lemone112/labpics-dashboard/milestone/16) | 16 | Route extraction, API versioning, feature flags |
+| 27 | Multi-user & RBAC | [#235–#246](https://github.com/lemone112/labpics-dashboard/milestone/17) | 17 | Teams, roles, invitations, project-level access |
+| 28 | Engagement & Notifications | [#247–#256](https://github.com/lemone112/labpics-dashboard/milestone/18) | 18 | Push/email/Telegram notifications, optimistic UI, Cmd+K |
+| 29 | Platform & Integrations | [#255–#263](https://github.com/lemone112/labpics-dashboard/milestone/19) | 19 | Webhooks, data export (CSV/PDF), scheduled reports |
+| 30 | Offline, Personalization & Enterprise | [#264–#271](https://github.com/lemone112/labpics-dashboard/milestone/20) | 20 | PWA, offline queue, E2E encryption, smart dashboard |
+
+### Ключевые бизнес-метрики Wave 4
+
+| Задача | Impact | Целевая метрика |
+|--------|--------|-----------------|
+| RSC + Streaming (#221–#223) | LCP -50% | LCP < 1.5s |
+| Multi-tier Cache (#224–#226) | API p95 -90% | p95 < 50ms cached |
+| RBAC + Teams (#235–#246) | Revenue gate | Multi-seat sales |
+| Notification Engine (#247–#252) | DAU +30% | Push delivery > 95% |
+| Optimistic UI (#253) | UX quality | Perceived latency 0ms |
+| Data Export (#259–#261) | User base expansion | Share → new user loop |
+| Webhooks (#255–#258) | Platform play | External integrations |
+| PWA + Offline (#264–#266) | Mobile retention | Session duration +25% |
+
+---
+
+## 9) Явно вне scope (MVP)
+
+- KAG pipeline (удалён в Iter 10).
+- Black-box рекомендационные агенты без evidence.
+- ~~RBAC / multi-user auth~~ → **Запланирован в Iter 27 (Wave 4)**.
+- Дорогие LLM-решения в критических операционных циклах.
+- ~~Полная TypeScript миграция~~ → **Запланирована в Iter 15 (Wave 2)**.
+
+---
+
+## 10) Полный roadmap (4 волны)
+
+```
+Wave 1 (Iter 0–10, 12) ✅ DONE ─── Platform hardening, 77/79 задач
+  │
+Wave 2 (Iter 11–16) ⬜ IN PROGRESS ─── LightRAG, resilience, TS, QA, 68 задач
+  │
+Wave 3 (Iter 17–24) ⬜ PLANNED ─── Design overhaul, 96 задач
+  │
+Wave 4 (Iter 25–30) ⬜ PLANNED ─── Strategic growth, 51 задач
+  │
+Total: 292 задач across 30 итераций
+```
+
+---
+
+## 11) Связанные документы
 
 - Детальный анализ: [`docs/product-structure-analysis.md`](./product-structure-analysis.md)
 - Iteration log: [`docs/iteration-log.md`](./iteration-log.md)
@@ -264,4 +326,7 @@ Telegram Bot (LLM) → daniel-lightrag-mcp (22 tools) → LightRAG Server → Po
 - Redis/SSE архитектура: [`docs/redis-sse.md`](./redis-sse.md)
 - LightRAG контракт: [`docs/lightrag-contract.md`](./lightrag-contract.md)
 - LightRAG-only spec: [`docs/specs/0018-lightrag-only-mode.md`](./specs/0018-lightrag-only-mode.md)
+- Wave 2 plan: [`docs/iteration-plan-wave2.md`](./iteration-plan-wave2.md)
+- Wave 3 design plan: [`docs/iteration-plan-wave3-design.md`](./iteration-plan-wave3-design.md)
+- Wave 4 strategic plan: [`docs/iteration-plan-wave4-growth.md`](./iteration-plan-wave4-growth.md)
 - Бэклог: [`docs/backlog.md`](./backlog.md)

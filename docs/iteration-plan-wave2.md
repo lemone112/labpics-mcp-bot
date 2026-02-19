@@ -295,14 +295,22 @@ Remaining: 11 + 13 can start now (parallel), then 14, then 16.
 
 ## Deferred (Future Waves)
 
-| Item | Rationale |
-|------|-----------|
-| ~~**TypeScript migration**~~ | ~~Deferred~~ → **Moved to Iter 15** (15.10–15.12). Full migration: server + web. |
-| **B-3: computeClientValueScore → SQL** | LOW priority. Works correctly in JS. Move to matview when performance justifies. |
-| **B-4: use-project-portfolio.js split** | Evaluated — splitting not justified. 335 lines is acceptable for a context hook. |
-| **B-6: Grafana dashboards** | Datasources provisioned. Pre-built dashboards are nice-to-have, not blocking. |
-| **Core API extraction** | If 3+ products consume the dashboard API, extract shared business logic into a standalone Core API service. Prerequisites done in Wave 2: OpenAPI spec (16.9), API-key auth (16.13), route modules (16.14). Trigger: when dashboard deploys break other products, or API needs independent scaling. |
-| **Event bus / webhooks** | For cross-product coordination (e.g., bot creates deal → dashboard syncs immediately). Not needed while eventual consistency via 15-min sync is acceptable. Consider Redis Streams or webhook contracts when real-time coordination required. |
+| Item | Rationale | Wave |
+|------|-----------|------|
+| ~~**TypeScript migration**~~ | ~~Deferred~~ → **Moved to Iter 15** (15.10–15.12). Full migration: server + web. | Wave 2 |
+| **B-3: computeClientValueScore → SQL** | LOW priority. Works correctly in JS. Move to matview when performance justifies. | — |
+| **B-4: use-project-portfolio.js split** | Evaluated — splitting not justified. 335 lines is acceptable for a context hook. | — |
+| **B-6: Grafana dashboards** | Datasources provisioned. Pre-built dashboards are nice-to-have, not blocking. | — |
+| ~~**Core API extraction**~~ | → **Moved to Iter 26** (#228). Route extraction + API versioning + OpenAPI auto-generation. | Wave 4 |
+| ~~**Event bus / webhooks**~~ | → **Moved to Iter 29** (#255–#258). Webhook system with HMAC signing, retry, circuit breaker. | Wave 4 |
+| ~~**RBAC / multi-user**~~ | → **Moved to Iter 27** (#235–#246). Teams, roles, invitations, project-level access. | Wave 4 |
+| **RSC + Streaming** | Next.js 16 Server Components for LCP improvement. | Wave 4 (Iter 25) |
+| **Notification Engine** | Push/email/Telegram proactive notifications. | Wave 4 (Iter 28) |
+| **Data Export** | CSV/PDF/scheduled reports for stakeholders. | Wave 4 (Iter 29) |
+| **PWA + Offline** | Service Worker, IndexedDB, offline action queue. | Wave 4 (Iter 30) |
+| **E2E Encryption** | pgcrypto for sensitive data, SOC 2 compliance. | Wave 4 (Iter 30) |
+
+> Полный план Wave 4: [`docs/iteration-plan-wave4-growth.md`](./iteration-plan-wave4-growth.md)
 
 ---
 

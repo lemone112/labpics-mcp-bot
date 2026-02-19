@@ -36,8 +36,9 @@
 ## 6) UI/Design инварианты
 
 - Только shadcn-токены и наследуемые primitives.
-- Никаких page-level “одноразовых” компонентных систем.
-- Мобильный UX: project sheet + фиксированный нижний tabbar (6 business items).
+- Никаких page-level "одноразовых" компонентных систем.
+- Мобильный UX: project sheet + фиксированный нижний tabbar (4 items: Actions, Messages, Search, Profile).
+- Feature flags (`useFeatureFlag()`) для gradual rollout новых UI-компонентов (Iter 26).
 
 ## 7) Observability baseline
 
@@ -69,6 +70,28 @@ health_scoring → analytics_aggregates
 Механизм: `UPDATE scheduled_jobs SET next_run_at = now()` для downstream.
 Устраняет задержку в 15-30 минут между синхронизацией и обновлением аналитики.
 
+## 10) Multi-user & RBAC (Wave 4, Iter 27)
+
+- Роли: `owner`, `admin`, `manager`, `viewer`.
+- Scope расширяется: `project_id` + `account_scope_id` + `team_id`.
+- Permission middleware: `requireAuth()`, `requireRole()`, `requireProjectAccess()`.
+- Viewer role: read-only access, mutations скрыты в UI.
+- Audit trail: `user_id` в `audit_events` для всех мутаций.
+
+## 11) Notification Engine (Wave 4, Iter 28)
+
+- Event-driven: `job_completed` → проверка triggers → notification dispatch.
+- Каналы: in-app, Web Push, email, Telegram.
+- Подписки per-user per-event-type per-channel.
+- Deduplication + batching (5-минутное окно).
+
+## 12) Webhook Event Bus (Wave 4, Iter 29)
+
+- HMAC-SHA256 signing для payload integrity.
+- Retry с exponential backoff (1min → 12hr, max 5 attempts).
+- Circuit breaker: disable webhook после 10 consecutive failures.
+- Превращает продукт из closed dashboard в open platform.
+
 ---
 
 Ссылки:
@@ -76,3 +99,6 @@ health_scoring → analytics_aggregates
 - Data model: [`docs/data-model.md`](./data-model.md)
 - Pipelines: [`docs/pipelines.md`](./pipelines.md)
 - Real-time архитектура: [`docs/redis-sse.md`](./redis-sse.md)
+- Wave 2 plan: [`docs/iteration-plan-wave2.md`](./iteration-plan-wave2.md)
+- Wave 3 design plan: [`docs/iteration-plan-wave3-design.md`](./iteration-plan-wave3-design.md)
+- Wave 4 strategic plan: [`docs/iteration-plan-wave4-growth.md`](./iteration-plan-wave4-growth.md)

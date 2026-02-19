@@ -2,8 +2,21 @@
 
 > Обновлено: 2026-02-19
 > Roadmap: [`docs/mvp-vs-roadmap.md`](./mvp-vs-roadmap.md)
-> Iteration plan (Wave 2): [`docs/iteration-plan-wave2.md`](./iteration-plan-wave2.md)
+> Wave 2: [`docs/iteration-plan-wave2.md`](./iteration-plan-wave2.md)
+> Wave 3: [`docs/iteration-plan-wave3-design.md`](./iteration-plan-wave3-design.md)
+> Wave 4: [`docs/iteration-plan-wave4-growth.md`](./iteration-plan-wave4-growth.md)
 > **Source of truth:** [GitHub Issues & Milestones](https://github.com/lemone112/labpics-dashboard/milestones)
+
+---
+
+## Roadmap Overview (4 волны, 30 итераций, 292 задачи)
+
+| Wave | Iterations | Issues | Статус | Фокус |
+|------|-----------|--------|--------|-------|
+| **Wave 1** | Iter 0–10, 12 | #2–#17 | ✅ **DONE** (77/79) | Platform hardening |
+| **Wave 2** | Iter 11–16 | #46–#119 | ⬜ In progress | LightRAG, resilience, TS, QA |
+| **Wave 3** | Iter 17–24 | #125–#220 | ⬜ Planned | Design overhaul |
+| **Wave 4** | Iter 25–30 | #221–#271 | ⬜ Planned | Strategic growth |
 
 ---
 
@@ -12,21 +25,7 @@
 ### Iter 11 — HKUDS LightRAG Migration + MCP | CRITICAL
 
 > Миграция с custom hybrid RAG на [HKUDS LightRAG](https://github.com/HKUDS/LightRAG) из форка [`lemone112/lightrag`](https://github.com/lemone112/lightrag).
-
-| # | Задача | Статус |
-|---|--------|--------|
-| 11.1 | Deploy LightRAG Server (Python) в docker-compose. Настроить OPENAI_API_KEY, PostgreSQL connection, health check | ⬜ |
-| 11.2 | PostgreSQL storage backend: PGKVStorage + PGVectorStorage + PGGraphStorage. Shared DB, namespace isolation | ⬜ |
-| 11.3 | Data ingestion pipeline: connector-sync.js → LightRAG `/documents` API. Batch ingestion messages/issues/deals | ⬜ |
-| 11.4 | Proxy endpoints: `/lightrag/query` → LightRAG `/query`, `/lightrag/status` → `/health`. Удалить custom RAG код | ⬜ |
-| 11.5 | MCP Server: [daniel-lightrag-mcp](https://github.com/desimpkins/daniel-lightrag-mcp) (22 tools) в docker-compose для Telegram бота | ⬜ |
-| 11.6 | Service account auth: API key (header `X-API-Key`), env `SERVICE_API_KEYS`, scope per key | ⬜ |
-| 11.7 | Integration tests: proxy endpoints, data ingestion, health check, auth | ⬜ |
-
-**Блокеры:** Iter 10 (KAG cleanup).
-**Зависимости:** Репозиторий `lemone112/lightrag` (форк HKUDS LightRAG).
-
----
+> Задачи: [GitHub Milestone](https://github.com/lemone112/labpics-dashboard/milestone/1) (#46–#55)
 
 ### Iter 13 — Frontend Resilience & Auth | HIGH
 
@@ -43,6 +42,35 @@
 ### Iter 16 — QA & Release Readiness | HIGH
 
 > Задачи: [GitHub Milestone](https://github.com/lemone112/labpics-dashboard/milestone/5) (#91–#102, #117–#119)
+
+---
+
+## Planned Iterations (Wave 3 — Design Overhaul)
+
+| Iter | Название | Milestone | Issues |
+|------|----------|-----------|--------|
+| 17 | Analytics Instrumentation | [6](https://github.com/lemone112/labpics-dashboard/milestone/6) | #125–#134 |
+| 18 | Design System Foundations | [7](https://github.com/lemone112/labpics-dashboard/milestone/7) | #131–#153 |
+| 19 | Component Library Overhaul | [8](https://github.com/lemone112/labpics-dashboard/milestone/8) | #147–#198 |
+| 20 | UX Logic & Information Architecture | [9](https://github.com/lemone112/labpics-dashboard/milestone/9) | #138–#171 |
+| 20.5 | Charts & Data Visualization | [10](https://github.com/lemone112/labpics-dashboard/milestone/10) | #152–#196 |
+| 21 | Page-Level Redesign | [11](https://github.com/lemone112/labpics-dashboard/milestone/11) | #158–#200 |
+| 22 | Mobile & Responsive | [12](https://github.com/lemone112/labpics-dashboard/milestone/12) | #175–#201 |
+| 23 | Accessibility, Polish & Dark Mode | [13](https://github.com/lemone112/labpics-dashboard/milestone/13) | #202–#211 |
+| 24 | Design Validation & QA | [14](https://github.com/lemone112/labpics-dashboard/milestone/14) | #212–#220 |
+
+---
+
+## Planned Iterations (Wave 4 — Strategic Growth)
+
+| Iter | Название | Milestone | Issues | Бизнес-impact |
+|------|----------|-----------|--------|---------------|
+| 25 | Performance & Caching | [15](https://github.com/lemone112/labpics-dashboard/milestone/15) | #221–#231 | LCP -50%, API costs -70% |
+| 26 | API Architecture & DX | [16](https://github.com/lemone112/labpics-dashboard/milestone/16) | #228–#240 | Dev velocity +35% |
+| 27 | Multi-user & RBAC | [17](https://github.com/lemone112/labpics-dashboard/milestone/17) | #235–#246 | Revenue gate (multi-seat) |
+| 28 | Engagement & Notifications | [18](https://github.com/lemone112/labpics-dashboard/milestone/18) | #247–#256 | DAU +30% |
+| 29 | Platform & Integrations | [19](https://github.com/lemone112/labpics-dashboard/milestone/19) | #255–#263 | Platform play |
+| 30 | Offline, Personalization & Enterprise | [20](https://github.com/lemone112/labpics-dashboard/milestone/20) | #264–#271 | Enterprise compliance |
 
 ---
 
