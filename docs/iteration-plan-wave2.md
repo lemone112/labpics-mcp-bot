@@ -7,6 +7,9 @@
 > **⚠ Supersedes** Iter 12 ("Frontend Resilience") and Iter 13 ("CI/CD Hardening")
 > from the original roadmap in [`mvp-vs-roadmap.md`](./mvp-vs-roadmap.md).
 > Those definitions are replaced by this plan.
+>
+> **v3** — verified against codebase on 2026-02-19. Removed 2 already-completed tasks
+> (BE-02 login rate limit, BE-11 sourceLimit). Corrected 3 task descriptions (12.1, 12.6, 12.11).
 
 ---
 
@@ -36,12 +39,12 @@ Iter 15 (CI/CD) — independent, can run in parallel with any iteration
 |------|------|----------|-------|------------|-------------|
 | **10** | KAG Cleanup + DB Hygiene | CRITICAL | 9 | — | S |
 | **11** | Full LightRAG Integration | CRITICAL | 10 | 10 | L |
-| **12** | Backend Security & Reliability | HIGH | 11 | 10 | M |
+| **12** | Backend Security & Reliability | HIGH | 10 | 10 | M |
 | **13** | Frontend Resilience & Auth | HIGH | 11 | 10 | M |
 | **14** | Design System & Accessibility | MEDIUM | 10 | 13 | M |
 | **15** | CI/CD & Infrastructure | MEDIUM | 6 | — | S |
-| **16** | Polish & Technical Debt | LOW | 5 | 11, 12, 14 | S |
-| | **Total** | | **62** | | |
+| **16** | Polish & Technical Debt | LOW | 4 | 11, 12, 14 | S |
+| | **Total** | | **60** | | |
 
 Effort: S = 1-2 days, M = 3-5 days, L = 5-8 days
 
@@ -116,19 +119,19 @@ Effort: S = 1-2 days, M = 3-5 days, L = 5-8 days
 
 | # | Task | Source | Details |
 |---|------|--------|---------|
-| 12.1 | Wrap embedding state updates in transactions | BE-01 | `markReadyRows` → `withTransaction`. Partial failure must ROLLBACK. |
-| 12.2 | Fix login rate limit: username+IP compound key | BE-02 | Track `loginAttempts` by `username:ip` pair, not just IP. Prevent distributed brute force. |
-| 12.3 | Sanitize error messages returned to clients | BE-03 | Replace `String(error?.message)` with generic messages in all catch blocks that call `sendError`. Log original to Pino. |
+| 12.1 | Harden embedding claim→mark lifecycle | BE-01 | `markReadyRows` (embeddings.js:99) is a single atomic UPDATE — no transaction needed there. Real issue: if process crashes between `claimPendingChunks` (line 18) and `markReadyRows`/`markFailedRows`, rows stay stuck in `processing` until `recoverStaleProcessingRows` catches them 30 min later — and that recovery has no max-retry cap (see 16.2). Fix: add `embedding_attempts` ceiling to `recoverStaleProcessingRows`, and ensure `markClaimedAsPending` is called in all error paths so rows don't stay stuck. |
+| ~~12.2~~ | ~~Login rate limit compound key~~ | ~~BE-02~~ | **Already implemented.** `loginAttemptKey()` (index.js:517) uses `${ip}:${username}`. Verified 2026-02-19. |
+| 12.3 | Sanitize error messages returned to clients | BE-03 | Replace `String(error?.message)` with generic messages in all catch blocks that call `sendError`. Affected: index.js lines 1186, 1236, 1448. Example: line 1448 passes raw error into `ApiError(500, ..., message)`. Log original to Pino, return only error code. |
 | 12.4 | Add idempotency key support to mutations | BE-04 | Accept `X-Idempotency-Key` header. Store in new `idempotency_keys` table with `ON CONFLICT → return cached response`. Apply to CRM create, offer create, outbound send. |
-| 12.5 | Escape LIKE pattern special characters | BE-05 | `buildLikePatterns()`: escape `%` → `\%`, `_` → `\_` before wrapping in `%...%`. |
-| 12.6 | Fix race condition in outbox policy touch | BE-06 | Replace INSERT→SELECT with `INSERT...ON CONFLICT(project_id, contact_global_id, channel) DO UPDATE SET updated_at = now() RETURNING *`. |
-| 12.7 | Add SSE broadcaster reaper | BE-07 | Periodic sweep every 60s: remove entries whose `reply.raw.destroyed === true`. Log cleanup count. |
-| 12.8 | Implement FOR UPDATE SKIP LOCKED in scheduler | BE-08 | `SELECT ... FROM scheduled_jobs WHERE status = 'active' AND next_run_at <= now() FOR UPDATE SKIP LOCKED LIMIT $1`. Prevents duplicate execution by concurrent workers. |
-| 12.9 | Add pool.on('error') handler | BE-13 | Register `pool.on('error', (err) => logger.error({ err }, 'pool_error'))` in `createDbPool`. Prevents silent connection accumulation. |
-| 12.10 | Worker graceful shutdown timeout | BE-14 | After SIGTERM, wait max 30s for current cycle, then force-exit. Use `AbortController` or `Promise.race` with timeout. |
-| 12.11 | Fix hydrateSessionScope double-call | B-1 | Add `request.scopeHydrated` guard flag. If already hydrated, skip second call in preValidation. |
+| 12.5 | Escape LIKE pattern special characters | BE-05 | `buildLikePatterns()` (lightrag.js:33): escape `%` → `\%`, `_` → `\_` before wrapping in `%...%`. Currently `100%` or `user_name` produce incorrect SQL patterns. |
+| 12.6 | Consolidate outbox policy upsert to single query | BE-06 | `touchChannelPolicy()` (outbox.js:21) currently uses `INSERT...ON CONFLICT DO NOTHING` + separate SELECT (line 50). Two queries where one suffices. Replace with `INSERT...ON CONFLICT(project_id, contact_global_id, channel) DO UPDATE SET updated_at = now() RETURNING *`. Severity: LOW (not a data-loss race, but unnecessary round-trip). |
+| 12.7 | Add SSE broadcaster reaper | BE-07 | `sse-broadcaster.js` (90 LOC): no periodic cleanup. `broadcast()` catches errors from dead clients (line 63) but doesn't remove entries. Add periodic sweep every 60s: remove entries whose `reply.raw.destroyed === true`. Log cleanup count. |
+| 12.8 | Implement FOR UPDATE SKIP LOCKED in scheduler | BE-08 | `scheduler.js:257-273`: plain SELECT for due jobs — no row locking. If 2+ workers run, both pick same jobs. Note: `claimPendingChunks` in embeddings.js already uses `FOR UPDATE SKIP LOCKED` correctly. Apply same pattern: `SELECT ... FROM scheduled_jobs WHERE status = 'active' AND next_run_at <= now() FOR UPDATE SKIP LOCKED LIMIT $1`. |
+| 12.9 | Add pool.on('error') handler | BE-13 | `db.js:5-14`: `new Pool({...})` with no error listener. Register `pool.on('error', (err) => logger.error({ err }, 'pool_error'))`. Prevents silent connection accumulation and unhandled rejection. |
+| 12.10 | Worker graceful shutdown timeout | BE-14 | After SIGTERM, wait max 30s for current cycle, then force-exit. Use `AbortController` or `Promise.race` with timeout. Current SIGTERM handler (index.js:3025) closes server but has no hard deadline. |
+| 12.11 | Optimize hydrateSessionScope redundant DB call | B-1 | Two-phase hydration is **intentional**: onRequest (line 684, URL params) → preValidation (line 712, body params). Guard at line 709 (`if (active_project_id && account_scope_id) return`) already prevents most double-calls. Remaining issue: when body provides same project_ids as URL, second DB call is wasted. Fix: cache resolved scope in `request._resolvedScope` and compare `preferredProjectIds` before re-calling DB. Severity: LOW. |
 
-**Exit criteria:** All 11 fixes applied. No raw error messages in API responses (verified by grep). Scheduler safe for 2+ concurrent workers. `hydrateSessionScope` called exactly once per request.
+**Exit criteria:** All 10 fixes applied (12.2 already done). No raw error messages in API responses (verified by grep). Scheduler safe for 2+ concurrent workers.
 
 **Risks:**
 - Idempotency keys (12.4) require new DB table + migration — coordinate with 0021
@@ -216,12 +219,12 @@ Effort: S = 1-2 days, M = 3-5 days, L = 5-8 days
 | # | Task | Source | Details |
 |---|------|--------|---------|
 | 16.1 | Audit ON DELETE behavior across all FKs | DB-02 | Review all FK constraints. Add `ON DELETE CASCADE` where missing (risk_pattern_events, case_signatures). Document reasoning for `ON DELETE RESTRICT` cases. |
-| 16.2 | Fix stale embedding recovery max retries | BE-09 | Add `WHERE embedding_attempts < $max_retries` to `recoverStaleProcessingRows`. Mark as `failed` after limit. |
+| 16.2 | Fix stale embedding recovery max retries | BE-09 | `recoverStaleProcessingRows` (embeddings.js:45): no `WHERE embedding_attempts < $max` guard. Rows recovered indefinitely. Add ceiling (e.g. 5 attempts), mark as `failed` after limit. Related to 12.1 (lifecycle hardening). |
 | 16.3 | Fix cache invalidation gap | BE-10 | Invalidate `lightrag:*` cache prefix after `embeddings_run` completion, not just on connector sync. |
-| 16.4 | Apply sourceLimit at DB level in search | BE-11 | `queryLightRag`: add `LIMIT $sourceLimit` to each source query (messages, issues, opportunities). Remove JS-side truncation. |
+| ~~16.4~~ | ~~Apply sourceLimit at DB level~~ | ~~BE-11~~ | **Already implemented.** `queryLightRag()` (lightrag.js:222) uses `LIMIT $4` with sourceLimit. Verified 2026-02-19. |
 | 16.5 | Remove PageLoadingSkeleton infinite loop | DS-05 | Replace `loop: true` with single iteration or 2-cycle fade. Align with MOTION_GUIDELINES. |
 
-**Exit criteria:** All 28 audit issues resolved. No known HIGH+ issues in backlog.
+**Exit criteria:** All 28 audit issues resolved (26 remaining + 2 already done). No known HIGH+ issues in backlog.
 
 ---
 
@@ -283,17 +286,17 @@ This saves ~1 week vs original plan.
 | DB-04 | Partial index pending embeddings | 10 | 10.8 |
 | DB-05 | mv_portfolio_dashboard refresh | 15 | 15.5 |
 | DB-06 | audit_events_partitioned unused | 10 | 10.9 |
-| BE-01 | Embedding state not transactional | 12 | 12.1 |
-| BE-02 | Login rate limit bypass | 12 | 12.2 |
+| BE-01 | Embedding claim→mark lifecycle | 12 | 12.1 |
+| ~~BE-02~~ | ~~Login rate limit bypass~~ | — | **Already done** (`loginAttemptKey` uses `ip:username`) |
 | BE-03 | Error messages leak internals | 12 | 12.3 |
 | BE-04 | No idempotency keys | 12 | 12.4 |
 | BE-05 | LIKE pattern not escaped | 12 | 12.5 |
-| BE-06 | Race condition outbox | 12 | 12.6 |
+| BE-06 | Outbox policy upsert consolidation | 12 | 12.6 |
 | BE-07 | SSE broadcaster memory leak | 12 | 12.7 |
 | BE-08 | Missing job locking | 12 | 12.8 |
 | BE-09 | Stale embedding no max retries | 16 | 16.2 |
 | BE-10 | Cache invalidation gap | 16 | 16.3 |
-| BE-11 | N+1 over-fetching in search | 16 | 16.4 |
+| ~~BE-11~~ | ~~N+1 over-fetching in search~~ | — | **Already done** (`LIMIT $4` at DB level in `queryLightRag`) |
 | BE-12 | KAG routes leak existence | 10 | 10.3 *(deleted entirely)* |
 | BE-13 | DB pool missing error handler | 12 | 12.9 |
 | BE-14 | Worker no shutdown timeout | 12 | 12.10 |
@@ -324,14 +327,27 @@ This saves ~1 week vs original plan.
 | DS-11 | Z-index not formalized | 14 | 14.10 |
 | DS-12 | Form labels not associated | 14 | 14.4 |
 | DS-13 | Checkbox not Radix | 14 | 14.8 |
-| B-1 | hydrateSessionScope double-call | 12 | 12.11 |
+| B-1 | hydrateSessionScope redundant DB call | 12 | 12.11 |
 | B-2 | 80+ env vars duplicated | 15 | 15.6 |
 | B-5 | Vector index tuning | 11 | *(resolved by HKUDS LightRAG)* |
 | B-7 | Custom RAG quality score | 11 | *(replaced by HKUDS metrics)* |
 
 ---
 
-## Changes vs v1 of this document
+## Changes vs v2 of this document
+
+| Change | Reason |
+|--------|--------|
+| Removed task 12.2 (login rate limit) | **Already implemented.** `loginAttemptKey()` (index.js:517) uses compound `ip:username` key. Verified by reading code. |
+| Removed task 16.4 (sourceLimit at DB level) | **Already implemented.** `queryLightRag()` uses `LIMIT $4` with sourceLimit param. Verified by reading code. |
+| Corrected 12.1 description | `markReadyRows` is a single atomic UPDATE — wrapping in `withTransaction` is unnecessary. Real issue is crash-recovery lifecycle: claim→embed→mark has no guaranteed cleanup on crash. Reframed as "harden lifecycle". |
+| Corrected 12.6 description | Code already uses `INSERT...ON CONFLICT DO NOTHING`, not plain INSERT. Downgraded severity to LOW. Reframed as "consolidate to single query" optimization. |
+| Corrected 12.11 description | Guard already exists at index.js:709 (`if (active_project_id && account_scope_id) return`). Two-phase hydration is intentional. Reframed as "optimize redundant DB call" with LOW severity. |
+| Total tasks: 62 → 60 | -2 resolved (12.2, 16.4), 3 corrected (12.1, 12.6, 12.11). |
+
+---
+
+## Changes v1 → v2
 
 | Change | Reason |
 |--------|--------|
