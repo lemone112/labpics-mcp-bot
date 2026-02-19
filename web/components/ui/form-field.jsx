@@ -4,51 +4,66 @@ import * as React from "react";
 import { cn } from "@/lib/utils";
 import { Label } from "@/components/ui/label";
 
-const FormFieldContext = React.createContext(null);
+const FormFieldContext = React.createContext({});
 
-function useFormField() {
-  return React.useContext(FormFieldContext);
-}
-
-function FormField({ id, label, error, className, children }) {
-  const fieldId = React.useId();
-  const resolvedId = id || fieldId;
-  const errorId = `${resolvedId}-error`;
-
-  const ctx = React.useMemo(
-    () => ({ id: resolvedId, errorId, error }),
-    [resolvedId, errorId, error]
-  );
+const FormField = ({
+  className,
+  children,
+  error,
+  label,
+  required,
+  hint,
+  id,
+  ...props
+}) => {
+  const generatedId = React.useId();
+  const fieldId = id || generatedId;
+  const errorId = `${fieldId}-error`;
+  const hintId = `${fieldId}-hint`;
+  const describedBy = [hint ? hintId : null, error ? errorId : null]
+    .filter(Boolean)
+    .join(" ");
 
   return (
-    <FormFieldContext.Provider value={ctx}>
-      <div className={cn("space-y-1.5", className)}>
-        {label && <Label htmlFor={resolvedId}>{label}</Label>}
-        {typeof children === "function"
-          ? children({
-              id: resolvedId,
-              "aria-describedby": error ? errorId : undefined,
-              "aria-invalid": error ? true : undefined,
-            })
-          : children}
-        {error && <FormError id={errorId}>{error}</FormError>}
+    <FormFieldContext.Provider value={{ fieldId, errorId, hintId }}>
+      <div className={cn("grid gap-1.5", className)} {...props}>
+        {label ? (
+          <div className="flex items-center gap-2">
+            <Label htmlFor={fieldId} className="leading-none">
+              {label}
+              {required ? <span className="text-destructive"> *</span> : null}
+            </Label>
+          </div>
+        ) : null}
+
+        {children}
+
+        {hint ? (
+          <p id={hintId} className="text-muted-foreground text-xs">
+            {hint}
+          </p>
+        ) : null}
+
+        {error ? (
+          <p
+            id={errorId}
+            role="alert"
+            className={cn("text-sm text-destructive", className)}
+          >
+            {error}
+          </p>
+        ) : null}
       </div>
     </FormFieldContext.Provider>
   );
-}
+};
 
-function FormError({ id, className, children }) {
-  if (!children) return null;
+const useFormField = () => {
+  const context = React.useContext(FormFieldContext);
+  if (!context) {
+    throw new Error("useFormField must be used within a FormField");
+  }
+  return context;
+};
 
-  return (
-    <p
-      id={id}
-      role="alert"
-      className={cn("text-[13px] text-destructive", className)}
-    >
-      {children}
-    </p>
-  );
-}
-
-export { FormField, FormError, useFormField };
+export { FormField, useFormField };
