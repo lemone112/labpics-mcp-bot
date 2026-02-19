@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
+import { StatTile } from "@/components/ui/stat-tile";
 import { cn } from "@/lib/utils";
 import { numberValue, formatHumanDateRu, formatRelativeTimeRu, EMPTY_WIZARD, PRIMARY_CTA } from "../lib/formatters";
 
@@ -73,8 +74,18 @@ function compactUniqueRisks(risks, max = 12) {
 
 export const RisksSection = memo(function RisksSection({ risks, isAllProjects }) {
   const visibleRisks = useMemo(() => compactUniqueRisks(risks, 12), [risks]);
+  const highSeverity = useMemo(() => risks.filter((r) => numberValue(r.severity) >= 4).length, [risks]);
+  const projectCount = useMemo(() => new Set(risks.map((r) => r.project_id)).size, [risks]);
+
   return (
     <div className="space-y-3">
+      {risks.length > 0 ? (
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+          <StatTile label="Всего рисков" value={risks.length} />
+          <StatTile label="Высокий / критический" value={highSeverity} />
+          <StatTile label="Проектов с рисками" value={projectCount} />
+        </div>
+      ) : null}
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-xs text-muted-foreground">
           Показано {visibleRisks.length} из {Array.isArray(risks) ? risks.length : 0} рисков. Дубликаты автоматически свернуты.

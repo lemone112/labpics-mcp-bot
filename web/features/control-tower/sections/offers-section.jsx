@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
+import { StatTile } from "@/components/ui/stat-tile";
 import { numberValue, EMPTY_WIZARD, PRIMARY_CTA } from "../lib/formatters";
 
 export const OffersSection = memo(function OffersSection({ payload, isAllProjects, moneyFormatter }) {
@@ -15,12 +16,12 @@ export const OffersSection = memo(function OffersSection({ payload, isAllProject
 
   return (
     <div className="space-y-4">
-      <Card data-motion-item>
-        <CardHeader><CardTitle>Loops база</CardTitle></CardHeader>
-        <CardContent className="text-sm text-muted-foreground">
-          Контактов с email: {numberValue(loopsStats.contacts_with_email)}, уникальных email: {numberValue(loopsStats.unique_emails)}
-        </CardContent>
-      </Card>
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
+        <StatTile label="Возможности апсейла" value={offers.upsell?.length || 0} />
+        <StatTile label="Последние офферы" value={offers.recent_offers?.length || 0} />
+        <StatTile label="Контактов с email" value={numberValue(loopsStats.contacts_with_email)} />
+        <StatTile label="Уникальных email" value={numberValue(loopsStats.unique_emails)} />
+      </div>
 
       <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
         <Card data-motion-item>
