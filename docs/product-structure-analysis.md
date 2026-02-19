@@ -4,7 +4,7 @@
 > Метод: 3-цикловый ресёрч (structure → hotpaths → self-criticism)
 > Scope: backend, frontend, infrastructure, data model, Redis, production readiness
 >
-> **Статус:** Iter 0-9 завершены. Architecture Audit проведён. Wave 2 (Iter 10-13) пересмотрен. KAG legacy cleanup → CRITICAL.
+> **Статус:** Iter 0-12 завершены. Wave 2 (Iter 11-16) активен. KAG полностью удалён (Iter 10). Source of truth: [GitHub Issues](https://github.com/lemone112/labpics-dashboard/milestones).
 
 ---
 
@@ -545,7 +545,7 @@ session UPDATE (login/logout/project switch):
 | Покрыты ли все 6 зон? | Да: Platform, Connectors, Intelligence, Dashboard, Frontend, Infrastructure | OK |
 | Проверен ли каждый critical finding в коде? | Да: строки указаны, код прочитан | OK |
 | Есть ли пропущенные bottlenecks? | Возможно: worker-loop.js при большом числе проектов. Проверено — OK, tick limit 25 | OK |
-| Учтён ли KAG legacy code? | Да: явно отмечен как out of scope, таблицы предложены к cleanup | OK |
+| Учтён ли KAG code? | Да: полностью удалён в Iter 10 (2,770 LOC, routes, scheduler jobs, DB tables) | OK |
 
 ### Раунд 2: Проверка Redis-решения
 
@@ -596,29 +596,12 @@ session UPDATE (login/logout/project switch):
 | 8 | Security Hardening II | 7/7 | ✅ Done | — |
 | 9 | Extended Input Validation | 5/5 | ✅ Done | — |
 
-**Итого:** 58/60 задач завершено в Iter 0-9. Wave 2 пересмотрен v2: Iter 10-13 (22 задачи) + Later (3 задачи).
+**Итого:** 77/79 задач завершено в Iter 0-12. Wave 2 (Iter 11-16): 68 задач, трекаются в [GitHub Issues](https://github.com/lemone112/labpics-dashboard/milestones).
 
-**Рекомендуемый порядок выполнения:**
-```
-✅ Iter 0 (security) ──────── DONE
-✅ Iter 1 (Redis cache) ───── DONE
-✅ Iter 2 (reliability) ───── DONE
-✅ Iter 3 (frontend) ───────── DONE
-✅ Iter 4 (DB optimization) ── DONE
-✅ Iter 5 (observability) ──── DONE
-✅ Iter 6 (quality & UX) ──── DONE
-✅ Iter 7 (validation) ─────── DONE
-✅ Iter 8 (security II) ────── DONE
-✅ Iter 9 (ext. validation) ── DONE
-⬜ Iter 10 (KAG cleanup) ───── CRITICAL — удаление ~2,770 LOC мёртвого кода
-⬜ Iter 11 (LightRAG + MCP) ── HIGH ★ — миграция на HKUDS LightRAG + MCP для Telegram бота
-⬜ Iter 12 (frontend res.) ─── MEDIUM — error boundaries, SSE reconnect
-⬜ Iter 13 (CI/CD) ──────────── MEDIUM — audit, backup, rollback
-⬜ Later (TypeScript Phase 1) ─ LOW — tsconfig checkJs, новые файлы на TS
-```
+**Актуальный порядок:** см. [`docs/mvp-vs-roadmap.md`](./mvp-vs-roadmap.md) §4.
 
-**Архитектурные решения (Architecture Audit v2, 2026-02-18):**
-- Custom hybrid RAG → миграция на [HKUDS LightRAG](https://github.com/HKUDS/LightRAG) из форка `lemone112/lightrag`
-- KAG = deprecated, удаляется в Iter 10. `kag_event_log` → `connector_events`
+**Архитектурные решения:**
+- Custom hybrid RAG → миграция на [HKUDS LightRAG](https://github.com/HKUDS/LightRAG) (Iter 11)
+- KAG полностью удалён (Iter 10). `kag_event_log` → `connector_events`
 - Telegram Bot = [daniel-lightrag-mcp](https://github.com/desimpkins/daniel-lightrag-mcp) (22 tools) → LightRAG Server → PostgreSQL
 - JS → TS = инкрементальный подход (checkJs + новые файлы на TS)

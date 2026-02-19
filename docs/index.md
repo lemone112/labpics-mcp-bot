@@ -36,9 +36,7 @@
 
 ## Жёсткий контракт для разработки
 
-- По умолчанию включен режим `LIGHTRAG_ONLY=1`.
-- В разработке и продуктовых задачах используется только LightRAG API.
-- KAG pipeline полностью удалён (Iter 10). Код, routes, scheduler jobs, DB-таблицы — удалены.
+- Intelligence layer = custom hybrid RAG (`/lightrag/*` endpoints). KAG pipeline удалён (Iter 10).
 - UI обязан опираться на LightRAG + operational charts.
 - **Real-time**: Redis Pub/Sub для event propagation, SSE для auto-refresh в браузере, cascade triggers между задачами.
 
