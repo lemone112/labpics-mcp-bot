@@ -219,29 +219,27 @@ Effort: S = 1-2 days, M = 3-5 days, L = 5-8 days
 | ~~16.4~~ | ~~Apply sourceLimit at DB level~~ | ~~BE-11~~ | **Already implemented.** `queryLightRag()` (lightrag.js:222) uses `LIMIT $4` with sourceLimit. Verified 2026-02-19. |
 | 16.5 | Remove PageLoadingSkeleton infinite loop | DS-05 | Replace `loop: true` with single iteration or 2-cycle fade. Align with MOTION_GUIDELINES. |
 
-**Exit criteria:** All 28 audit issues resolved (26 remaining + 2 already done). No known HIGH+ issues in backlog.
+**Exit criteria:** All 28 audit issues resolved (24 remaining + 4 already done: BE-02, BE-09, BE-11, 16.4). No known HIGH+ issues in backlog.
 
 ---
 
 ## Timeline (suggested)
 
 ```
-Week 1       ┃ Iter 10 — KAG Cleanup + DB Hygiene
-             ┃
-Week 2-3     ┃ Iter 11 — LightRAG    ║ Iter 12 — Backend    ║ Iter 15 — CI/CD
+✅ Done       ┃ Iter 10 — KAG Cleanup    ║ Iter 12 — Backend Security
+             ┃                           ║
+Next         ┃ Iter 11 — LightRAG    ║ Iter 13 — Frontend    ║ Iter 15 — CI/CD
              ┃  (sequential)          ║  (parallel)           ║  (parallel)
              ┃                        ║                       ║
-Week 3-4     ┃ Iter 13 — Frontend     ║                       ║
+Then         ┃ Iter 14 — Design       ║                       ║
              ┃                        ║                       ║
-Week 4-5     ┃ Iter 14 — Design       ║                       ║
-             ┃                        ║                       ║
-Week 5-6     ┃ Iter 16 — Polish       ║                       ║
+Finally      ┃ Iter 16 — Polish       ║                       ║
              ┃                        ║                       ║
              ┗━━━ Target: 97%+ maturity ━━━━━━━━━━━━━━━━━━━━━━┛
 ```
 
-**Key insight:** Iter 12 (Backend) runs in parallel with Iter 11 (LightRAG), not sequentially.
-This saves ~1 week vs original plan.
+**Key insight:** Iter 10 and 12 completed in parallel, saving ~1 week.
+Remaining: 11 + 13 can start now (parallel), then 14, then 16.
 
 ---
 
