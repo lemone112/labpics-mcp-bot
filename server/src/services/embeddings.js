@@ -7,9 +7,20 @@ function truncateError(error, maxLen = 400) {
   return message.slice(0, maxLen);
 }
 
+const ALLOWED_SET_LOCAL_KEYS = new Set(["ivfflat.probes", "hnsw.ef_search"]);
+
 async function safeSetLocal(client, key, value, logger = console) {
+  if (!ALLOWED_SET_LOCAL_KEYS.has(key)) {
+    logger.warn({ key }, "blocked SET LOCAL for unknown key");
+    return;
+  }
+  const safeValue = Number(value);
+  if (!Number.isFinite(safeValue) || safeValue < 0) {
+    logger.warn({ key, value }, "blocked SET LOCAL for invalid value");
+    return;
+  }
   try {
-    await client.query(`SET LOCAL ${key} = ${value}`);
+    await client.query(`SET LOCAL ${key} = ${String(Math.floor(safeValue))}`);
   } catch (error) {
     logger.warn({ key, value, err: truncateError(error, 180) }, "unable to set local pgvector knob");
   }
