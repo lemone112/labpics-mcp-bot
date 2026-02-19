@@ -294,6 +294,25 @@ Issues написаны как однострочные заметки, а не 
 - **#228 (Route extraction):** Shared dependencies injection не описан
 - **#233 (OpenAPI):** Fastify уже имеет Pino-based swagger — дублирование
 
+### Iter 27-35 (Multi-user, Notifications, Intelligence): архитектурные риски
+- **#237 (RBAC Auth) — CRITICAL PATH**: блокирует ВСЕ остальные итерации. Задержка здесь сдвигает всё. Рекомендация: начать с #235 + #237 как "Sprint 0".
+- **LLM cost explosion**: 5 issues (#273 sentiment, #274 churn, #275 upsell, #284 QBR, #285 copilot) используют LLM — нет centralized cost tracking.
+- **#267 (E2E encryption)**: название вводит в заблуждение → переименовать в "Column-level encryption at rest".
+- **Крупные issues нужно разбить**: #283 (Playbooks → 4 sub-issues), #284 (QBR → 5 sub-issues), #272 (Health Score → 3 sub-issues).
+- **Dependency chain опасно длинная**: #284 (QBR) зависит от ~10 предыдущих issues.
+
+### Пропущенные cross-cutting concerns (все итерации):
+| Concern | Где пропущено | Рекомендация |
+|---------|---------------|--------------|
+| Rate limiting | Все новые API endpoints | Централизовать в Iter 27 |
+| Cursor-based pagination | #242, #246, #252, #258 | Стандартизировать шаблон |
+| Error boundaries | Все frontend issues | Error Boundary + toast pattern |
+| Empty/Loading states | Все list/table UI | Design system: skeleton screens |
+| LLM token budgeting | #273, #274, #275, #284, #285 | Отдельный issue: cost tracking |
+| Data retention policies | #246 (90d), #268 (1y), #269 (90d) | Унифицировать per data type |
+| GDPR compliance | #269 mentions "deletable" | Отдельный issue: right to deletion |
+| API versioning | Multi-user + webhooks | Добавить issue в Iter 29 |
+
 ---
 
 ## 10. ПЛАН ДЕЙСТВИЙ (PRE-CODING GATE)
@@ -318,3 +337,31 @@ Issues написаны как однострочные заметки, а не 
 - [ ] Закрыть 8 duplicate issues (3.1)
 - [ ] Расставить priority labels (3.2)
 - [ ] Детализировать Issues Iter 22-24 до уровня Iter 25-26
+- [ ] Разбить крупные issues: #283 (→4), #284 (→5), #272 (→3)
+- [ ] Создать issue: LLM token budget tracking
+- [ ] Создать issue: GDPR / data deletion
+- [ ] Переименовать #267: "E2E encryption" → "Column-level encryption at rest"
+
+---
+
+## 11. КАРТА ЗАВИСИМОСТЕЙ (critical path)
+
+```
+#235 (RBAC DB schema) ← SPRINT 0
+  └─→ #237 (Auth upgrade) ← SPRINT 0
+       ├─→ #239 (Invites) → #242 (Team UI)
+       ├─→ #241 (Permissions) → #244 (Role UI) / #245 (Project access) / #246 (Audit)
+       └─→ #243 (Profile)
+
+#247 (Notif schema) → #248 (Triggers) → #249 (Push) / #250 (Email) / #251 (Telegram) / #252 (Prefs UI)
+
+#254 (Search infra) → #256 (Cmd+K)
+
+#272 (Health Score) → #273 (Sentiment) → #274 (Churn) ──┐
+                   → #279 (Surveys)                      │
+                   → #277 (Scope Creep) → #280–#282      │
+                                                          │
+#283 (Playbooks) ← all triggers ──────────────────────────┘
+#284 (QBR) ← ALL of the above
+#285 (AI Copilot) ← #256 + all data services
+```
