@@ -23,7 +23,7 @@ async function touchChannelPolicy(pool, scope, policyPatch) {
   const channel = String(policyPatch.channel || "").trim().toLowerCase();
   if (!contactGlobalId || !channel) return null;
 
-  await pool.query(
+  const { rows } = await pool.query(
     `
       INSERT INTO contact_channel_policies(
         project_id,
@@ -35,7 +35,16 @@ async function touchChannelPolicy(pool, scope, policyPatch) {
       )
       VALUES ($1, $2, $3, $4, $5, $6)
       ON CONFLICT (project_id, contact_global_id, channel)
-      DO NOTHING
+      DO UPDATE SET updated_at = now()
+      RETURNING
+        id,
+        opted_out,
+        stop_on_reply,
+        frequency_window_hours,
+        frequency_cap,
+        sent_in_window,
+        window_started_at,
+        last_inbound_at
     `,
     [
       scope.projectId,
@@ -45,27 +54,6 @@ async function touchChannelPolicy(pool, scope, policyPatch) {
       toPositiveInt(policyPatch.frequencyWindowHours, 24, 1, 720),
       toPositiveInt(policyPatch.frequencyCap, 3, 1, 200),
     ]
-  );
-
-  const { rows } = await pool.query(
-    `
-      SELECT
-        id,
-        opted_out,
-        stop_on_reply,
-        frequency_window_hours,
-        frequency_cap,
-        sent_in_window,
-        window_started_at,
-        last_inbound_at
-      FROM contact_channel_policies
-      WHERE project_id = $1
-        AND account_scope_id = $2
-        AND contact_global_id = $3
-        AND channel = $4
-      LIMIT 1
-    `,
-    [scope.projectId, scope.accountScopeId, contactGlobalId, channel]
   );
   return rows[0] || null;
 }

@@ -36,6 +36,7 @@ import {
   ContinuityApplySchema,
 } from "./lib/schemas.js";
 import { requireProjectScope } from "./lib/scope.js";
+import { findCachedResponse, getIdempotencyKey, storeCachedResponse } from "./lib/idempotency.js";
 import { applyMigrations } from "../db/migrate-lib.js";
 import { runEmbeddings } from "./services/embeddings.js";
 import { finishJob, getJobsStatus, startJob } from "./services/jobs.js";
@@ -383,7 +384,7 @@ async function main() {
     );
   });
 
-  const pool = createDbPool(databaseUrl);
+  const pool = createDbPool(databaseUrl, app.log);
   const currentFile = fileURLToPath(import.meta.url);
   const currentDir = path.dirname(currentFile);
   const migrationsDir = path.join(currentDir, "..", "db", "migrations");
@@ -652,6 +653,7 @@ async function main() {
 
     const preferredProjectIds = parseProjectIdsFromUrl(request.url);
     request.auth = await hydrateSessionScope(pool, sid, sessionRow, preferredProjectIds);
+    request._resolvedProjectIds = preferredProjectIds;
     // Batch last_seen_at updates every 30s instead of per-request
     sessionTouchBuffer.add(sid);
 
@@ -679,7 +681,10 @@ async function main() {
     if (request.auth?.active_project_id && request.auth?.account_scope_id) return;
 
     const preferredProjectIds = collectPreferredProjectIds(request);
+    const prev = request._resolvedProjectIds;
+    if (prev && prev.length === preferredProjectIds.length && prev.every((id, i) => id === preferredProjectIds[i])) return;
     request.auth = await hydrateSessionScope(pool, request.auth.session_id, request.auth, preferredProjectIds);
+    request._resolvedProjectIds = preferredProjectIds;
   });
 
   app.addHook("onResponse", async (_request, reply) => {
@@ -1164,7 +1169,7 @@ async function main() {
         return sendError(
           reply,
           request.requestId,
-          new ApiError(409, "chatwoot_source_binding_error", "Chatwoot source binding conflict", { reason: errMsg })
+          new ApiError(409, "chatwoot_source_binding_error", "Chatwoot source binding conflict")
         );
       }
       return sendError(reply, request.requestId, new ApiError(500, "chatwoot_sync_failed", "Chatwoot sync failed"));
@@ -1257,7 +1262,7 @@ async function main() {
         return sendError(
           reply,
           request.requestId,
-          new ApiError(409, "attio_source_binding_error", "Attio source binding conflict", { reason: errMsg })
+          new ApiError(409, "attio_source_binding_error", "Attio source binding conflict")
         );
       }
       return sendError(reply, request.requestId, new ApiError(500, "attio_sync_failed", "Attio sync failed"));
@@ -1307,7 +1312,7 @@ async function main() {
         return sendError(
           reply,
           request.requestId,
-          new ApiError(409, "linear_source_binding_error", "Linear source binding conflict", { reason: errMsg })
+          new ApiError(409, "linear_source_binding_error", "Linear source binding conflict")
         );
       }
       return sendError(reply, request.requestId, new ApiError(500, "linear_sync_failed", "Linear sync failed"));
@@ -1407,8 +1412,8 @@ async function main() {
       });
       return sendOk(reply, request.requestId, { result });
     } catch (error) {
-      const message = String(error?.message || error || "connector_sync_failed");
-      return sendError(reply, request.requestId, new ApiError(500, "connector_sync_failed", message));
+      request.log.error({ err: String(error?.message || error), request_id: request.requestId }, "connector sync failed");
+      return sendError(reply, request.requestId, new ApiError(500, "connector_sync_failed", "Connector sync failed"));
     }
   });
 
@@ -1865,6 +1870,11 @@ async function main() {
 
   registerPost("/crm/accounts", async (request, reply) => {
     const scope = requireProjectScope(request);
+    const idemKey = getIdempotencyKey(request);
+    if (idemKey) {
+      const cached = await findCachedResponse(pool, scope.projectId, idemKey);
+      if (cached) return reply.code(cached.status_code).send(cached.response_body);
+    }
     const body = parseBody(CreateAccountSchema, request.body);
     const ownerUsername = body.owner_username || request.auth?.username || null;
     const { rows } = await pool.query(
@@ -1887,7 +1897,9 @@ async function main() {
       payload: { name: rows[0].name, stage: rows[0].stage },
       evidenceRefs: normalizeEvidenceRefs(body.evidence_refs),
     });
-    return sendOk(reply, request.requestId, { account: rows[0] }, 201);
+    const responseBody = { ok: true, account: rows[0], request_id: request.requestId };
+    if (idemKey) await storeCachedResponse(pool, scope.projectId, idemKey, "/crm/accounts", 201, responseBody);
+    return reply.code(201).send(responseBody);
   });
 
   registerGet("/crm/opportunities", async (request, reply) => {
@@ -2127,6 +2139,11 @@ async function main() {
 
   registerPost("/offers", async (request, reply) => {
     const scope = requireProjectScope(request);
+    const idemKey = getIdempotencyKey(request);
+    if (idemKey) {
+      const cached = await findCachedResponse(pool, scope.projectId, idemKey);
+      if (cached) return reply.code(cached.status_code).send(cached.response_body);
+    }
     const body = parseBody(CreateOfferSchema, request.body);
     const subtotal = body.subtotal;
     const discountPct = body.discount_pct;
@@ -2200,7 +2217,9 @@ async function main() {
       },
       evidenceRefs,
     });
-    return sendOk(reply, request.requestId, { offer: rows[0] }, 201);
+    const responseBody = { ok: true, offer: rows[0], request_id: request.requestId };
+    if (idemKey) await storeCachedResponse(pool, scope.projectId, idemKey, "/offers", 201, responseBody);
+    return reply.code(201).send(responseBody);
   });
 
   registerPost("/offers/:id/approve-discount", async (request, reply) => {
@@ -2493,9 +2512,16 @@ async function main() {
 
   registerPost("/outbound/draft", async (request, reply) => {
     const scope = requireProjectScope(request);
+    const idemKey = getIdempotencyKey(request);
+    if (idemKey) {
+      const cached = await findCachedResponse(pool, scope.projectId, idemKey);
+      if (cached) return reply.code(cached.status_code).send(cached.response_body);
+    }
     const body = parseBody(CreateOutboundDraftSchema, request.body);
     const outbound = await createOutboundDraft(pool, scope, body, request.auth?.username || null, request.requestId);
-    return sendOk(reply, request.requestId, { outbound }, 201);
+    const responseBody = { ok: true, outbound, request_id: request.requestId };
+    if (idemKey) await storeCachedResponse(pool, scope.projectId, idemKey, "/outbound/draft", 201, responseBody);
+    return reply.code(201).send(responseBody);
   });
 
   registerPost("/outbound/:id/approve", async (request, reply) => {
@@ -2601,10 +2627,11 @@ async function main() {
     if (shuttingDown) return;
     shuttingDown = true;
     app.log.info({ signal }, "graceful shutdown initiated");
+    const deadlineMs = parseInt(process.env.SHUTDOWN_TIMEOUT_MS, 10) || 30_000;
     const shutdownTimeout = setTimeout(() => {
-      app.log.error("shutdown timeout exceeded, forcing exit");
+      app.log.error({ deadline_ms: deadlineMs }, "shutdown timeout exceeded, forcing exit");
       process.exit(1);
-    }, 10_000);
+    }, deadlineMs);
     shutdownTimeout.unref();
     try {
       await app.close();

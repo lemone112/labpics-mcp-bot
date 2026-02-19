@@ -42,8 +42,10 @@ async function claimPendingChunks(pool, scope, batchSize) {
   return rows;
 }
 
-async function recoverStaleProcessingRows(pool, scope, staleMinutes = 30) {
+async function recoverStaleProcessingRows(pool, scope, staleMinutes = 30, maxAttempts = 5) {
   const safeMinutes = Math.max(1, Math.min(24 * 60, staleMinutes));
+  const safeMaxAttempts = Math.max(1, Math.min(20, maxAttempts));
+  // Recover rows that haven't exceeded max attempts back to pending
   await pool.query(
     `
       UPDATE rag_chunks
@@ -56,8 +58,26 @@ async function recoverStaleProcessingRows(pool, scope, staleMinutes = 30) {
         AND project_id = $2
         AND account_scope_id = $3
         AND updated_at < (now() - ($1::text || ' minutes')::interval)
+        AND embedding_attempts < $4
     `,
-    [safeMinutes, scope.projectId, scope.accountScopeId]
+    [safeMinutes, scope.projectId, scope.accountScopeId, safeMaxAttempts]
+  );
+  // Permanently fail rows that exceeded max attempts
+  await pool.query(
+    `
+      UPDATE rag_chunks
+      SET
+        embedding_status = 'failed',
+        embedding_error = 'max_attempts_exceeded',
+        updated_at = now()
+      WHERE
+        embedding_status = 'processing'
+        AND project_id = $2
+        AND account_scope_id = $3
+        AND updated_at < (now() - ($1::text || ' minutes')::interval)
+        AND embedding_attempts >= $4
+    `,
+    [safeMinutes, scope.projectId, scope.accountScopeId, safeMaxAttempts]
   );
 }
 

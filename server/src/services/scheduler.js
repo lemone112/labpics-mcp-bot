@@ -192,18 +192,24 @@ export async function runSchedulerTick(pool, scope, options = {}) {
 
   const dueRows = await pool.query(
     `
+      WITH claimed AS (
+        SELECT id
+        FROM scheduled_jobs
+        WHERE project_id = $1
+          AND account_scope_id = $2
+          AND status = 'active'
+          AND next_run_at <= now()
+        ORDER BY next_run_at ASC
+        LIMIT $3
+        FOR UPDATE SKIP LOCKED
+      )
       SELECT
-        id,
-        job_type,
-        cadence_seconds,
-        payload
-      FROM scheduled_jobs
-      WHERE project_id = $1
-        AND account_scope_id = $2
-        AND status = 'active'
-        AND next_run_at <= now()
-      ORDER BY next_run_at ASC
-      LIMIT $3
+        s.id,
+        s.job_type,
+        s.cadence_seconds,
+        s.payload
+      FROM scheduled_jobs s
+      INNER JOIN claimed c ON c.id = s.id
     `,
     [scope.projectId, scope.accountScopeId, limit]
   );
