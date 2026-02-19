@@ -55,17 +55,17 @@ test("toApiError passes through existing ApiError", () => {
   assert.equal(result, original);
 });
 
-test("toApiError wraps plain Error in 500", () => {
+test("toApiError wraps plain Error in 500 with sanitized message", () => {
   const result = toApiError(new Error("boom"));
   assert.equal(result.status, 500);
   assert.equal(result.code, "internal_error");
-  assert.equal(result.message, "boom");
+  assert.equal(result.message, "Internal server error");
 });
 
-test("toApiError wraps string in 500", () => {
+test("toApiError wraps string in 500 with sanitized message", () => {
   const result = toApiError("some failure");
   assert.equal(result.status, 500);
-  assert.ok(result.message.includes("some failure"));
+  assert.equal(result.message, "Internal server error");
 });
 
 // ---------------------------------------------------------------------------

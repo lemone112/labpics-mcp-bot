@@ -7,6 +7,10 @@ import { fileURLToPath } from "node:url";
 const currentDir = dirname(fileURLToPath(import.meta.url));
 const indexSource = readFileSync(join(currentDir, "..", "src", "index.js"), "utf8");
 const apiSource = readFileSync(join(currentDir, "..", "src", "lib", "api-contract.js"), "utf8");
+// Route files (route handlers extracted from index.js into routes/*.js)
+const authRouteSource = readFileSync(join(currentDir, "..", "src", "routes", "auth.js"), "utf8");
+const projectsRouteSource = readFileSync(join(currentDir, "..", "src", "routes", "projects.js"), "utf8");
+const allRouteSource = indexSource + authRouteSource + projectsRouteSource;
 
 // ===========================================================================
 // Iter 8 — Security Hardening II
@@ -20,11 +24,11 @@ test("login handler always calls bcrypt.compare (dummy hash for wrong username)"
   // The login handler must call bcrypt.compare() even when the username doesn't match,
   // using a dummy hash to prevent timing-based username enumeration.
   assert.ok(
-    indexSource.includes("DUMMY_BCRYPT_HASH"),
+    allRouteSource.includes("DUMMY_BCRYPT_HASH"),
     "Expected DUMMY_BCRYPT_HASH constant for timing-safe login"
   );
   // Verify the dummy hash is a valid bcrypt format
-  const dummyMatch = indexSource.match(/DUMMY_BCRYPT_HASH\s*=\s*"(\$2[aby]\$\d{2}\$.+?)"/);
+  const dummyMatch = allRouteSource.match(/DUMMY_BCRYPT_HASH\s*=\s*"(\$2[aby]\$\d{2}\$.+?)"/);
   assert.ok(dummyMatch, "DUMMY_BCRYPT_HASH must be a valid bcrypt hash string");
   assert.ok(dummyMatch[1].startsWith("$2b$10$"), "Expected $2b$10$ prefix on dummy hash");
 });
@@ -32,7 +36,7 @@ test("login handler always calls bcrypt.compare (dummy hash for wrong username)"
 test("login uses conditional hash — real hash on match, dummy on mismatch", () => {
   // bcrypt.compare is always called: with auth.password if username matches, DUMMY_BCRYPT_HASH otherwise
   assert.ok(
-    indexSource.includes("usernameMatches ? auth.password : DUMMY_BCRYPT_HASH"),
+    allRouteSource.includes("usernameMatches ? auth.password : DUMMY_BCRYPT_HASH"),
     "Expected conditional hash selection for timing-safe login"
   );
 });
@@ -99,11 +103,11 @@ test("X-DNS-Prefetch-Control header is set", () => {
 test("project select endpoint invalidates session cache", () => {
   // After UPDATE sessions, cache.del(`session:${sid}`) must be called
   // Find the /projects/:id/select handler and verify cache.del is present
-  const selectHandlerIdx = indexSource.indexOf('"/projects/:id/select"');
+  const selectHandlerIdx = allRouteSource.indexOf('"/projects/:id/select"');
   assert.ok(selectHandlerIdx > -1, "Expected /projects/:id/select endpoint");
 
   // Get the next ~500 chars after the handler registration to find cache.del
-  const handlerSlice = indexSource.slice(selectHandlerIdx, selectHandlerIdx + 1000);
+  const handlerSlice = allRouteSource.slice(selectHandlerIdx, selectHandlerIdx + 1000);
   assert.ok(
     handlerSlice.includes("cache.del(`session:${sid}`)"),
     "Expected cache.del for session after project switch"
@@ -203,9 +207,9 @@ test("CSRF cookie has httpOnly: true", () => {
 
 test("login response includes csrf_token in body", () => {
   // The login handler should return csrf_token in the response body
-  const loginIdx = indexSource.indexOf('"/auth/login"');
+  const loginIdx = allRouteSource.indexOf('"/auth/login"');
   assert.ok(loginIdx > -1, "Expected /auth/login endpoint");
-  const loginSlice = indexSource.slice(loginIdx, loginIdx + 2000);
+  const loginSlice = allRouteSource.slice(loginIdx, loginIdx + 3000);
   assert.ok(
     loginSlice.includes("csrf_token: csrfToken"),
     "Login response must include csrf_token in body"
@@ -213,9 +217,9 @@ test("login response includes csrf_token in body", () => {
 });
 
 test("/auth/me response includes csrf_token", () => {
-  const meIdx = indexSource.indexOf('"/auth/me"');
+  const meIdx = allRouteSource.indexOf('"/auth/me"');
   assert.ok(meIdx > -1, "Expected /auth/me endpoint");
-  const meSlice = indexSource.slice(meIdx, meIdx + 2000);
+  const meSlice = allRouteSource.slice(meIdx, meIdx + 2000);
   assert.ok(
     meSlice.includes("csrf_token: hydrated.csrf_token"),
     "/auth/me response must include csrf_token"

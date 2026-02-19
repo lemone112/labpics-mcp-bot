@@ -24,7 +24,7 @@ export function toApiError(error) {
     }));
     return new ApiError(400, "validation_error", issues[0]?.message || "Invalid request", issues);
   }
-  return new ApiError(500, "internal_error", String(error?.message || error || "internal_error"));
+  return new ApiError(500, "internal_error", "Internal server error");
 }
 
 export function sendOk(reply, requestId, payload = {}, status = 200) {

@@ -439,7 +439,7 @@ export async function setOptOut(pool, scope, input, actorUsername, requestId) {
       input?.stop_on_reply == null ? null : Boolean(input.stop_on_reply),
       input?.frequency_window_hours == null ? null : toPositiveInt(input.frequency_window_hours, 24, 1, 720),
       input?.frequency_cap == null ? null : toPositiveInt(input.frequency_cap, 3, 1, 200),
-      Boolean(input?.mark_replied),
+      Boolean(input?.mark_inbound),
     ]
   );
   const policy = rows[0];

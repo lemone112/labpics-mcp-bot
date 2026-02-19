@@ -17,6 +17,9 @@ const positiveNumber = (max = 1_000_000_000) =>
 
 const probability = z.coerce.number().min(0).max(1).default(0.1);
 
+const accountStageEnum = z.enum(["active", "inactive", "prospect"]);
+const opportunityStageEnum = z.enum(["discovery", "qualified", "proposal", "negotiation", "won", "lost"]);
+
 // ---------------------------------------------------------------------------
 // 7.1  CRM schemas
 // ---------------------------------------------------------------------------
@@ -24,7 +27,8 @@ const probability = z.coerce.number().min(0).max(1).default(0.1);
 export const CreateAccountSchema = z.object({
   name: trimmedString(2, 300),
   domain: optionalTrimmedString(300),
-  stage: z.string().trim().toLowerCase().default("prospect"),
+  external_ref: optionalTrimmedString(500),
+  stage: z.string().trim().toLowerCase().pipe(accountStageEnum).default("prospect"),
   owner_username: optionalTrimmedString(200),
   evidence_refs: evidenceRefs,
 });
@@ -33,7 +37,7 @@ export const CreateOpportunitySchema = z.object({
   title: trimmedString(1, 500),
   account_id: trimmedString(1, 200),
   next_step: trimmedString(4, 1000),
-  stage: z.string().trim().toLowerCase().default("discovery"),
+  stage: z.string().trim().toLowerCase().pipe(opportunityStageEnum).default("discovery"),
   probability,
   amount_estimate: positiveNumber(),
   expected_close_date: z.string().optional().default(null).nullable(),
@@ -42,7 +46,7 @@ export const CreateOpportunitySchema = z.object({
 });
 
 export const UpdateStageSchema = z.object({
-  stage: z.string().trim().toLowerCase().min(1, "stage is required"),
+  stage: z.string().trim().toLowerCase().pipe(opportunityStageEnum),
   reason: optionalTrimmedString(1000),
   evidence_refs: evidenceRefs,
 });

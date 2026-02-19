@@ -27,7 +27,7 @@ export default function LoginPage() {
         body: { username, password },
       });
       setToast({ type: "success", message: "Вход выполнен. Перенаправление..." });
-      router.push("/projects");
+      router.push("/control-tower/dashboard");
       router.refresh();
     } catch (error) {
       setToast({ type: "error", message: error?.message || "Ошибка входа" });
