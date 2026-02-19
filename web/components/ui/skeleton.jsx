@@ -16,7 +16,7 @@ function Skeleton({ className, ...props }) {
       duration: MOTION.durations.slow * 2,
       ease: MOTION.easing.standard,
       direction: "alternate",
-      loop: true,
+      loop: 2,
     });
 
     return () => anim.cancel();
