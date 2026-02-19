@@ -2,6 +2,7 @@
 
 import { cn } from "@/lib/utils";
 import { StatusChip } from "@/components/ui/status-chip";
+import { EmptyStateWizard } from "@/components/ui/empty-state";
 
 export function Kanban({ columns = [], className }) {
   return (
@@ -16,19 +17,22 @@ export function Kanban({ columns = [], className }) {
             {(column.items || []).map((item) => (
               <div key={item.id} className="rounded-md border bg-card p-2">
                 <div className="text-sm font-medium">{item.title}</div>
-                {item.subtitle ? (
-                  <div className="mt-1 text-xs text-muted-foreground">{item.subtitle}</div>
-                ) : null}
+                {item.subtitle ? <div className="mt-1 text-xs text-muted-foreground">{item.subtitle}</div> : null}
                 <div className="mt-2 flex items-center justify-between">
                   <StatusChip status={item.status || column.id} />
                   {item.meta ? <span className="text-xs text-muted-foreground">{item.meta}</span> : null}
                 </div>
               </div>
             ))}
+
             {!column.items?.length ? (
-              <div className="rounded-xl border bg-muted/30 px-4 py-3 text-xs text-muted-foreground">
-                Нет элементов
-              </div>
+              <EmptyStateWizard
+                data-testid="empty-wizard"
+                title="Нет элементов"
+                reason="В этой колонке пока нет карточек."
+                steps={["Создайте карточку", "Перетащите в колонку", "Обновите статус"]}
+                cta={{ label: "Создать карточку", href: "/kanban/new" }}
+              />
             ) : null}
           </div>
         </section>
