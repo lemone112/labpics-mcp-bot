@@ -1,5 +1,13 @@
 # CLAUDE.md — Project Instructions
 
+## Critical analysis rule
+
+After any research, analysis, or audit — always review the result from a position of **maximum criticism**:
+- Every claim must be **verified** (by tests, code grep, or direct evidence).
+- Every hypothesis must be **confirmed or rejected** — never stated as fact without proof.
+- **Zero fabrications** — if something is unknown, say "unknown", never invent.
+- Prefer outputs that are **provably true** (test passes, file exists, grep confirms) over plausible-sounding assumptions.
+
 ## Team context
 
 - The project owner is a **designer with 10+ years of experience**.

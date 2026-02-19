@@ -15,7 +15,7 @@
 - [0008 — Аудит, приватность и retention](./0008-audit-privacy-retention.md)
 - [0009 — Web IA: страницы и навигация](./0009-web-ia-pages-navigation.md)
 - [0017 — Auth v1: логин/пароль, сессии](./0017-auth-login-password-sessions.md)
-- [0018 — LightRAG-only режим и API-контракт](./0018-lightrag-only-mode.md)
+- ~~0018~~ — Merged into [`docs/lightrag-contract.md`](../lightrag-contract.md) (section 5: API Schema)
 
 ## Legacy / roadmap (архив, не использовать для текущей реализации)
 

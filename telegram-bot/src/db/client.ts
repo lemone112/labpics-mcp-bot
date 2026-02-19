@@ -1,12 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
-
-type Env = {
-  SUPABASE_URL: string;
-  SUPABASE_SERVICE_ROLE_KEY: string;
-
-  // vars
-  SUPABASE_SCHEMA?: string;
-};
+import type { Env } from "../types";
 
 function requireEnv(env: Env, key: keyof Env): string {
   const v = env[key];
@@ -21,15 +14,10 @@ export function getSchema(env: Env): string {
 export function supa(env: Env) {
   const url = requireEnv(env, "SUPABASE_URL");
   const key = requireEnv(env, "SUPABASE_SERVICE_ROLE_KEY");
-  return createClient(url, key, {
-    auth: { persistSession: false },
-  });
+  return createClient(url, key, { auth: { persistSession: false } });
 }
 
-/**
- * Returns a schema-bound query builder.
- * This is critical because the project uses a single app schema (default: `bot`).
- */
+/** Schema-bound query builder (default: `bot`). */
 export function db(env: Env) {
   return supa(env).schema(getSchema(env));
 }
@@ -41,11 +29,13 @@ export async function getSetting<T>(env: Env, key: string): Promise<T | null> {
     .eq("key", key)
     .maybeSingle();
 
-  if (error) throw new Error(`Supabase getSetting(${key}) failed: ${error.message}`);
+  if (error) throw new Error(`getSetting(${key}) failed: ${error.message}`);
   return (data?.value as T) ?? null;
 }
 
-export async function upsertSetting(env: Env, key: string, value: any) {
-  const { error } = await db(env).from("settings").upsert({ key, value } as any);
-  if (error) throw new Error(`Supabase upsertSetting(${key}) failed: ${error.message}`);
+export async function upsertSetting(env: Env, key: string, value: unknown): Promise<void> {
+  const { error } = await db(env)
+    .from("settings")
+    .upsert({ key, value } as Record<string, unknown>);
+  if (error) throw new Error(`upsertSetting(${key}) failed: ${error.message}`);
 }
