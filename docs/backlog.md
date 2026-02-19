@@ -6,11 +6,12 @@
 > Wave 3: [`docs/iteration-plan-wave3-design.md`](./iteration-plan-wave3-design.md)
 > Wave 4: [`docs/iteration-plan-wave4-growth.md`](./iteration-plan-wave4-growth.md)
 > Wave 5: [`docs/iteration-plan-wave5-intelligence.md`](./iteration-plan-wave5-intelligence.md)
+> Wave 6: [`docs/iteration-plan-wave6-analytics.md`](./iteration-plan-wave6-analytics.md)
 > **Source of truth:** [GitHub Issues & Milestones](https://github.com/lemone112/labpics-dashboard/milestones)
 
 ---
 
-## Roadmap Overview (5 волн, 35 итераций, 307 задач)
+## Roadmap Overview (6 волн, 43 итерации, 350 задач)
 
 | Wave | Iterations | Issues | Статус | Фокус |
 |------|-----------|--------|--------|-------|
@@ -19,6 +20,7 @@
 | **Wave 3** | Iter 17–24 | #125–#220 | ⬜ Planned | Design overhaul |
 | **Wave 4** | Iter 25–30 | #221–#271 | ⬜ Planned | Strategic growth |
 | **Wave 5** | Iter 31–35 | #272–#286 | ⬜ Planned | Client intelligence |
+| **Wave 6** | Iter 36–43 | #287–#334 | ⬜ Planned | Advanced analytics & viz (43 tasks) |
 
 ---
 
@@ -85,6 +87,21 @@
 | 33 | Revenue & Operations Analytics | [23](https://github.com/lemone112/labpics-dashboard/milestone/23) | #280–#282 | Margin visibility |
 | 34 | Automation & Workflows | [24](https://github.com/lemone112/labpics-dashboard/milestone/24) | #283–#286 | Team efficiency +30% |
 | 35 | Reporting & Executive Layer | [25](https://github.com/lemone112/labpics-dashboard/milestone/25) | #284 | QBR time: 4h → 60s |
+
+---
+
+## Planned Iterations (Wave 6 — Advanced Analytics & Visualization)
+
+| Iter | Название | Milestone | Issues | Бизнес-impact |
+|------|----------|-----------|--------|---------------|
+| 36 | Database Analytics Foundation | [26](https://github.com/lemone112/labpics-dashboard/milestone/26) | #287–#292 | Contracts, lifecycle, stage velocity |
+| 37 | Chart Infrastructure & Foundations | [27](https://github.com/lemone112/labpics-dashboard/milestone/27) | #298–#306 | React Flow, Sigma.js, chart system |
+| 38 | Full Lifecycle Funnel | [28](https://github.com/lemone112/labpics-dashboard/milestone/28) | #299–#308 | 3-zone Sales+Delivery+Relationship funnel |
+| 39 | Entity Graph & Network Viz | [29](https://github.com/lemone112/labpics-dashboard/milestone/29) | #309–#312 | Ego-graph explorer, stakeholder map |
+| 40 | Advanced Business Visualizations | [30](https://github.com/lemone112/labpics-dashboard/milestone/30) | #313–#317 | 26 new charts across 5 domains |
+| 41 | Scoped Dashboard Tabs | [32](https://github.com/lemone112/labpics-dashboard/milestone/32) | #318–#331 | 6-scope tab nav (Overview/Sales/Projects/Finance/Team/Clients) |
+| 42 | DB Storage Optimization | [31](https://github.com/lemone112/labpics-dashboard/milestone/31) | #319–#327 | Dim reduction, retention, archival (75% savings) |
+| 43 | Strategic Integrations | [33](https://github.com/lemone112/labpics-dashboard/milestone/33) | #329–#334 | Toggl, Stripe, Telegram, Calendar, GitHub |
 
 ---
 

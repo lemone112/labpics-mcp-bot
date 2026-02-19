@@ -316,7 +316,40 @@ Telegram Bot (LLM) → daniel-lightrag-mcp (22 tools) → LightRAG Server → Po
 
 ---
 
-## 10) Явно вне scope (MVP)
+## 10) Wave 6 — Advanced Analytics & Visualization (Iter 36–43, 43 задачи)
+
+> Продвинутая аналитика, визуализации, scoped dashboard, оптимизация хранения, новые интеграции.
+> Детальный план: [`docs/iteration-plan-wave6-analytics.md`](./iteration-plan-wave6-analytics.md)
+> Research: [`docs/research/advanced-charts-analysis.md`](./research/advanced-charts-analysis.md),
+> [`docs/research/scoped-dashboard-tabs.md`](./research/scoped-dashboard-tabs.md),
+> [`docs/research/db-storage-optimization.md`](./research/db-storage-optimization.md),
+> [`docs/research/bigquery-and-integrations.md`](./research/bigquery-and-integrations.md)
+
+| Iter | Название | Issues | Milestone | Фокус |
+|------|----------|--------|-----------|-------|
+| 36 | Database Analytics Foundation | [#287–#292](https://github.com/lemone112/labpics-dashboard/milestone/26) | 26 | contracts, lifecycle_stage, matviews, indexes |
+| 37 | Chart Infrastructure & Foundations | [#298–#306](https://github.com/lemone112/labpics-dashboard/milestone/27) | 27 | React Flow + Sigma.js + chart system |
+| 38 | Full Lifecycle Funnel | [#299–#308](https://github.com/lemone112/labpics-dashboard/milestone/28) | 28 | 3-zone horizontal funnel + drill-downs |
+| 39 | Entity Graph & Network Viz | [#309–#312](https://github.com/lemone112/labpics-dashboard/milestone/29) | 29 | Ego-graph, stakeholder map, playbook builder |
+| 40 | Advanced Business Visualizations | [#313–#317](https://github.com/lemone112/labpics-dashboard/milestone/30) | 30 | 26 new charts (revenue, delivery, comms, health) |
+| 41 | Scoped Dashboard Tabs | [#318–#331](https://github.com/lemone112/labpics-dashboard/milestone/32) | 32 | 6-scope tabs: Overview/Sales/Projects/Finance/Team/Clients |
+| 42 | DB Storage Optimization | [#319–#327](https://github.com/lemone112/labpics-dashboard/milestone/31) | 31 | 75% storage savings: dim reduction, retention, archival |
+| 43 | Strategic Integrations | [#329–#334](https://github.com/lemone112/labpics-dashboard/milestone/33) | 33 | Toggl, Stripe, Telegram, Google Calendar, GitHub |
+
+### Ключевые решения Wave 6
+
+| Решение | Обоснование |
+|---------|------------|
+| **D3.js → НЕТ** | DOM conflict с React 19. Держим Recharts + React Flow + Sigma.js |
+| **BigQuery → НЕТ** | ~1-5 GB данных, PostgreSQL + Redis хватает. DuckDB если понадобится |
+| **Obsidian graph → Ego-graph** | Full graph = "cool but useless". 2-hop ego-graph explorer = actionable |
+| **Node dependencies → Gantt** | Industry standard (Linear, Asana). React Flow для stakeholder maps |
+| **6 dashboard scopes** | Overview, Sales, Projects, Finance, Team, Clients + segmented controls |
+| **Top 5 integrations** | Toggl (#1), Stripe (#2), Telegram (#3), Calendar (#4), GitHub (#5) |
+
+---
+
+## 11) Явно вне scope (MVP)
 
 - KAG pipeline (удалён в Iter 10).
 - Black-box рекомендационные агенты без evidence.
@@ -326,7 +359,7 @@ Telegram Bot (LLM) → daniel-lightrag-mcp (22 tools) → LightRAG Server → Po
 
 ---
 
-## 11) Полный roadmap (5 волн)
+## 12) Полный roadmap (6 волн)
 
 ```
 Wave 1 (Iter 0–10, 12) ✅ DONE ─── Platform hardening, 77/79 задач
@@ -339,12 +372,14 @@ Wave 4 (Iter 25–30) ⬜ PLANNED ─── Strategic growth, 51 задач
   │
 Wave 5 (Iter 31–35) ⬜ PLANNED ─── Client intelligence, 15 задач
   │
-Total: 307 задач across 35 итераций
+Wave 6 (Iter 36–43) ⬜ PLANNED ─── Advanced analytics & visualization, 43 задачи
+  │
+Total: 350 задач across 43 итерации
 ```
 
 ---
 
-## 12) Связанные документы
+## 13) Связанные документы
 
 - Детальный анализ: [`docs/product-structure-analysis.md`](./product-structure-analysis.md)
 - Iteration log: [`docs/iteration-log.md`](./iteration-log.md)
@@ -356,4 +391,9 @@ Total: 307 задач across 35 итераций
 - Wave 3 design plan: [`docs/iteration-plan-wave3-design.md`](./iteration-plan-wave3-design.md)
 - Wave 4 strategic plan: [`docs/iteration-plan-wave4-growth.md`](./iteration-plan-wave4-growth.md)
 - Wave 5 intelligence plan: [`docs/iteration-plan-wave5-intelligence.md`](./iteration-plan-wave5-intelligence.md)
+- Wave 6 analytics plan: [`docs/iteration-plan-wave6-analytics.md`](./iteration-plan-wave6-analytics.md)
+- Research — Charts: [`docs/research/advanced-charts-analysis.md`](./research/advanced-charts-analysis.md)
+- Research — Dashboard Scopes: [`docs/research/scoped-dashboard-tabs.md`](./research/scoped-dashboard-tabs.md)
+- Research — DB Storage: [`docs/research/db-storage-optimization.md`](./research/db-storage-optimization.md)
+- Research — BigQuery & Integrations: [`docs/research/bigquery-and-integrations.md`](./research/bigquery-and-integrations.md)
 - Бэклог: [`docs/backlog.md`](./backlog.md)

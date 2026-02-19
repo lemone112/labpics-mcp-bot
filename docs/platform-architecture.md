@@ -109,6 +109,35 @@ health_scoring → analytics_aggregates
 - Renewal calendar: contract lifecycle, auto-reminders at 90/60/30/14/7 days.
 - Materialized views для fast reads, weekly scheduler refresh.
 
+## 15) Visualization Stack (Wave 6, Iter 37-41)
+
+- **Recharts 3.7** (existing): Standard charts (bar, line, area, pie, funnel, Sankey).
+- **React Flow @xyflow/react 12.x** (new): Node diagrams, stakeholder maps, playbook builder.
+- **Sigma.js + graphology** (new): Network graphs, entity relationship explorer (WebGL, ForceAtlas2).
+- **3-level segmented controls:** scope tabs → view mode → chart variant.
+- **6 dashboard scopes:** Overview, Sales, Projects, Finance, Team, Clients.
+- D3.js rejected (DOM conflict with React 19). ECharts rejected (135KB+ bundle).
+
+## 16) Storage Optimization (Wave 6, Iter 42)
+
+- Embedding dimension reduction: 1536 → 512 (OpenAI native, -67% vector storage).
+- Drop IVFFlat index (HNSW only, strictly better).
+- LZ4 TOAST compression on jsonb columns (PG 16 native).
+- Hot/Warm/Cold tiering: full (0-90d), stripped jsonb (90d-1y), archived (>1y).
+- Monthly archive pipeline: JSONL.gz + Parquet + SHA-256 manifest.
+- Rehydration SLA: < 4 hours for any archived month.
+- Target: 75% storage reduction over 2 years.
+
+## 17) Integration Architecture (Wave 6, Iter 43)
+
+- **Toggl/Clockify** → time_entries_raw, team_rates → P&L, utilization, scope creep.
+- **Stripe** → invoices_raw, payments_raw → real revenue data, cash flow.
+- **Telegram Bot** → telegraf, notification delivery for Russian market.
+- **Google Calendar** → calendar_events_raw → meeting frequency as engagement signal.
+- **GitHub** → github_prs_raw, github_deployments_raw → DORA metrics.
+- Connector framework: `createConnector()` + `connector_sync_state` CHECK constraint.
+- BigQuery evaluated and rejected: ~1-5 GB data, PostgreSQL sufficient. DuckDB as future alternative.
+
 ---
 
 Ссылки:
@@ -120,3 +149,8 @@ health_scoring → analytics_aggregates
 - Wave 3 design plan: [`docs/iteration-plan-wave3-design.md`](./iteration-plan-wave3-design.md)
 - Wave 4 strategic plan: [`docs/iteration-plan-wave4-growth.md`](./iteration-plan-wave4-growth.md)
 - Wave 5 intelligence plan: [`docs/iteration-plan-wave5-intelligence.md`](./iteration-plan-wave5-intelligence.md)
+- Wave 6 analytics plan: [`docs/iteration-plan-wave6-analytics.md`](./iteration-plan-wave6-analytics.md)
+- Research — Charts: [`docs/research/advanced-charts-analysis.md`](./research/advanced-charts-analysis.md)
+- Research — Dashboard Scopes: [`docs/research/scoped-dashboard-tabs.md`](./research/scoped-dashboard-tabs.md)
+- Research — DB Storage: [`docs/research/db-storage-optimization.md`](./research/db-storage-optimization.md)
+- Research — BigQuery & Integrations: [`docs/research/bigquery-and-integrations.md`](./research/bigquery-and-integrations.md)
