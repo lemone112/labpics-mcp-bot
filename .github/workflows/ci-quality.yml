@@ -23,6 +23,7 @@ jobs:
           cache-dependency-path: |
             server/package-lock.json
             web/package-lock.json
+            telegram-bot/package-lock.json
 
       - name: Install server dependencies
         working-directory: server
@@ -57,6 +58,28 @@ jobs:
         env:
           E2E_REQUIRE_DOCKER: "1"
         run: npm run test:e2e:integration
+
+  typecheck-bot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: telegram-bot/package-lock.json
+
+      - name: Install bot dependencies
+        working-directory: telegram-bot
+        run: npm ci
+
+      - name: Typecheck bot
+        working-directory: telegram-bot
+        run: npm run typecheck
 
   smoke:
     runs-on: ubuntu-latest

@@ -10,6 +10,7 @@
 
 - **Backend:** Node.js, Fastify, PostgreSQL, pgvector, LightRAG
 - **Frontend:** React 19, Next.js 16 (App Router), shadcn/ui, Radix, Tailwind CSS v4, anime.js
+- **Telegram Bot:** Cloudflare Worker, TypeScript, Supabase, Composio MCP (`telegram-bot/`)
 - **Testing:** node:test (backend unit), Playwright (e2e)
 - **Docs language:** Russian (code & comments in English)
 
@@ -25,6 +26,27 @@
 
 - All tasks tracked as GitHub Issues with Milestones (Iter 11–16).
 - `docs/iteration-plan-wave2.md` is the architectural reference; Issues are source of truth.
+
+## Monorepo structure
+
+```
+labpics-dashboard/
+├── server/          # Fastify API + worker
+├── web/             # Next.js frontend
+├── telegram-bot/    # Cloudflare Worker — Telegram assistant bot
+├── infra/           # Caddy, deployment configs
+├── scripts/         # Smoke tests, utilities
+└── docs/            # Architecture, specs, iterations
+```
+
+## Telegram bot
+
+- Source: `telegram-bot/` (migrated from `telegram-assistant-bot` repo)
+- Runtime: Cloudflare Workers (wrangler)
+- DB: Supabase (schema `bot`), migrations in `telegram-bot/supabase/migrations/`
+- Local dev: `docker compose --profile telegram-bot up` or `cd telegram-bot && npx wrangler dev`
+- Typecheck: `cd telegram-bot && npm run typecheck`
+- Bot docs: `telegram-bot/docs/`
 
 ## Git conventions
 
