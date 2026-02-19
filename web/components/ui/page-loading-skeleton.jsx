@@ -17,18 +17,16 @@ export function PageLoadingSkeleton({ className }) {
     const blocks = scope.querySelectorAll("[data-skeleton-item]");
     if (!blocks.length) return undefined;
 
-    const pulse = animate(blocks, {
-      opacity: [0.45, 1],
-      scale: [0.995, 1],
+    const entrance = animate(blocks, {
+      opacity: [0, 1],
+      scale: [0.98, 1],
       delay: stagger(MOTION.stagger.base),
-      duration: MOTION.durations.slow,
+      duration: MOTION.durations.base,
       ease: MOTION.easing.emphasized,
-      direction: "alternate",
-      loop: true,
     });
 
     return () => {
-      pulse.cancel();
+      entrance.cancel();
     };
   }, []);
 

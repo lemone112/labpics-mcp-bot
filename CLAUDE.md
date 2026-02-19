@@ -8,9 +8,9 @@
 
 ## Tech stack
 
-- **Backend:** Node.js, Express, PostgreSQL, pgvector, LightRAG
-- **Frontend:** React 19, Vite, shadcn/ui, Radix, Tailwind CSS, anime.js
-- **Testing:** Vitest (unit), Playwright (e2e)
+- **Backend:** Node.js, Fastify, PostgreSQL, pgvector, LightRAG
+- **Frontend:** React 19, Next.js 16 (App Router), shadcn/ui, Radix, Tailwind CSS v4, anime.js
+- **Testing:** node:test (backend unit), Playwright (e2e)
 - **Docs language:** Russian (code & comments in English)
 
 ## Design system

@@ -13,8 +13,6 @@ const JOB_TO_DATA_MAP = {
   connectors_sync_cycle: ["portfolio", "messages"],
   signals_extraction: ["portfolio", "recommendations"],
   health_scoring: ["portfolio"],
-  kag_recommendations_refresh: ["recommendations"],
-  kag_v2_recommendations_refresh: ["recommendations"],
   analytics_aggregates: ["portfolio"],
   embeddings_run: ["portfolio"],
 };

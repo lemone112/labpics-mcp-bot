@@ -112,3 +112,27 @@ Anime.js is the single motion engine.
 - Decorative looping animations on data tables/forms
 - Aggressive entrance motion that delays reading
 - Rapid repetitive animation that distracts from evidence workflows
+
+## 7) Z-index hierarchy
+
+Strict layering to prevent stacking conflicts. Never use arbitrary z-index values outside this scale.
+
+| Token       | Value   | Usage                                           |
+| ----------- | ------- | ----------------------------------------------- |
+| `z-10`      | 10      | Sidebar panel (fixed), sticky section headers   |
+| `z-20`      | 20      | Sidebar rail, page sticky header                |
+| `z-50`      | 50      | Overlays: Sheet, Dropdown, Tooltip, Select      |
+| `z-[60]`    | 60      | Mobile bottom tabbar                            |
+| `z-[70]`    | 70      | Mobile projects sheet (above tabbar)            |
+| `z-[80]`    | 80      | Offline banner (always visible)                 |
+| `z-[90]`    | 90      | Toast stack (topmost interactive layer)          |
+
+### Rules
+
+1. Page content: no explicit z-index (auto stacking context).
+2. Sticky headers within scrollable areas: `z-10`.
+3. Global navigation chrome: `z-10`–`z-20`.
+4. Radix primitives (Sheet, Dropdown, Tooltip, Select): `z-50` — set by shadcn defaults, do not override.
+5. Mobile overlays that must sit above Radix portals: `z-[60]`–`z-[70]`.
+6. System-level banners (offline, errors): `z-[80]`.
+7. Toast notifications: `z-[90]`.
