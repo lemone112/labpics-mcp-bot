@@ -91,7 +91,7 @@ test("desktop: project sidebar click selects project and does not block jobs by 
   await page.setViewportSize({ width: 1366, height: 900 });
   await page.goto("/jobs");
 
-  await expect(page.getByRole("button", { name: "Run Chatwoot Sync" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Синхронизация Chatwoot" })).toBeVisible();
   await expect(page.getByText("Сначала выберите активный проект")).toHaveCount(0);
 
   await page.getByTestId(`project-select-${PROJECT_BETA.id}`).click();
@@ -108,7 +108,7 @@ test("mobile: project sheet selects project and closes cleanly", async ({ page }
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/jobs");
 
-  await expect(page.getByRole("button", { name: "Run Chatwoot Sync" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Синхронизация Chatwoot" })).toBeVisible();
   await page.getByTestId("mobile-projects-open").click();
   await expect(page.getByTestId("mobile-projects-sheet")).toBeVisible();
 

@@ -68,6 +68,7 @@ npm run test:e2e:integration    # С полным стеком (Docker Compose)
 | Сценарий | Файл теста | Что проверяется |
 |----------|-----------|-----------------|
 | Project scope | `project-scope-regression.spec.js` | Desktop/mobile project selection, scope routing |
+| Control Tower design system | `design-system-control-tower.spec.js` | Hero panel, primary CTA, trust bar, empty wizard per section |
 
 ## 4) Подход к тестированию
 
