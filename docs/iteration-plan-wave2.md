@@ -8,8 +8,9 @@
 > from the original roadmap in [`mvp-vs-roadmap.md`](./mvp-vs-roadmap.md).
 > Those definitions are replaced by this plan.
 >
-> **v3** — verified against codebase on 2026-02-19. Removed 2 already-completed tasks
-> (BE-02 login rate limit, BE-11 sourceLimit). Corrected 3 task descriptions (12.1, 12.6, 12.11).
+> **v4** — re-verified Iter 11, 13–16 against post-Iter-10/12 codebase on 2026-02-19.
+> Removed 13.10 (already done), 16.2 (fixed in 12.1). Added 13.10-new (dead KAG refs cleanup).
+> Total tasks: 60 → 59. v3 changelog preserved below.
 
 ---
 
@@ -43,8 +44,8 @@ Iter 15 (CI/CD) — independent, can run in parallel with any iteration
 | **13** | Frontend Resilience & Auth | HIGH | 11 | 10 | M |
 | **14** | Design System & Accessibility | MEDIUM | 10 | 13 | M |
 | **15** | CI/CD & Infrastructure | MEDIUM | 6 | — | S |
-| **16** | Polish & Technical Debt | LOW | 4 | 11, 12, 14 | S |
-| | **Total** | | **60** | | |
+| **16** | Polish & Technical Debt | LOW | 3 | 11, 12, 14 | S |
+| | **Total** | | **59** | | |
 
 Effort: S = 1-2 days, M = 3-5 days, L = 5-8 days
 
@@ -151,7 +152,8 @@ Effort: S = 1-2 days, M = 3-5 days, L = 5-8 days
 | 13.7 | Coordinate refresh mechanisms | FE-07 | SSE events → `queryClient.invalidateQueries()` instead of custom hooks. Remove `useAutoRefresh` polling when SSE connected. Single source of truth for data freshness. |
 | 13.8 | Add Suspense boundaries | FE-08 | Wrap dynamic imports and data-dependent sections in `<Suspense fallback={<PageLoadingSkeleton />}>`. |
 | 13.9 | Add page metadata to all routes | FE-09 | `export const metadata = { title: "...", description: "..." }` in every `page.jsx`. Dynamic titles for `[section]` routes. |
-| 13.10 | Consistent loading skeletons | backlog | Skeleton loaders for all dashboard sections (CRM, analytics, search, control tower). Consistent shimmer pattern using MOTION tokens. |
+| ~~13.10~~ | ~~Consistent loading skeletons~~ | ~~backlog~~ | **Already done.** `PageLoadingSkeleton` exists + used in all dashboard sections. Skeleton pattern is consistent. |
+| 13.10-new | Clean dead KAG refs in frontend hooks | backlog | Remove stale `kag_recommendations`, `kag_v2_recommendations` job type references from `web/hooks/use-realtime-refresh.js`. These job types no longer exist after Iter 10. |
 | 13.11 | Offline detection | backlog | `navigator.onLine` + fetch probe (`GET /health`). Show banner when offline. Auto-dismiss on reconnect. Pause react-query refetches while offline. |
 
 **Exit criteria:** No blank screens on errors. Unauthenticated users never see protected UI. All pages have titles in browser tab. react-query devtools show cache hits. Offline banner appears within 5s of connectivity loss.
@@ -212,7 +214,7 @@ Effort: S = 1-2 days, M = 3-5 days, L = 5-8 days
 | # | Task | Source | Details |
 |---|------|--------|---------|
 | 16.1 | Audit ON DELETE behavior across all FKs | DB-02 | Review all FK constraints. Add `ON DELETE CASCADE` where missing (risk_pattern_events, case_signatures). Document reasoning for `ON DELETE RESTRICT` cases. |
-| 16.2 | Fix stale embedding recovery max retries | BE-09 | `recoverStaleProcessingRows` (embeddings.js:45): no `WHERE embedding_attempts < $max` guard. Rows recovered indefinitely. Add ceiling (e.g. 5 attempts), mark as `failed` after limit. Related to 12.1 (lifecycle hardening). |
+| ~~16.2~~ | ~~Fix stale embedding recovery max retries~~ | ~~BE-09~~ | **Fixed in 12.1.** `recoverStaleProcessingRows` now has `maxAttempts = 5` ceiling; rows exceeding cap are permanently failed. |
 | 16.3 | Fix cache invalidation gap | BE-10 | Invalidate `lightrag:*` cache prefix after `embeddings_run` completion, not just on connector sync. |
 | ~~16.4~~ | ~~Apply sourceLimit at DB level~~ | ~~BE-11~~ | **Already implemented.** `queryLightRag()` (lightrag.js:222) uses `LIMIT $4` with sourceLimit. Verified 2026-02-19. |
 | 16.5 | Remove PageLoadingSkeleton infinite loop | DS-05 | Replace `loop: true` with single iteration or 2-cycle fade. Align with MOTION_GUIDELINES. |
@@ -287,7 +289,7 @@ This saves ~1 week vs original plan.
 | BE-06 | Outbox policy upsert consolidation | 12 | 12.6 |
 | BE-07 | SSE broadcaster memory leak | 12 | 12.7 |
 | BE-08 | Missing job locking | 12 | 12.8 |
-| BE-09 | Stale embedding no max retries | 16 | 16.2 |
+| ~~BE-09~~ | ~~Stale embedding no max retries~~ | ~~16~~ | **Fixed in 12.1** |
 | BE-10 | Cache invalidation gap | 16 | 16.3 |
 | ~~BE-11~~ | ~~N+1 over-fetching in search~~ | — | **Already done** (`LIMIT $4` at DB level in `queryLightRag`) |
 | BE-12 | KAG routes leak existence | 10 | 10.3 *(deleted entirely)* |
@@ -324,6 +326,18 @@ This saves ~1 week vs original plan.
 | B-2 | 80+ env vars duplicated | 15 | 15.6 |
 | B-5 | Vector index tuning | 11 | *(resolved by HKUDS LightRAG)* |
 | B-7 | Custom RAG quality score | 11 | *(replaced by HKUDS metrics)* |
+
+---
+
+## Changes v3 → v4
+
+| Change | Reason |
+|--------|--------|
+| Struck through task 13.10 (loading skeletons) | **Already done.** `PageLoadingSkeleton` exists and is used across all dashboard sections. |
+| Added task 13.10-new (clean dead KAG refs in frontend hooks) | `use-realtime-refresh.js` still references `kag_recommendations` and `kag_v2_recommendations` job types removed in Iter 10. |
+| Struck through task 16.2 (stale embedding max retries) | **Fixed in 12.1.** `recoverStaleProcessingRows` now has `maxAttempts = 5` with permanent failure for rows exceeding cap. |
+| Struck through BE-09 in cross-reference | Same as 16.2 — resolved in Iter 12.1. |
+| Total tasks: 60 → 59 | -2 resolved (13.10, 16.2), +1 added (13.10-new). Iter 11, 14, 15 verified unchanged. |
 
 ---
 
