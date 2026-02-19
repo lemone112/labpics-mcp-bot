@@ -40,7 +40,7 @@ server/src/
 │   ├── similarity.js           # Case signature & search
 │   ├── snapshots.js            # Project snapshots
 │   ├── intelligence.js         # Risk, analytics, digests
-│   ├── signals.js              # Legacy signal extraction
+│   ├── signals.js              # Signal extraction
 │   ├── identity-graph.js       # Entity resolution
 │   ├── portfolio.js            # Portfolio overview
 │   ├── continuity.js           # Continuity actions
@@ -135,20 +135,19 @@ server/src/
 ### 3.2 Intelligence Pipeline
 
 > KAG pipeline (kag.js + kag/ directory) полностью удалён в Iter 10.
-> Сохранённые сервисы ниже работают автономно через scheduler.
 
-#### forecasting.js
+#### forecasting.js (dead-code — [#117](https://github.com/lemone112/labpics-dashboard/issues/117))
 | | |
 |-|-|
 | **Назначение** | Прогнозирование рисков 7/14/30 дней |
-| **Exported** | `refreshRiskForecasts(pool, scope, options)`, `computeRiskForecastsFromInputs(inputs)`, `listRiskForecasts(pool, scope, options)` |
+| **Статус** | **Нет вызывающего кода** после удаления KAG routes и scheduler jobs. Зависит от kag_risk_forecasts, kag_signals, kag_scores. Решение: удалить или рефакторить для LightRAG (Iter 11/16) |
 | **Tables** | kag_risk_forecasts, kag_signals, kag_scores, case_signatures, past_case_outcomes |
 
-#### recommendations-v2.js
+#### recommendations-v2.js (dead-code — [#117](https://github.com/lemone112/labpics-dashboard/issues/117))
 | | |
 |-|-|
 | **Назначение** | Enhanced рекомендации с evidence gating |
-| **Exported** | `refreshRecommendationsV2`, `listRecommendationsV2`, `updateRecommendationV2Status`, `updateRecommendationV2Feedback`, `markRecommendationsV2Shown`, `generateRecommendationsV2FromInputs` |
+| **Статус** | **Нет вызывающего кода** после удаления KAG scheduler jobs. Зависит от kag_signals, kag_scores. Решение: удалить или рефакторить |
 | **Tables** | recommendations_v2, kag_signals, kag_scores, kag_risk_forecasts |
 
 #### recommendation-actions.js
@@ -167,13 +166,12 @@ server/src/
 | **Tables** | case_signatures, project_snapshots, past_case_outcomes |
 | **Cadence** | 1/week (case_signatures_refresh) |
 
-#### snapshots.js
+#### snapshots.js (dead-code — [#117](https://github.com/lemone112/labpics-dashboard/issues/117))
 | | |
 |-|-|
 | **Назначение** | Дневные снимки состояния проектов |
-| **Exported** | `buildProjectSnapshot(pool, scope)`, `listProjectSnapshots`, `listPastCaseOutcomes` |
+| **Статус** | **Нет вызывающего кода** после удаления kag_daily_pipeline scheduler job |
 | **Tables** | project_snapshots, past_case_outcomes |
-| **Cadence** | 1/day (kag_daily_pipeline) |
 
 ### 3.3 RAG & LightRAG
 
@@ -209,7 +207,7 @@ server/src/
 | **Exported** | `createEmbeddings(inputs, logger)` |
 | **Config** | `EMBEDDING_MODEL` (text-embedding-3-small), `EMBEDDING_DIM` (1536), `OPENAI_EMBED_MAX_INPUTS` (100) |
 
-### 3.4 Intelligence (Legacy)
+### 3.4 Intelligence & Analytics
 
 #### intelligence.js
 | | |
@@ -218,7 +216,7 @@ server/src/
 | **Exported** | `refreshRiskAndHealth`, `refreshAnalytics`, `getRiskOverview`, `getAnalyticsOverview`, `getControlTower`, `generateDailyDigest`, `generateWeeklyDigest` |
 | **Tables** | analytics_revenue_snapshots, analytics_delivery_snapshots, analytics_comms_snapshots, daily_digests, weekly_digests, health_scores, risk_radar_items |
 
-#### signals.js (legacy)
+#### signals.js
 | | |
 |-|-|
 | **Назначение** | Детекция сигналов из переписок и CRM |
@@ -239,7 +237,7 @@ server/src/
 |-|-|
 | **Назначение** | Portfolio overview для менеджера |
 | **Exported** | `getPortfolioOverview(pool, scope)`, `getPortfolioMessages(pool, scope)` |
-| **Tables** | projects, cw_messages, cw_contacts, linear_issues_raw, crm_accounts, crm_opportunities, kag_signals, kag_scores |
+| **Tables** | projects, cw_messages, cw_contacts, linear_issues_raw, crm_accounts, crm_opportunities, signals, health_scores |
 
 #### outbox.js
 | | |
@@ -490,12 +488,12 @@ index.js (routes)
        │
        ├── intelligence.js → analytics_*, health_scores, risk_radar_items
        │
-       ├── forecasting.js → kag_risk_forecasts, case_signatures
-       │
-       ├── recommendations-v2.js → recommendations_v2
+       ├── outbox.js → outbound_messages, contact_channel_policies
        │
        └── scheduler.js → scheduled_jobs, worker_runs
             └── triggers all jobs above on cadence
+
+       (dead-code: forecasting.js, recommendations-v2.js, snapshots.js — see #117)
 ```
 
 ---

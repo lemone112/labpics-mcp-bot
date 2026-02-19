@@ -62,13 +62,10 @@
 - `outbound_messages`, `outbound_attempts`
 - `contact_channel_policies`
 
-### 2.7 Intelligence (post-KAG cleanup)
+### 2.7 Intelligence
 
-> Миграция `0022_drop_kag_tables` удалила 10 таблиц: `kag_nodes`, `kag_edges`,
-> `kag_events`, `kag_signal_state`, `kag_signal_history`, `kag_score_history`,
-> `kag_recommendations`, `kag_v2_recommendation_evidence`, `kag_templates`,
-> `kag_template_renders`.
-> Таблица `kag_event_log` переименована в `connector_events`.
+> Миграция `0022_drop_kag_tables` удалила 10 неиспользуемых таблиц (Iter 10).
+> Таблица `kag_event_log` переименована в `connector_events` (migration 0021).
 
 Сохранённые таблицы (используются активными сервисами):
 
@@ -90,10 +87,10 @@
 - `signals`, `next_best_actions` — extracted signals и NBA
 - `daily_digests`, `weekly_digests` — generated digests
 
-## 3) Legacy таблицы
+## 3) Остаточные таблицы (dead-code, [#117](https://github.com/lemone112/labpics-dashboard/issues/117))
 
-В схеме могут присутствовать исторические таблицы, не входящие в текущий LightRAG-контракт.
-Для продуктовой разработки ориентируйтесь только на таблицы, перечисленные в этом документе как активные.
+Таблицы `kag_signals`, `kag_scores`, `kag_risk_forecasts` используются только dead-code сервисами (`forecasting.js`, `recommendations-v2.js`, `snapshots.js`). Решение о удалении/рефакторинге — Iter 16.
+Для продуктовой разработки ориентируйтесь только на таблицы, перечисленные как активные.
 
 ## 4) Важные индексы и производительность
 

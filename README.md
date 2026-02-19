@@ -36,7 +36,7 @@ Real-time обновления: Redis Pub/Sub → SSE endpoint → auto-refresh 
 
 ## 1) API (high level)
 
-Важное правило: для разработки используется только LightRAG API; `/kag/*` не входит в текущий контракт.
+Intelligence layer: custom hybrid RAG (`/lightrag/*` endpoints). Миграция на HKUDS LightRAG — Iter 11.
 
 ### Public (no auth)
 

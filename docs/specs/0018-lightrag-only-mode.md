@@ -1,8 +1,8 @@
 # Спека 0018 — Intelligence Layer: RAG-only режим
 
-> Обновлено: 2026-02-18 (post Architecture Audit)
+> Обновлено: 2026-02-19 (post Iter 10 — KAG fully removed)
 
-Статус: **implemented (MVP, mandatory)**. KAG cleanup запланирован в Iter 10.
+Статус: **implemented (MVP, mandatory)**. KAG полностью удалён в Iter 10.
 
 ## Архитектурный контекст
 
@@ -10,20 +10,20 @@
 - `server/src/services/lightrag.js` — основной query engine
 - `server/src/services/embeddings.js` — OpenAI embeddings → pgvector
 - Внутреннее имя "LightRAG" — custom реализация, НЕ HKUDS LightRAG
+- Миграция на HKUDS LightRAG запланирована в Iter 11
 
 ## Цель
 
-Зафиксировать, что продукт работает в едином контуре RAG без активных `/kag/*` API.
+Зафиксировать, что продукт работает в едином RAG-контуре.
 
 ## Инварианты
 
-1. Маршруты `/kag/*` **удаляются** в Iter 10 (legacy cleanup).
-2. Frontend не должен использовать `/kag/*`.
-3. Поисковая поверхность работает через:
+1. Маршруты `/kag/*` удалены (Iter 10). Код, routes, scheduler jobs, DB-таблицы — не существуют.
+2. Поисковая поверхность работает через:
    - `POST /lightrag/query`
    - alias `POST /search` (совместимость).
-4. Scheduler не выполняет KAG-related jobs.
-5. Таблица `kag_event_log` переименовывается в `connector_events` (Iter 10).
+3. Scheduler не содержит KAG-related jobs.
+4. Таблица `kag_event_log` переименована в `connector_events` (migration 0021).
 
 ## API-контракт RAG query
 
@@ -63,6 +63,5 @@
 
 - Search page возвращает answer + chunks + evidence.
 - После запроса создаётся запись в `lightrag_query_runs`.
-- UI не показывает ошибок `kag_disabled` в штатных пользовательских сценариях.
 - Quality score и source_diversity включены в response.
 - Feedback endpoint (`POST /lightrag/feedback`) принимает rating и comment.

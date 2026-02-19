@@ -11,10 +11,9 @@
 
 ## 2) LightRAG-only режим
 
-- Флаг `LIGHTRAG_ONLY=1` считается целевым режимом.
-- `/kag/*` в этом режиме недоступны и не входят в контракт разработки.
-- Scheduler не выполняет legacy jobs, связанные с `/kag/*` (ставит их в `paused`).
-- Frontend не вызывает `/kag/*`.
+- Продуктовый интеллект-контур = custom hybrid RAG (`/lightrag/*` endpoints).
+- KAG pipeline полностью удалён (Iter 10): код, routes, scheduler jobs, DB-таблицы.
+- Миграция на HKUDS LightRAG запланирована в Iter 11.
 
 ## 3) Evidence-first
 
@@ -63,13 +62,12 @@ Scheduler поддерживает cascade chains — автоматически
 
 ```
 connectors_sync_cycle → signals_extraction, embeddings_run
-signals_extraction → health_scoring, kag_recommendations_refresh
+signals_extraction → health_scoring
 health_scoring → analytics_aggregates
-kag_recommendations_refresh → kag_v2_recommendations_refresh
 ```
 
 Механизм: `UPDATE scheduled_jobs SET next_run_at = now()` для downstream.
-Это устраняет задержку в 15-30 минут между синхронизацией и обновлением рекомендаций.
+Устраняет задержку в 15-30 минут между синхронизацией и обновлением аналитики.
 
 ---
 
