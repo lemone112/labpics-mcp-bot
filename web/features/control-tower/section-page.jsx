@@ -21,7 +21,7 @@ import { useEventStream } from "@/hooks/use-event-stream";
 import { usePortfolioMessages } from "@/hooks/use-portfolio-messages";
 import { usePortfolioOverview } from "@/hooks/use-portfolio-overview";
 import { useProjectPortfolio } from "@/hooks/use-project-portfolio";
-import { useRealtimeRefresh } from "@/hooks/use-realtime-refresh";
+import { useSseInvalidation } from "@/hooks/use-sse-invalidation";
 import { PageShell } from "@/components/page-shell";
 import { ProjectBadge } from "@/components/project-badge";
 import { Badge } from "@/components/ui/badge";
@@ -971,8 +971,8 @@ export default function ControlTowerSectionPage({ section }) {
     sseConnected: eventStream.connected,
   });
 
-  useRealtimeRefresh({ lastEvent: eventStream.lastEvent, reload: overview.reload, dataType: "portfolio" });
-  useRealtimeRefresh({ lastEvent: eventStream.lastEvent, reload: messages.reload, dataType: "messages" });
+  // SSE events invalidate react-query cache → automatic refetch
+  useSseInvalidation({ lastEvent: eventStream.lastEvent });
 
 
   useEffect(() => {
@@ -1014,15 +1014,25 @@ export default function ControlTowerSectionPage({ section }) {
   const agreements = Array.isArray(overviewPayload?.agreements) ? overviewPayload.agreements : [];
   const risks = Array.isArray(overviewPayload?.risks) ? overviewPayload.risks : [];
 
-  const activeAutoRefresh =
+  const activeDataUpdatedAt =
     normalizedSection === "messages"
-      ? messages.autoRefresh
-      : overview.autoRefresh;
+      ? messages.dataUpdatedAt
+      : overview.dataUpdatedAt;
 
   const activeReload =
     normalizedSection === "messages"
       ? messages.reload
       : overview.reload;
+
+  const [secondsAgo, setSecondsAgo] = useState(null);
+  useEffect(() => {
+    if (!activeDataUpdatedAt) return;
+    setSecondsAgo(Math.floor((Date.now() - activeDataUpdatedAt) / 1000));
+    const timer = setInterval(() => {
+      setSecondsAgo(Math.floor((Date.now() - activeDataUpdatedAt) / 1000));
+    }, 5000);
+    return () => clearInterval(timer);
+  }, [activeDataUpdatedAt]);
 
   return (
     <PageShell title={TITLES[normalizedSection]} subtitle={SUBTITLES[normalizedSection]}>
@@ -1031,7 +1041,7 @@ export default function ControlTowerSectionPage({ section }) {
           <Button data-testid="primary-cta">{PRIMARY_CTA[normalizedSection]}</Button>
           <div data-testid="trust-bar">
             <LastUpdatedIndicator
-              secondsAgo={activeAutoRefresh?.secondsAgo}
+              secondsAgo={secondsAgo}
               onRefresh={activeReload}
               loading={overview.loading || messages.loading}
             />
