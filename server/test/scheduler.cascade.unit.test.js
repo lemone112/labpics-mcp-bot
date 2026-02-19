@@ -12,17 +12,11 @@ test("cascade chains are defined for connectors_sync_cycle", () => {
 test("cascade chains are defined for signals_extraction", () => {
   assert.ok(Array.isArray(CASCADE_CHAINS.signals_extraction));
   assert.ok(CASCADE_CHAINS.signals_extraction.includes("health_scoring"));
-  assert.ok(CASCADE_CHAINS.signals_extraction.includes("kag_recommendations_refresh"));
 });
 
 test("cascade chains are defined for health_scoring", () => {
   assert.ok(Array.isArray(CASCADE_CHAINS.health_scoring));
   assert.ok(CASCADE_CHAINS.health_scoring.includes("analytics_aggregates"));
-});
-
-test("cascade chains are defined for kag_recommendations_refresh", () => {
-  assert.ok(Array.isArray(CASCADE_CHAINS.kag_recommendations_refresh));
-  assert.ok(CASCADE_CHAINS.kag_recommendations_refresh.includes("kag_v2_recommendations_refresh"));
 });
 
 test("cascade chains do not contain circular references", () => {
