@@ -118,7 +118,7 @@ Circuit breaker вызвал failure в `http.unit.test.js` — global state (`c
 ### Самокритика
 
 - Zod validation отложена — это осознанное решение. Текущие ручные проверки покрывают основные кейсы, но при росте API нужна системная валидация.
-- Circuit breaker states не экспортируются в `/metrics` — TODO для Iter 5.1.
+- Circuit breaker states не экспортируются в `/metrics` — tracked as [#118](https://github.com/lemone112/labpics-dashboard/issues/118).
 - Backup script не автоматизирован (нет cron в docker-compose) — нужно добавить в Iter 5.
 
 ---

@@ -8,6 +8,10 @@
 > from the original roadmap in [`mvp-vs-roadmap.md`](./mvp-vs-roadmap.md).
 > Those definitions are replaced by this plan.
 >
+> **v7** — all tasks tracked as GitHub Issues (#46–#119) with Milestones and Labels.
+> Added design audit Issues (#103–#119). Cleaned up stale TODOs.
+> v6 changelog preserved below.
+>
 > **v6** — added TypeScript migration, Pino structured logging, Biome linter to Iter 15.
 > Iter 15 renamed "TypeScript, CI/CD & Infrastructure" (9 → 14 tasks, effort M → L).
 > Total tasks: 71 → 76. v5 changelog preserved below.
@@ -36,16 +40,19 @@ Iter 15 (TS + CI/CD) — parallel with any iteration ──────┘
 
 ## Summary
 
-| Iter | Name | Priority | Tasks | Depends on | Est. effort |
-|------|------|----------|-------|------------|-------------|
-| **10** | KAG Cleanup + DB Hygiene | ✅ DONE | 9/9 | — | S |
-| **11** | Full LightRAG Integration | CRITICAL | 10 | 10 | L |
-| **12** | Backend Security & Reliability | ✅ DONE | 10/10 | 10 | M |
-| **13** | Frontend Resilience & Auth | HIGH | 11 | 10 | M |
-| **14** | Design System & Accessibility | MEDIUM | 10 | 13 | M |
-| **15** | TypeScript, CI/CD & Infrastructure | MEDIUM | 14 | — | L |
-| **16** | QA & Release Readiness | HIGH | 12 | 11–15 | L |
-| | **Total** | | **76** | | |
+| Iter | Name | Priority | Tasks | Issues | Depends on | Est. effort |
+|------|------|----------|-------|--------|------------|-------------|
+| **10** | KAG Cleanup + DB Hygiene | ✅ DONE | 9/9 | — | — | S |
+| **11** | Full LightRAG Integration | CRITICAL | 10 | [#46–#55](https://github.com/lemone112/labpics-dashboard/milestone/1) | 10 | L |
+| **12** | Backend Security & Reliability | ✅ DONE | 10/10 | — | 10 | M |
+| **13** | Frontend Resilience & Auth | HIGH | 11 | [#56–#66](https://github.com/lemone112/labpics-dashboard/milestone/2) | 10 | M |
+| **14** | Design System & Accessibility | MEDIUM | 10+6 | [#67–#76, #103–#108](https://github.com/lemone112/labpics-dashboard/milestone/3) | 13 | M |
+| **15** | TypeScript, CI/CD & Infrastructure | MEDIUM | 14 | [#77–#90](https://github.com/lemone112/labpics-dashboard/milestone/4) | — | L |
+| **16** | QA & Release Readiness | HIGH | 12+3 | [#91–#102, #117–#119](https://github.com/lemone112/labpics-dashboard/milestone/5) | 11–15 | L |
+| | **Total** | | **76+9** | | | |
+
+> **Source of truth:** [GitHub Milestones](https://github.com/lemone112/labpics-dashboard/milestones).
+> This document is the architectural reference; task status is tracked in Issues.
 
 Effort: S = 1–2 days, M = 3–5 days, L = 5–8 days
 
@@ -354,6 +361,21 @@ Remaining: 11 + 13 can start now (parallel), then 14, then 16.
 | B-2 | 80+ env vars duplicated | 15 | 15.6 |
 | B-5 | Vector index tuning | 11 | *(resolved by HKUDS LightRAG)* |
 | B-7 | Custom RAG quality score | 11 | *(replaced by HKUDS metrics)* |
+
+---
+
+## Changes v6 → v7
+
+| Change | Reason |
+|--------|--------|
+| All tasks tracked as GitHub Issues (#46–#119) | Milestones, Labels, and Issues are now source of truth for task status. |
+| Added 6 design audit Issues (#103–#108) to Iter 14 | Split section-page.jsx, ChartNoData CTA, StatTile actionable, Hero highlights, TrustBar, MOTION docs. |
+| Added 5 design audit Issues (#109–#113) to Iter 14 — closed | Already fixed in PR #44: chart-as-status, bare empty states, data-testid, EmptyState wizard, guardrails. |
+| Added #114 (CTA wiring), #116 (primary CTA wiring) to Iter 13 | Buttons need onClick handlers. |
+| Added #115 (single CTA lint), #117 (dead-code services), #118 (circuit breaker metrics), #119 (API auth docs) | Miscellaneous audit findings assigned to Iter 14/16. |
+| Summary table: added Issues column with milestone links | Easy navigation from plan to GitHub. |
+| Stale TODO in iteration-log.md → linked to #118 | Replaced inline TODO with Issue reference. |
+| Total tasks: 76 → 85 (76 plan + 9 audit) | 5 of 9 already closed (fixed in PR #44). |
 
 ---
 
