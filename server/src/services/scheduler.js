@@ -110,7 +110,16 @@ function createHandlers(customHandlers = {}) {
     weekly_digest: async ({ pool, scope }) => generateWeeklyDigest(pool, scope),
     campaign_scheduler: async ({ pool, scope }) =>
       processDueOutbounds(pool, scope, "scheduler", `scheduler_campaign_${Date.now()}`, 50),
-    analytics_aggregates: async ({ pool, scope }) => refreshAnalytics(pool, scope, 30),
+    analytics_aggregates: async ({ pool, scope }) => {
+      const result = await refreshAnalytics(pool, scope, 30);
+      // Refresh materialized view so dashboard picks up latest health scores
+      try {
+        await pool.query("REFRESH MATERIALIZED VIEW CONCURRENTLY mv_portfolio_dashboard");
+      } catch {
+        // matview may not exist yet (pre-migration) — swallow
+      }
+      return result;
+    },
     loops_contacts_sync: async ({ pool, scope }) =>
       syncLoopsContacts(
         pool,
