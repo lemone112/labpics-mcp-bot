@@ -4,6 +4,7 @@ import { Slot } from "@radix-ui/react-slot"
 import { cva } from "class-variance-authority";
 import { PanelLeft } from "lucide-react";
 
+import { useIsMobile } from "@/hooks/use-mobile"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -82,6 +83,8 @@ const SidebarProvider = React.forwardRef((
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [toggleSidebar])
 
+  const isMobile = useIsMobile()
+
   // We add a state so that we can do data-state="expanded" or "collapsed".
   // This makes it easier to style the sidebar with Tailwind classes.
   const state = open ? "expanded" : "collapsed"
@@ -90,9 +93,9 @@ const SidebarProvider = React.forwardRef((
     state,
     open,
     setOpen,
-    isMobile: false,
+    isMobile,
     toggleSidebar,
-  }), [state, open, setOpen, toggleSidebar])
+  }), [state, open, setOpen, isMobile, toggleSidebar])
 
   return (
     <SidebarContext.Provider value={contextValue}>

@@ -132,7 +132,22 @@ for (const filePath of featureFiles) {
 }
 
 // ---------------------------------------------------------------------------
-// 3) Report
+// 3) Single primary CTA per section (§1.1 DESIGN_SYSTEM_CONTROL_TOWER.md)
+// ---------------------------------------------------------------------------
+
+const sectionPagePath = path.join(ROOT, "features/control-tower/section-page.jsx");
+if (fs.existsSync(sectionPagePath)) {
+  const sectionContent = fs.readFileSync(sectionPagePath, "utf8");
+  const ctaMatches = sectionContent.match(/data-testid\s*=\s*["']primary-cta["']/g) || [];
+  if (ctaMatches.length === 0) {
+    errors.push("PRIMARY-CTA: features/control-tower/section-page.jsx has 0 primary-cta elements (expected exactly 1)");
+  } else if (ctaMatches.length > 1) {
+    errors.push(`PRIMARY-CTA: features/control-tower/section-page.jsx has ${ctaMatches.length} primary-cta elements (expected exactly 1)`);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 4) Report
 // ---------------------------------------------------------------------------
 
 if (errors.length) {

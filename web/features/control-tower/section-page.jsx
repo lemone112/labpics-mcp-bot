@@ -123,6 +123,8 @@ export default function ControlTowerSectionPage({ section }) {
               secondsAgo={secondsAgo}
               onRefresh={activeReload}
               loading={overview.loading || messages.loading}
+              sseConnected={eventStream.connected}
+              errorCount={(overview.error ? 1 : 0) + (messages.error ? 1 : 0)}
             />
           </div>
         </div>
