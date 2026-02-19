@@ -11,6 +11,9 @@ const nextConfig = {
     root: currentDir,
   },
   async headers() {
+    const sseOrigin = process.env.NEXT_PUBLIC_SSE_URL || "";
+    const connectSrc = ["'self'", sseOrigin].filter(Boolean).join(" ");
+
     return [
       {
         source: "/(.*)",
@@ -26,7 +29,7 @@ const nextConfig = {
               "style-src 'self' 'unsafe-inline'",
               "img-src 'self' data: blob:",
               "font-src 'self'",
-              "connect-src 'self'",
+              `connect-src ${connectSrc}`,
               "frame-ancestors 'none'",
             ].join("; "),
           },

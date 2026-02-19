@@ -100,9 +100,6 @@ export async function apiFetch(path, options = {}) {
 }
 
 export async function getCurrentSession() {
-  const data = await apiFetch("/auth/me");
-  // Ensure CSRF token is populated on app mount
-  if (data?.csrf_token) csrfTokenCache = data.csrf_token;
-  if (data?.data?.csrf_token) csrfTokenCache = data.data.csrf_token;
-  return data;
+  // rawFetch already captures csrf_token from every response
+  return apiFetch("/auth/me");
 }

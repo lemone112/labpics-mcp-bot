@@ -7,11 +7,17 @@ const PROBE_INTERVAL_MS = 10_000;
 
 /**
  * Detects online/offline state using navigator.onLine + health endpoint probe.
- * Returns { online: boolean } — false within ~5s of connectivity loss.
+ * Only probes the server when recovering from offline state to avoid
+ * unnecessary traffic (no polling while already online).
  */
 export function useOnlineStatus() {
   const [online, setOnline] = useState(true);
   const probeTimerRef = useRef(null);
+
+  const stopProbing = useCallback(() => {
+    clearInterval(probeTimerRef.current);
+    probeTimerRef.current = null;
+  }, []);
 
   const probe = useCallback(async () => {
     try {
@@ -20,12 +26,21 @@ export function useOnlineStatus() {
         cache: "no-store",
         signal: AbortSignal.timeout(5000),
       });
-      if (response.ok) setOnline(true);
-      else setOnline(false);
+      if (response.ok) {
+        setOnline(true);
+        stopProbing();
+      } else {
+        setOnline(false);
+      }
     } catch {
       setOnline(false);
     }
-  }, []);
+  }, [stopProbing]);
+
+  const startProbing = useCallback(() => {
+    if (probeTimerRef.current) return;
+    probeTimerRef.current = setInterval(probe, PROBE_INTERVAL_MS);
+  }, [probe]);
 
   useEffect(() => {
     function handleOnline() {
@@ -33,26 +48,23 @@ export function useOnlineStatus() {
     }
     function handleOffline() {
       setOnline(false);
+      startProbing();
     }
 
     window.addEventListener("online", handleOnline);
     window.addEventListener("offline", handleOffline);
 
-    // Periodic probe only when offline to detect reconnection
-    probeTimerRef.current = setInterval(() => {
-      if (!navigator.onLine) {
-        setOnline(false);
-      } else {
-        probe();
-      }
-    }, PROBE_INTERVAL_MS);
+    if (typeof navigator !== "undefined" && !navigator.onLine) {
+      setOnline(false);
+      startProbing();
+    }
 
     return () => {
       window.removeEventListener("online", handleOnline);
       window.removeEventListener("offline", handleOffline);
-      clearInterval(probeTimerRef.current);
+      stopProbing();
     };
-  }, [probe]);
+  }, [probe, startProbing, stopProbing]);
 
   return { online };
 }
