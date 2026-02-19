@@ -20,7 +20,7 @@ After any research, analysis, or audit — always review the result from a posit
 
 - **Backend:** Node.js, Fastify, PostgreSQL, pgvector, LightRAG
 - **Frontend:** React 19, Next.js 16 (App Router), shadcn/ui, Radix, Tailwind CSS v4, anime.js
-- **Telegram Bot:** Cloudflare Worker, TypeScript, Supabase, Composio MCP (`telegram-bot/`)
+- **Telegram Bot:** TypeScript, Supabase, Composio MCP, Docker (`telegram-bot/`)
 - **Testing:** node:test (backend unit), Playwright (e2e)
 - **Docs language:** Russian (code & comments in English)
 
@@ -43,7 +43,7 @@ After any research, analysis, or audit — always review the result from a posit
 labpics-dashboard/
 ├── server/          # Fastify API + worker
 ├── web/             # Next.js frontend
-├── telegram-bot/    # Cloudflare Worker — Telegram assistant bot
+├── telegram-bot/    # Telegram assistant bot (TypeScript, Docker)
 ├── infra/           # Caddy, deployment configs
 ├── scripts/         # Smoke tests, utilities
 └── docs/            # Architecture, specs, iterations
@@ -52,7 +52,7 @@ labpics-dashboard/
 ## Telegram bot
 
 - Source: `telegram-bot/` (migrated from `telegram-assistant-bot` repo)
-- Runtime: Cloudflare Workers (wrangler)
+- Runtime: Docker (Node.js)
 - DB: Supabase (schema `bot`), migrations in `telegram-bot/supabase/migrations/`
 - Local dev: `docker compose --profile telegram-bot up` or `cd telegram-bot && npx wrangler dev`
 - Typecheck: `cd telegram-bot && npm run typecheck`
