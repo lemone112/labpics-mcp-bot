@@ -73,19 +73,34 @@
 - **Суть:** Часть маршрутов валидирует через Zod-схемы (`parseBody`), часть читает `request.query` напрямую без валидации.
 - **Файлы:** `index.js:1341`, `1734`, `1784` — неваливированные query-параметры.
 
-### 2.4 [HIGH] Frontend: 6 arbitrary spacing значений
-- `section-page.jsx:95` → `h-[240px]` (должен быть `h-60`)
-- `chart.jsx:24` → `h-[240px]`
-- `form-field.jsx:47` → `text-[13px]` (должен быть `text-xs`)
-- Плюс ещё 3 найдены design-audit.mjs.
-- **Влияние:** Нарушение DESIGN_SYSTEM_2026.md section 2 (spacing scale).
+### 2.4 [HIGH] Frontend: 7 arbitrary values (spacing + typography)
+- `section-page.jsx:95` → `h-[240px]` (→ `h-60`)
+- `chart.jsx:24` → `h-[240px]` (→ `h-60`)
+- `form-field.jsx:47` → `text-[13px]` (→ `text-xs` или `text-sm`)
+- `separator.jsx:18` → `h-[1px]`, `w-[1px]` (→ `h-px`, `w-px`)
+- `sidebar.jsx:225` → `w-[2px]` (→ `w-0.5`)
+- `jobs/page.jsx:189` → `max-w-[260px]` (→ `max-w-xs`)
+- `search/page.jsx:142` → `max-w-[460px]` (→ `max-w-md` или `max-w-lg`)
+- **Влияние:** Все 7 fail `npm run lint` — CI/CD блокирует merge.
 
-### 2.5 [HIGH] Redis: Только 2 из 10+ endpoints кешируются
+### 2.5 [HIGH] Frontend: Touch targets < 44×44px
+- `theme-toggle.jsx:20` → `h-8 w-8` = 32×32px (→ `h-11 w-11`)
+- `page-shell.jsx:54-64` → `size-7` = 28px на mobile (→ extended hit area)
+- **Влияние:** DESIGN_SYSTEM_2026.md section 8: minimum 44×44px.
+
+### 2.6 [HIGH] Frontend: 3 bare empty states + DropdownMenu as state selector
+- `inbox-list.jsx:30` → `"Список пуст"` (→ `<EmptyState>` wizard pattern)
+- `kanban.jsx:30` → `"Нет элементов"` (→ `<EmptyState>`)
+- `section-page.jsx:357` → `"Нет данных"` в ChartNoData (→ `<EmptyState>`)
+- `theme-toggle.jsx:27-29` → DropdownMenu для выбора темы (→ `Select` или `Tabs`)
+- **Влияние:** All fail `npm run ui:consistency`.
+
+### 2.7 [HIGH] Redis: Только 2 из 10+ endpoints кешируются
 - **Кешированы:** `/control-tower` (120s), `/portfolio/overview` (90s)
 - **Не кешированы:** `/projects`, `/signals`, `/analytics`, `/search`, `/jobs`, `/connectors/state`, `/reconciliation`, `/identity/links` и др.
 - **Влияние:** Каждый polling-цикл (15-60с) идёт напрямую в PostgreSQL. Потенциальное снижение QPS на 40-50% при расширении кеша.
 
-### 2.6 [HIGH] Rate limiting — in-memory вместо Redis
+### 2.8 [HIGH] Rate limiting — in-memory вместо Redis
 - **Файл:** `server/src/index.js` — rate limiter хранит counters в памяти процесса.
 - **Влияние:** При горизонтальном масштабировании (2+ server instances) лимиты не шарятся между нодами.
 
@@ -344,9 +359,11 @@ Issues написаны как однострочные заметки, а не 
 - [ ] Добавить onClick обработчики к CTA кнопкам (2.1)
 - [ ] Обернуть POST-маршруты в try-catch (2.2)
 - [ ] Валидировать query-параметры (2.3)
-- [ ] Исправить arbitrary spacing (2.4)
-- [ ] Расширить Redis кеширование (2.5)
-- [ ] Пометить Issue #224 — заменить `public` → `private` для auth'd endpoints (1.4)
+- [ ] Исправить 7 arbitrary values — spacing/typography (2.4)
+- [ ] Исправить touch targets — theme-toggle, page-shell (2.5)
+- [ ] Заменить 3 bare empty states + DropdownMenu (2.6)
+- [ ] Расширить Redis кеширование (2.7)
+- [ ] Пометить Issue #224 — `public` → `private` для auth'd endpoints (1.4)
 - [ ] Написать Phase 1 тесты (см. TEST_PLAN_COMPREHENSIVE.md §7)
 
 ### Средний приоритет:
