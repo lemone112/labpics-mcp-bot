@@ -1,12 +1,10 @@
-# Архитектура системы (LightRAG-only)
+# Архитектура системы
 
 ## 1) Архитектурная цель
 
 Система строится вокруг одного интеллектуального контура:
 
 - **LightRAG** для retrieval-контекста по сообщениям, задачам и сделкам.
-
-Любые маршруты и фичи, завязанные на `/kag/*`, не являются частью текущего контракта разработки.
 
 ## 2) Технологический стек
 
@@ -45,41 +43,35 @@
 ```
                     ┌─────────────────────────────────────────┐
                     │              FRONTEND (Next.js)          │
-                    │  Dashboard · Portfolio · Recommendations │
-                    │  Signals · Forecasts · CRM · Settings    │
+                    │  Dashboard · Portfolio · Search · CRM    │
+                    │  Signals · Analytics · Offers · Settings │
                     └────────────────┬────────────────────────┘
                                      │ REST API
                     ┌────────────────▼────────────────────────┐
-                    │              BACKEND (Fastify v5)           │
+                    │              BACKEND (Fastify v5)        │
                     │                                          │
                     │  ┌─── Routes ──┐  ┌── Middleware ─────┐  │
                     │  │ /api/*      │  │ auth · csrf · req │  │
-                    │  │ /kag/*      │  │ scope · error     │  │  ← legacy prefix
-                    │  │ /connectors │  └───────────────────┘  │
+                    │  │ /connectors │  │ scope · error     │  │
+                    │  │ /lightrag   │  └───────────────────┘  │
                     │  └─────────────┘                         │
                     │                                          │
                     │  ┌─── Services ──────────────────────┐   │
-                    │  │ kag · forecasting · recommendations│   │
-                    │  │ portfolio · identity · campaigns   │   │
-                    │  │ connectors · rag · offers · crm    │   │
+                    │  │ lightrag · embeddings · signals    │   │
+                    │  │ portfolio · identity · intelligence│   │
+                    │  │ connectors · offers · crm · outbox │   │
                     │  │ redis-pubsub · sse-broadcaster     │   │
                     │  └───────────────────────────────────┘   │
                     │                                          │
-                    │  ┌─── Intelligence Engine ────────────┐   │
-                    │  │ ingest · graph · signals · scoring  │   │
-                    │  │ recommendations · templates         │   │
-                    │  └────────────────────────────────────┘   │
-                    │                                          │
                     │  ┌─── Scheduler ─────────────────────┐   │
                     │  │ 15min sync · 5min retry · daily    │   │
-                    │  │ pipeline · weekly signatures       │   │
+                    │  │ pipeline · weekly digest           │   │
                     │  │ cascade triggers · Redis PUBLISH   │   │
                     │  └───────────────────────────────────┘   │
                     └────────────────┬────────────────────────┘
                                      │
                     ┌────────────────▼────────────────────────┐
                     │         PostgreSQL 16 + pgvector          │
-                    │  79 tables · 17 migrations · triggers    │
                     │  IVFFlat/HNSW · GIN · scope guards       │
                     └──────────┬──────────┬──────────┬────────┘
                                │          │          │
@@ -117,13 +109,7 @@
 - Dashboard показывает operational metrics + sync completeness.
 - Jobs/Connectors дают диагностику пайплайна.
 
-## 5) LightRAG-only guardrails
-
-- При `LIGHTRAG_ONLY=1` маршруты `/kag/*` отключены (`410 kag_disabled`).
-- Legacy scheduler jobs, связанные с `/kag/*`, автоматически переводятся в `paused`.
-- Frontend не использует `/kag/*`.
-
-## 6) Связанные документы
+## 5) Связанные документы
 
 - Platform invariants: [`docs/platform-architecture.md`](./platform-architecture.md)
 - Data model: [`docs/data-model.md`](./data-model.md)

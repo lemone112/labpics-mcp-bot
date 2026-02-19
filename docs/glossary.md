@@ -40,4 +40,4 @@
 
 ## Legacy термины
 
-**/kag/* routes** — legacy маршруты, не входящие в dev-contract; в целевом режиме возвращают `410 kag_disabled`.
+**/kag/* routes** — удалённые legacy маршруты; код и роуты полностью удалены в Iter 10.

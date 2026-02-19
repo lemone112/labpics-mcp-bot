@@ -59,9 +59,8 @@
 
 ```
 connectors_sync_cycle → signals_extraction, embeddings_run
-signals_extraction    → health_scoring, kag_recommendations_refresh
+signals_extraction    → health_scoring
 health_scoring        → analytics_aggregates
-kag_recommendations_refresh → kag_v2_recommendations_refresh
 ```
 
 Это устраняет задержку 15-30 мин между sync и обновлением рекомендаций.
@@ -75,9 +74,10 @@ Frontend auto-refresh:
 
 Детали: [`docs/redis-sse.md`](./redis-sse.md)
 
-## 5) Legacy jobs в LightRAG-only режиме
+## 5) Удалённые legacy jobs
 
-При `LIGHTRAG_ONLY=1` legacy jobs, связанные с `/kag/*` (`kag_*`, `case_signatures_refresh`, `project_snapshot_daily`), автоматически переводятся в `paused`.
+KAG pipeline jobs (`kag_recommendations_refresh`, `kag_v2_recommendations_refresh`)
+полностью удалены в Iter 10. Флаг `LIGHTRAG_ONLY` больше не используется.
 
 ## 6) Полезные operational endpoints
 

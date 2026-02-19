@@ -62,14 +62,22 @@
 - `outbound_messages`, `outbound_attempts`
 - `contact_channel_policies`
 
-### 2.7 Intelligence (KAG legacy, используется scheduler pipeline)
+### 2.7 Intelligence (post-KAG cleanup)
 
-- `kag_events`, `kag_event_log` — intelligence events и process logging
-- `kag_signal_state`, `kag_signals`, `kag_signal_history` — computed signals
-- `kag_scores`, `kag_score_history` — project scores
-- `kag_recommendations`, `recommendations_v2` — generated recommendations
+> Миграция `0022_drop_kag_tables` удалила 10 таблиц: `kag_nodes`, `kag_edges`,
+> `kag_events`, `kag_signal_state`, `kag_signal_history`, `kag_score_history`,
+> `kag_recommendations`, `kag_v2_recommendation_evidence`, `kag_templates`,
+> `kag_template_renders`.
+> Таблица `kag_event_log` переименована в `connector_events`.
+
+Сохранённые таблицы (используются активными сервисами):
+
+- `connector_events` (бывш. `kag_event_log`) — process logging
+- `kag_signals` — computed signals (signals.js)
+- `kag_scores` — project scores (intelligence.js)
+- `recommendations_v2` — generated recommendations
 - `recommendation_action_runs` — action execution tracking
-- `kag_risk_forecasts` — 7/14/30 day risk forecasts
+- `kag_risk_forecasts` — 7/14/30 day risk forecasts (forecasting.js)
 - `project_snapshots`, `past_case_outcomes` — daily snapshots для case-based reasoning
 - `case_signatures` — similarity vectors для case matching
 
