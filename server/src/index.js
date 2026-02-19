@@ -1,4 +1,7 @@
 import "dotenv/config";
+import { validateEnv } from "./lib/env-check.js";
+validateEnv();
+
 import crypto from "node:crypto";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -36,6 +39,7 @@ import {
   ContinuityApplySchema,
 } from "./lib/schemas.js";
 import { requireProjectScope } from "./lib/scope.js";
+import { rateLimitHook } from "./lib/rate-limit.js";
 import { findCachedResponse, getIdempotencyKey, storeCachedResponse } from "./lib/idempotency.js";
 import { applyMigrations } from "../db/migrate-lib.js";
 import { runEmbeddings } from "./services/embeddings.js";
@@ -607,15 +611,33 @@ async function main() {
     return pathName;
   }
 
-  function registerGet(pathName, handler) {
-    app.get(pathName, handler);
-    app.get(`/v1${pathName}`, handler);
+  function registerGet(pathName, handler, opts) {
+    app.get(pathName, opts || {}, handler);
+    app.get(`/v1${pathName}`, opts || {}, handler);
   }
 
-  function registerPost(pathName, handler) {
-    app.post(pathName, handler);
-    app.post(`/v1${pathName}`, handler);
+  function registerPost(pathName, handler, opts) {
+    app.post(pathName, opts || {}, handler);
+    app.post(`/v1${pathName}`, opts || {}, handler);
   }
+
+  // Tight rate limit for expensive/CPU-intensive endpoints (10 req/min per IP+path)
+  const EXPENSIVE_PATHS = new Set([
+    "/search", "/lightrag/query", "/lightrag/refresh",
+    "/jobs/embeddings/run", "/connectors/sync",
+    "/jobs/chatwoot/sync", "/jobs/attio/sync", "/jobs/linear/sync",
+  ]);
+  const expensiveRateCheck = rateLimitHook({
+    maxRequests: 10,
+    windowMs: 60_000,
+    keyFn: (request) => `expensive:${request.ip}:${request.url.split("?")[0].replace(/^\/v1/, "")}`,
+  });
+  app.addHook("preHandler", async (request, reply) => {
+    const cleanPath = request.url.split("?")[0].replace(/^\/v1/, "");
+    if (request.method === "POST" && EXPENSIVE_PATHS.has(cleanPath)) {
+      await expensiveRateCheck(request, reply);
+    }
+  });
 
   app.addHook("onRequest", async (request, reply) => {
     metrics.requests_total += 1;
