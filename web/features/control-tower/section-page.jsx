@@ -18,7 +18,7 @@ import {
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { EmptyStateWizard } from "@/components/ui/empty-state";
+import { EmptyState } from "@/components/ui/empty-state";
 import { StatusChip } from "@/components/ui/status-chip";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 
@@ -94,7 +94,7 @@ function SectionPage() {
               </ResponsiveContainer>
             </div>
           ) : (
-            <EmptyStateWizard
+            <EmptyState
               data-testid="empty-wizard"
               title="No signal yet"
               reason="We’ll show a live signal once your first integration reports data."
@@ -103,7 +103,14 @@ function SectionPage() {
                 "Generate an event",
                 "Return to Control Tower",
               ]}
-              cta={{ label: "Connect integration", href: "/integrations" }}
+              primaryAction={
+                <a
+                  className="inline-flex h-9 items-center justify-center rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground"
+                  href="/integrations"
+                >
+                  Connect integration
+                </a>
+              }
             />
           )}
         </CardContent>
@@ -117,7 +124,13 @@ function SectionPage() {
           <CardContent>
             <div className="grid gap-3">
               {statuses.map((s) => (
-                <div key={s.value} className={cn("flex items-center justify-between rounded-md border p-3", selected === s.value && "border-primary") }>
+                <div
+                  key={s.value}
+                  className={cn(
+                    "flex items-center justify-between rounded-md border p-3",
+                    selected === s.value && "border-primary"
+                  )}
+                >
                   <div className="flex items-center gap-2">
                     <StatusChip tone={s.tone}>{s.label}</StatusChip>
                     <span className="text-sm text-muted-foreground">Last 5 min</span>

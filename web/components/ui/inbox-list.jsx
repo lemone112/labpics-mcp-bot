@@ -2,7 +2,7 @@
 
 import { cn } from "@/lib/utils";
 import { StatusChip } from "@/components/ui/status-chip";
-import { EmptyStateWizard } from "@/components/ui/empty-state";
+import { EmptyState } from "@/components/ui/empty-state";
 
 export function InboxList({ items = [], className, onSelect = null }) {
   return (
@@ -28,12 +28,19 @@ export function InboxList({ items = [], className, onSelect = null }) {
       ))}
 
       {!items.length ? (
-        <EmptyStateWizard
+        <EmptyState
           data-testid="empty-wizard"
           title="Список пуст"
           reason="Пока нет писем или сообщений для отображения."
           steps={["Добавьте элемент", "Выберите его", "Продолжайте работу"]}
-          cta={{ label: "Создать", href: "/inbox/new" }}
+          primaryAction={
+            <a
+              className="inline-flex h-9 items-center justify-center rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground"
+              href="/inbox/new"
+            >
+              Создать
+            </a>
+          }
         />
       ) : null}
     </div>

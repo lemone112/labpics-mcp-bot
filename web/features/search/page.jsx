@@ -6,7 +6,7 @@ import { PageShell } from "@/components/page-shell";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { EmptyStateWizard } from "@/components/ui/empty-state";
+import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 
@@ -61,12 +61,19 @@ export default function SearchPage() {
               </TableBody>
             </Table>
           ) : (
-            <EmptyStateWizard
+            <EmptyState
               data-testid="empty-wizard"
               title="No results"
               reason="Try a different query or add content to index."
               steps={["Change query", "Add a record", "Search again"]}
-              cta={{ label: "Add record", href: "/new" }}
+              primaryAction={
+                <a
+                  className="inline-flex h-9 items-center justify-center rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground"
+                  href="/new"
+                >
+                  Add record
+                </a>
+              }
             />
           )}
         </CardContent>

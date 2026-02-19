@@ -6,7 +6,7 @@ import { PageShell } from "@/components/page-shell";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { StatusChip } from "@/components/ui/status-chip";
-import { EmptyStateWizard } from "@/components/ui/empty-state";
+import { EmptyState } from "@/components/ui/empty-state";
 import { Button } from "@/components/ui/button";
 
 const demo = [
@@ -72,12 +72,19 @@ export default function JobsPage() {
               </TableBody>
             </Table>
           ) : (
-            <EmptyStateWizard
+            <EmptyState
               data-testid="empty-wizard"
               title="No jobs"
               reason="You’ll see jobs here once background tasks are configured."
               steps={["Create a job", "Run it", "Return to this page"]}
-              cta={{ label: "Create job", href: "/jobs/new" }}
+              primaryAction={
+                <a
+                  className="inline-flex h-9 items-center justify-center rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground"
+                  href="/jobs/new"
+                >
+                  Create job
+                </a>
+              }
             />
           )}
         </CardContent>

@@ -2,7 +2,7 @@
 
 import { cn } from "@/lib/utils";
 import { StatusChip } from "@/components/ui/status-chip";
-import { EmptyStateWizard } from "@/components/ui/empty-state";
+import { EmptyState } from "@/components/ui/empty-state";
 
 export function Kanban({ columns = [], className }) {
   return (
@@ -26,12 +26,19 @@ export function Kanban({ columns = [], className }) {
             ))}
 
             {!column.items?.length ? (
-              <EmptyStateWizard
+              <EmptyState
                 data-testid="empty-wizard"
                 title="Нет элементов"
                 reason="В этой колонке пока нет карточек."
                 steps={["Создайте карточку", "Перетащите в колонку", "Обновите статус"]}
-                cta={{ label: "Создать карточку", href: "/kanban/new" }}
+                primaryAction={
+                  <a
+                    className="inline-flex h-9 items-center justify-center rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground"
+                    href="/kanban/new"
+                  >
+                    Создать карточку
+                  </a>
+                }
               />
             ) : null}
           </div>
