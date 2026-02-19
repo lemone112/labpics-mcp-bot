@@ -1,6 +1,6 @@
 # Статус продукта и roadmap (Production-Ready Plan)
 
-> Обновлено: 2026-02-18 (post Iter 0-9 + Architecture Audit v2 — HKUDS LightRAG migration)
+> Обновлено: 2026-02-19 (post Iter 0-12 + Design Audit. Source of truth: [GitHub Issues](https://github.com/lemone112/labpics-dashboard/milestones))
 > Детальный анализ: [`docs/product-structure-analysis.md`](./product-structure-analysis.md)
 
 ---
@@ -130,35 +130,28 @@
 | 7 | Input Validation & API Hardening | ✅ Done | 4/4 | Zod schemas for CRM/offers/outbound/auth/lightrag, `parseBody()` helper, standardized validation errors with details |
 | 8 | Security Hardening II | ✅ Done | 7/7 | Timing attack fix, security headers, session cache invalidation, loginAttempts cleanup, session expiration, CSRF httpOnly, trustProxy |
 | 9 | Extended Input Validation | ✅ Done | 5/5 | 18 new Zod schemas for all remaining POST endpoints, dead letter visibility endpoints, allProjectsFlag reusable preprocessor |
+| 10 | KAG Cleanup + DB Hygiene | ✅ Done | 9/9 | Removed 2,770 LOC KAG code, routes, scheduler jobs, DB tables. kag_event_log → connector_events |
+| 12 | Backend Security & Reliability | ✅ Done | 10/10 | Session hardening, CORS tightening, Helmet headers, rate limit tuning, Zod strictness |
 
 ---
 
-## 3) Оставшиеся итерации (Wave 2: Iter 10-13 — пересмотрено v2)
+## 3) Оставшиеся итерации (Wave 2: Iter 11–16)
 
-| Iter | Название | Задач | Приоритет | Фокус |
-|------|----------|-------|-----------|-------|
-| 10 | KAG Legacy Cleanup | 6 | **CRITICAL** | Удаление ~2,770 LOC мёртвого KAG кода, rename kag_event_log → connector_events, очистка scheduler/routes |
-| 11 | HKUDS LightRAG Migration + MCP | 7 | **HIGH** | Миграция на реальный LightRAG (форк `lemone112/lightrag`), data ingestion, MCP server для Telegram бота |
-| 12 | Frontend Resilience | 5 | MEDIUM | Error boundaries, retry logic, SSE reconnect, loading states |
-| 13 | CI/CD Hardening | 4 | MEDIUM | .dockerignore, npm audit, pre-deploy backup, rollback strategy |
+> Детальные задачи и статус: [GitHub Milestones](https://github.com/lemone112/labpics-dashboard/milestones)
+> Архитектурный план: [`docs/iteration-plan-wave2.md`](./iteration-plan-wave2.md)
 
-### Iter 10 — KAG Legacy Cleanup (CRITICAL)
+| Iter | Название | Issues | Приоритет | Фокус |
+|------|----------|--------|-----------|-------|
+| 11 | HKUDS LightRAG Integration | [#46–#55](https://github.com/lemone112/labpics-dashboard/milestone/1) | **CRITICAL** | HKUDS LightRAG + MCP + Telegram bot |
+| 13 | Frontend Resilience & Auth | [#56–#66](https://github.com/lemone112/labpics-dashboard/milestone/2) | **HIGH** | Error boundaries, auth flow, SSE reconnect |
+| 14 | Design System & Accessibility | [#67–#76, #103–#108](https://github.com/lemone112/labpics-dashboard/milestone/3) | MEDIUM | Компоненты, анимации, a11y |
+| 15 | TypeScript, CI/CD & Infrastructure | [#77–#90](https://github.com/lemone112/labpics-dashboard/milestone/4) | MEDIUM | TS migration, Pino logging, Biome |
+| 16 | QA & Release Readiness | [#91–#102, #117–#119](https://github.com/lemone112/labpics-dashboard/milestone/5) | HIGH | E2E tests, dead-code cleanup, polish |
 
-| # | Задача | Файлы | Изменения |
-|---|--------|-------|-----------|
-| 10.1 | Удалить dead KAG modules | `server/src/services/kag.js`, `server/src/kag/` (6 files) | Удалить 2,602 LOC мёртвого кода. Оставить `kag/templates/` (used by recommendations-v2) |
-| 10.2 | Rename kag_event_log → connector_events | migration 0021 | `ALTER TABLE kag_event_log RENAME TO connector_events`. Обновить все SQL-запросы в event-log.js, snapshots.js, similarity.js, forecasting.js |
-| 10.3 | Удалить /kag/* API routes | `server/src/index.js` | Удалить ~118 LOC disabled routes + `isKagRoute()` helper + LIGHTRAG_ONLY preValidation gate |
-| 10.4 | Очистить scheduler от KAG jobs | `server/src/services/scheduler.js` | Удалить kag_recommendations_refresh handler, job definitions, dependency chain. Оставить активные jobs (connectors, embeddings) |
-| 10.5 | Удалить неиспользуемые KAG DB таблицы | migration 0021 | DROP TABLE kag_nodes, kag_edges, kag_events, kag_provenance_refs, kag_signal_state, kag_recommendations, kag_templates (if inlined). Оставить kag_signals, kag_scores, kag_risk_forecasts (used by recommendations-v2, forecasting) |
-| 10.6 | Обновить KAG тесты и документацию | test files, docs | Удалить KAG test files. Убрать "KAG" из всех активных доков |
+### Iter 11 — HKUDS LightRAG Integration (CRITICAL)
 
-### Iter 11 — HKUDS LightRAG Migration + MCP (HIGH)
+Миграция с custom hybrid RAG на [HKUDS LightRAG](https://github.com/HKUDS/LightRAG) из форка [`lemone112/lightrag`](https://github.com/lemone112/lightrag). Knowledge graph + dual-level retrieval + PostgreSQL backend + MCP для Telegram бота.
 
-> Миграция с custom hybrid RAG на реальный [HKUDS LightRAG](https://github.com/HKUDS/LightRAG) из форка [`lemone112/lightrag`](https://github.com/lemone112/lightrag).
-> Knowledge graph + dual-level retrieval + PostgreSQL backend + MCP для Telegram бота.
-
-**Целевая архитектура:**
 ```
 ┌─────────────────┐     ┌─────────────────────┐     ┌──────────────┐
 │  Telegram Bot   │────▶│ daniel-lightrag-mcp  │────▶│  LightRAG    │
@@ -176,87 +169,47 @@
                         └─────────────────────┘     └──────────────┘
 ```
 
-| # | Задача | Файлы / Компоненты | Изменения |
-|---|--------|---------------------|-----------|
-| 11.1 | Deploy LightRAG Server | `docker-compose.yml`, `lemone112/lightrag` | Добавить lightrag service (Python). Настроить OPENAI_API_KEY, PostgreSQL connection. Health check на `/health` |
-| 11.2 | PostgreSQL storage backend | LightRAG config, shared PostgreSQL | PGKVStorage + PGVectorStorage + PGGraphStorage. Shared DB с нашими таблицами. Namespace isolation |
-| 11.3 | Data ingestion pipeline | `server/src/services/connector-sync.js` | После sync: отправить connector data (messages, issues, deals) в LightRAG Server через REST API `/documents`. Batch ingestion |
-| 11.4 | Proxy endpoints в Fastify | `server/src/index.js`, `server/src/services/lightrag.js` | `/lightrag/query` → proxy к LightRAG Server `/query`. `/lightrag/status` → proxy к `/health`. Сохранить совместимость с frontend. Удалить custom RAG код |
-| 11.5 | MCP Server для Telegram бота | `docker-compose.yml` | [daniel-lightrag-mcp](https://github.com/desimpkins/daniel-lightrag-mcp) (22 tools). Подключить к LightRAG Server. Tools: query, document management, knowledge graph operations |
-| 11.6 | Service account auth | `server/src/index.js` | API key auth (header `X-API-Key`) для service-to-service calls. Env `SERVICE_API_KEYS`. Scope per key |
-| 11.7 | Integration tests | `server/test/lightrag-integration.test.js` | Tests: proxy endpoints, data ingestion flow, LightRAG health check, auth |
-
-**Критерии завершения:**
-- LightRAG Server запущен и доступен
-- Connector data автоматически попадает в knowledge graph
-- `/lightrag/query` возвращает results с knowledge graph entities
-- Telegram бот через MCP может запрашивать данные и получать контекстные ответы
-- Frontend продолжает работать без изменений (proxy-совместимость)
-
-### Iter 12 — Frontend Resilience (MEDIUM)
-
-| # | Задача | Файлы | Изменения |
-|---|--------|-------|-----------|
-| 12.1 | Error boundaries | `web/components/error-boundary.jsx` (new) | React Error Boundary wrapping dashboard sections. Fallback UI с retry |
-| 12.2 | API retry с exponential backoff | `web/lib/api.js` | Retry на 5xx ошибки (max 3 attempts, backoff 1s/2s/4s). Не retry на 4xx |
-| 12.3 | SSE auto-reconnect | `web/hooks/use-auto-refresh.js` | При SSE disconnect: exponential reconnect (1s/2s/4s/8s, max 30s). Visual indicator |
-| 12.4 | Loading states consistency | `web/features/control-tower/section-page.jsx` | Skeleton loaders для всех dashboard sections. Consistent loading pattern |
-| 12.5 | Offline detection | `web/hooks/use-online-status.js` (new) | navigator.onLine + fetch probe. Banner при offline. Queue actions for replay |
-
-### Iter 13 — CI/CD Hardening (MEDIUM)
-
-| # | Задача | Файлы | Изменения |
-|---|--------|-------|-----------|
-| 13.1 | .dockerignore | `server/.dockerignore`, `web/.dockerignore` | Exclude node_modules, test, docs, .git. Reduce image size |
-| 13.2 | npm audit в CI | `.github/workflows/ci-quality.yml` | `npm audit --omit=dev` step. Fail on critical/high vulnerabilities |
-| 13.3 | Pre-deploy backup | `.github/workflows/deploy-prod.yml` | Run backup.sh before deployment. Verify backup before proceeding |
-| 13.4 | Rollback strategy | `scripts/rollback.sh` (new) | Docker tag pinning. Quick rollback to previous version. Health check after deploy |
-
-### Later — TypeScript Migration Phase 1
-
-| # | Задача | Файлы | Изменения |
-|---|--------|-------|-----------|
-| L.1 | tsconfig.json с checkJs | `server/tsconfig.json`, `web/tsconfig.json` | `checkJs: true, allowJs: true, strict: false`. Постепенная type-safety без rename |
-| L.2 | Type definitions для core modules | `server/src/types/` (new) | Типы для scope, session, api-contract, database rows. `.d.ts` files |
-| L.3 | Новые файлы на TypeScript | convention | Все новые файлы пишутся на .ts |
+**Критерии завершения:** LightRAG Server запущен, connector data в knowledge graph, `/lightrag/query` возвращает graph entities, Telegram бот работает через MCP, frontend без изменений (proxy)
 
 ---
 
 ## 4) Рекомендуемый порядок выполнения
 
 ```
-✅ Iter 0 (security) ──────── DONE (7/7)
-✅ Iter 1 (Redis cache) ───── DONE (8/8)
-✅ Iter 2 (reliability) ───── DONE (5/6, zod → Iter 7)
-✅ Iter 3 (frontend) ───────── DONE (5/6, portfolio hook → as-is)
-✅ Iter 4 (DB optimization) ── DONE (6/6)
-✅ Iter 5 (observability) ──── DONE (6/6)
-✅ Iter 6 (quality & UX) ──── DONE (5/5)
-✅ Iter 7 (validation) ─────── DONE (4/4)
-✅ Iter 8 (security II) ────── DONE (7/7)
-✅ Iter 9 (ext. validation) ── DONE (5/5)
-⬜ Iter 10 (KAG cleanup) ───── 6 tasks — CRITICAL
-⬜ Iter 11 (LightRAG + MCP) ── 7 tasks — HIGH ★ KEY ITERATION
-⬜ Iter 12 (frontend res.) ─── 5 tasks — MEDIUM
-⬜ Iter 13 (CI/CD) ──────────── 4 tasks — MEDIUM
-⬜ Later (TypeScript Phase 1) ─ 3 tasks — LOW
+✅ Iter 0  (security) ──────── DONE (7/7)
+✅ Iter 1  (Redis cache) ───── DONE (8/8)
+✅ Iter 2  (reliability) ───── DONE (5/6, zod → Iter 7)
+✅ Iter 3  (frontend) ───────── DONE (5/6, portfolio hook → as-is)
+✅ Iter 4  (DB optimization) ── DONE (6/6)
+✅ Iter 5  (observability) ──── DONE (6/6)
+✅ Iter 6  (quality & UX) ──── DONE (5/5)
+✅ Iter 7  (validation) ─────── DONE (4/4)
+✅ Iter 8  (security II) ────── DONE (7/7)
+✅ Iter 9  (ext. validation) ── DONE (5/5)
+✅ Iter 10 (KAG cleanup) ────── DONE (9/9)
+⬜ Iter 11 (LightRAG + MCP) ── 10 tasks — CRITICAL ★
+✅ Iter 12 (backend security) ─ DONE (10/10)
+⬜ Iter 13 (frontend + auth) ── 13 tasks — HIGH
+⬜ Iter 14 (design system) ──── 16 tasks — MEDIUM
+⬜ Iter 15 (TS, CI/CD) ──────── 14 tasks — MEDIUM
+⬜ Iter 16 (QA & release) ───── 15 tasks — HIGH
 ```
 
-**Итого:** 10 итераций завершены (58/60 задач). 4 итерации + 1 deferred (25 задач). Iter 11 — ключевая: миграция на HKUDS LightRAG + MCP для Telegram бота.
+**Итого:** 12 итераций завершены (77/79 задач). 5 итераций открыто (68 задач, из них 5 уже закрыты). Iter 11 — ключевая: HKUDS LightRAG + MCP.
 
 ---
 
 ## 5) Матрица зрелости
 
-| Зона | До (Iter 0) | После (Iter 0-4) | После (Iter 0-9) | Target (Iter 13) |
-|------|-------------|-------------------|-------------------|-------------------|
-| Платформа | 80% | 92% | **99%** | 99% |
-| Connectors | 85% | 95% | **97%** | 99% |
-| Intelligence | 65% | 82% | **90%** | 95% |
-| Dashboard | 50% | 88% | **88%** | 95% |
-| Frontend | 70% | 85% | **85%** | 95% |
-| Инфраструктура | 40% | 78% | **92%** | 98% |
-| **Среднее** | **65%** | **87%** | **92%** | **97%** |
+| Зона | До (Iter 0) | После (Iter 0-9) | После (Iter 10-12) | Target (Iter 16) |
+|------|-------------|-------------------|---------------------|-------------------|
+| Платформа | 80% | **99%** | **99%** | 99% |
+| Connectors | 85% | **97%** | **97%** | 99% |
+| Intelligence | 65% | **90%** | **90%** | 98% |
+| Dashboard | 50% | **88%** | **88%** | 96% |
+| Frontend | 70% | **85%** | **85%** | 96% |
+| Инфраструктура | 40% | **92%** | **92%** | 98% |
+| **Среднее** | **65%** | **92%** | **92%** | **97%+** |
 
 ---
 
@@ -275,9 +228,9 @@
 
 **Миграция**: Iter 10 (cleanup) → Iter 11 (deploy LightRAG + proxy + MCP). Frontend без изменений (proxy-совместимость).
 
-### KAG — deprecated, cleanup в Iter 10
+### KAG — полностью удалён (Iter 10)
 
-KAG (custom Knowledge Augmented Graph) — отключён. ~2,770 LOC мёртвого кода. Удаляется в Iter 10. `kag_event_log` → `connector_events`.
+KAG (custom Knowledge Augmented Graph) — удалён в Iter 10. 2,770 LOC кода, routes, scheduler jobs, DB-таблицы. `kag_event_log` переименован в `connector_events`.
 
 ### Telegram Bot Architecture
 
@@ -295,7 +248,7 @@ Telegram Bot (LLM) → daniel-lightrag-mcp (22 tools) → LightRAG Server → Po
 
 ## 7) Явно вне scope
 
-- ~~Интеграции и решения на `/kag/*` (legacy, paused).~~ → Удаляется в Iter 10.
+- KAG pipeline (удалён в Iter 10).
 - Black-box рекомендационные агенты без evidence.
 - RBAC / multi-user auth (single-user auth + scope достаточен для MVP).
 - Дорогие LLM-решения в критических операционных циклах.

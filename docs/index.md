@@ -38,7 +38,7 @@
 
 - По умолчанию включен режим `LIGHTRAG_ONLY=1`.
 - В разработке и продуктовых задачах используется только LightRAG API.
-- Роуты `/kag/*` считаются legacy и не входят в dev-contract (`410 kag_disabled`).
+- KAG pipeline полностью удалён (Iter 10). Код, routes, scheduler jobs, DB-таблицы — удалены.
 - UI обязан опираться на LightRAG + operational charts.
 - **Real-time**: Redis Pub/Sub для event propagation, SSE для auto-refresh в браузере, cascade triggers между задачами.
 

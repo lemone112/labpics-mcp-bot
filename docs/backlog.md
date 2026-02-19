@@ -1,30 +1,15 @@
 # Бэклог (Product Backlog)
 
-> Обновлено: 2026-02-18
+> Обновлено: 2026-02-19
 > Roadmap: [`docs/mvp-vs-roadmap.md`](./mvp-vs-roadmap.md)
-> Iteration log: [`docs/iteration-log.md`](./iteration-log.md)
+> Iteration plan (Wave 2): [`docs/iteration-plan-wave2.md`](./iteration-plan-wave2.md)
+> **Source of truth:** [GitHub Issues & Milestones](https://github.com/lemone112/labpics-dashboard/milestones)
 
 ---
 
 ## Active Iterations (Wave 2)
 
-### Iter 10 — KAG Legacy Cleanup | CRITICAL
-
-| # | Задача | Статус |
-|---|--------|--------|
-| 10.1 | Удалить dead KAG modules (`kag.js`, `kag/` directory — 6 files, ~2,602 LOC) | ⬜ |
-| 10.2 | Rename `kag_event_log` → `connector_events` (migration 0021 + update SQL in event-log.js, snapshots.js, similarity.js, forecasting.js) | ⬜ |
-| 10.3 | Удалить `/kag/*` API routes из index.js (~118 LOC + `isKagRoute()` + LIGHTRAG_ONLY gate) | ⬜ |
-| 10.4 | Очистить scheduler от KAG jobs (kag_recommendations_refresh, dependency chain) | ⬜ |
-| 10.5 | DROP неиспользуемые KAG DB таблицы (kag_nodes, kag_edges, kag_events, kag_provenance_refs, kag_signal_state, kag_recommendations) | ⬜ |
-| 10.6 | Удалить KAG test files, убрать "KAG" из активных доков | ⬜ |
-
-**Блокеры:** нет. Можно начинать сразу.
-**Зависимости:** Iter 11 зависит от Iter 10 (clean codebase перед миграцией).
-
----
-
-### Iter 11 — HKUDS LightRAG Migration + MCP | HIGH
+### Iter 11 — HKUDS LightRAG Migration + MCP | CRITICAL
 
 > Миграция с custom hybrid RAG на [HKUDS LightRAG](https://github.com/HKUDS/LightRAG) из форка [`lemone112/lightrag`](https://github.com/lemone112/lightrag).
 
@@ -43,42 +28,21 @@
 
 ---
 
-### Iter 12 — Frontend Resilience | MEDIUM
+### Iter 13 — Frontend Resilience & Auth | HIGH
 
-| # | Задача | Статус |
-|---|--------|--------|
-| 12.1 | Error boundaries: React Error Boundary wrapping dashboard sections, fallback UI с retry | ⬜ |
-| 12.2 | API retry: exponential backoff на 5xx (max 3 attempts, 1s/2s/4s). Не retry на 4xx | ⬜ |
-| 12.3 | SSE auto-reconnect: exponential reconnect (1s/2s/4s/8s, max 30s), visual indicator | ⬜ |
-| 12.4 | Loading states: skeleton loaders для всех dashboard sections, consistent pattern | ⬜ |
-| 12.5 | Offline detection: navigator.onLine + fetch probe, banner при offline | ⬜ |
+> Задачи: [GitHub Milestone](https://github.com/lemone112/labpics-dashboard/milestone/2) (#56–#66, #114, #116)
 
-**Блокеры:** нет.
+### Iter 14 — Design System & Accessibility | MEDIUM
 
----
+> Задачи: [GitHub Milestone](https://github.com/lemone112/labpics-dashboard/milestone/3) (#67–#76, #103–#108, #115)
 
-### Iter 13 — CI/CD Hardening | MEDIUM
+### Iter 15 — TypeScript, CI/CD & Infrastructure | MEDIUM
 
-| # | Задача | Статус |
-|---|--------|--------|
-| 13.1 | .dockerignore для server и web (exclude node_modules, test, docs, .git) | ⬜ |
-| 13.2 | npm audit в CI (`npm audit --omit=dev`, fail on critical/high) | ⬜ |
-| 13.3 | Pre-deploy backup (run backup.sh before deployment, verify) | ⬜ |
-| 13.4 | Rollback strategy: Docker tag pinning, quick rollback script, health check after deploy | ⬜ |
+> Задачи: [GitHub Milestone](https://github.com/lemone112/labpics-dashboard/milestone/4) (#77–#90)
 
-**Блокеры:** нет.
+### Iter 16 — QA & Release Readiness | HIGH
 
----
-
-## Deferred (Later)
-
-### TypeScript Migration Phase 1 | LOW
-
-| # | Задача | Статус |
-|---|--------|--------|
-| L.1 | `tsconfig.json` с `checkJs: true, allowJs: true, strict: false` для server и web | ⬜ |
-| L.2 | Type definitions для core modules: scope, session, api-contract, database rows (`.d.ts`) | ⬜ |
-| L.3 | Convention: все новые файлы пишутся на TypeScript | ⬜ |
+> Задачи: [GitHub Milestone](https://github.com/lemone112/labpics-dashboard/milestone/5) (#91–#102, #117–#119)
 
 ---
 
@@ -110,4 +74,6 @@
 | 7 | Input Validation | 4/4 | ✅ Done |
 | 8 | Security Hardening II | 7/7 | ✅ Done |
 | 9 | Extended Input Validation | 5/5 | ✅ Done |
-| **Итого** | | **58/60** | |
+| 10 | KAG Cleanup + DB Hygiene | 9/9 | ✅ Done |
+| 12 | Backend Security & Reliability | 10/10 | ✅ Done |
+| **Итого** | | **77/79** | |

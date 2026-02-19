@@ -75,9 +75,8 @@ Worker Loop                  Redis                  Fastify API Server        Br
 ```js
 const CASCADE_CHAINS = {
   connectors_sync_cycle: ["signals_extraction", "embeddings_run"],
-  signals_extraction:    ["health_scoring", "kag_recommendations_refresh"],
+  signals_extraction:    ["health_scoring"],
   health_scoring:        ["analytics_aggregates"],
-  kag_recommendations_refresh: ["kag_v2_recommendations_refresh"],
 };
 ```
 
@@ -93,10 +92,8 @@ const CASCADE_CHAINS = {
 ```
 connectors_sync_cycle
   ├── signals_extraction
-  │     ├── health_scoring
-  │     │     └── analytics_aggregates
-  │     └── kag_recommendations_refresh
-  │           └── kag_v2_recommendations_refresh
+  │     └── health_scoring
+  │           └── analytics_aggregates
   └── embeddings_run
 ```
 
@@ -175,8 +172,6 @@ const JOB_TO_DATA_MAP = {
   connectors_sync_cycle: ["portfolio", "messages"],
   signals_extraction: ["portfolio", "recommendations"],
   health_scoring: ["portfolio"],
-  kag_recommendations_refresh: ["recommendations"],
-  kag_v2_recommendations_refresh: ["recommendations"],
   analytics_aggregates: ["portfolio"],
   embeddings_run: ["portfolio"],
 };

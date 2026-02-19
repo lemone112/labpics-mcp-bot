@@ -1,6 +1,6 @@
 # Intelligence Layer Contract (нормативный документ)
 
-> Обновлено: 2026-02-18 (post Architecture Audit)
+> Обновлено: 2026-02-19 (post Iter 10 cleanup, KAG fully removed)
 
 Этот документ обязателен к исполнению при любой разработке в репозитории.
 
@@ -25,12 +25,12 @@
 ## 3) Обязательные правила (MUST)
 
 1. Продуктовый интеллект-контур = **только custom hybrid RAG** (endpoints `/lightrag/*`).
-2. KAG legacy code **удаляется** в Iter 10. `/kag/*` routes, kag.js, kag/ modules — deprecated.
+2. KAG pipeline **полностью удалён** (Iter 10): routes, modules, scheduler jobs, DB-таблицы.
 3. Frontend **MUST** использовать только:
    - `POST /lightrag/query`
-   - `POST /search` (только как compatibility alias).
-4. Таблица `kag_event_log` **будет переименована** в `connector_events` (Iter 10).
-5. Любой PR, который добавляет зависимость от удалённого KAG кода, считается нарушением контракта.
+   - `POST /search` (compatibility alias).
+4. Таблица `kag_event_log` переименована в `connector_events` (migration 0021).
+5. Любой PR, добавляющий зависимость от удалённого KAG кода, считается нарушением контракта.
 
 ## 4) API Endpoints (intelligence layer)
 

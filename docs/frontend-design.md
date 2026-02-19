@@ -180,8 +180,6 @@ Frontend (Next.js) решает четыре задачи:
 - `usePortfolioMessages` -> `/portfolio/messages`
 - search-страница -> `/lightrag/query`
 
-Нормативно: frontend не должен вызывать `/kag/*`.
-
 Назначение: инкапсулировать загрузку/ошибки/reload-механику и держать страницы тонкими.
 
 ---

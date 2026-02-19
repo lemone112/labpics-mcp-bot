@@ -69,12 +69,7 @@
 2. Сделать targeted sync нужного коннектора.
 3. Проверить dedupe конфликты (уникальные индексы по `external_ref`).
 
-## 5) Ошибка `kag_disabled` (legacy route)
-
-Это ожидаемо при `LIGHTRAG_ONLY=1`.  
-Если ошибка пришла из UI — значит в клиенте остались legacy вызовы `/kag/*` и их нужно удалить.
-
-## 6) Auth/CSRF проблемы
+## 5) Auth/CSRF проблемы
 
 Проверить:
 
@@ -82,7 +77,7 @@
 - CSRF cookie соответствует `x-csrf-token`;
 - `CORS_ORIGIN` совпадает с доменом UI.
 
-## 7) Что мониторить постоянно
+## 6) Что мониторить постоянно
 
 - `connector_errors` (рост, dead-letter).
 - лаг по `connector_sync_state`.
