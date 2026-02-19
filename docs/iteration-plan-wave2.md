@@ -9,9 +9,10 @@
 > Those definitions are replaced by this plan.
 >
 > **v5** — expanded Iter 15 (+3 tasks: coverage, Docker multi-stage, bundle size)
-> and restructured Iter 16 as "QA & Release Readiness" (+7 tasks: E2E, rate limiting,
-> env validation, OpenAPI, clean-DB migration test, final regression, query metrics).
-> Total tasks: 59 → 69. v4 changelog preserved below.
+> and restructured Iter 16 as "QA & Release Readiness" (+9 tasks: E2E, rate limiting,
+> env validation, OpenAPI, clean-DB migration test, final regression, query metrics,
+> machine auth API keys, route modularization for multi-product scalability).
+> Total tasks: 59 → 71. v4 changelog preserved below.
 
 ---
 
@@ -45,8 +46,8 @@ Iter 15 (CI/CD) — parallel with any iteration ──────────�
 | **13** | Frontend Resilience & Auth | HIGH | 11 | 10 | M |
 | **14** | Design System & Accessibility | MEDIUM | 10 | 13 | M |
 | **15** | CI/CD & Infrastructure | MEDIUM | 9 | — | M |
-| **16** | QA & Release Readiness | HIGH | 10 | 11–15 | M |
-| | **Total** | | **69** | | |
+| **16** | QA & Release Readiness | HIGH | 12 | 11–15 | L |
+| | **Total** | | **71** | | |
 
 Effort: S = 1-2 days, M = 3-5 days, L = 5-8 days
 
@@ -229,6 +230,8 @@ Effort: S = 1-2 days, M = 3-5 days, L = 5-8 days
 | 16.10 | Clean-DB migration test | new | CI step: spin up empty PostgreSQL, run all migrations 0001–002x, verify `schema_migrations` has all entries, run basic INSERT/SELECT on key tables. Catches migration ordering bugs and missing `IF NOT EXISTS` guards. |
 | 16.11 | Final regression suite | new | Run full CI pipeline (unit tests + E2E + smoke test + coverage check + bundle size) on a clean checkout. Document any flaky tests. All checks must pass green. |
 | 16.12 | Query execution time metrics | new | Add `app_query_duration_seconds` histogram to `/metrics`. Instrument top-5 slowest queries (lightrag search, CRM list, analytics aggregates, embeddings batch, scheduler tick). Alert if p95 > 500ms. |
+| 16.13 | Machine-to-machine auth (API keys) | new | Add `api_keys` table (`id`, `project_id`, `key_hash`, `name`, `scopes`, `expires_at`, `created_at`). New middleware: if `X-API-Key` header present, authenticate via hashed key lookup instead of session cookie. Scoped permissions (`read`, `write`, `admin`). This enables other products (TMA, telegram-assistant-bot, calls, future services) to consume the API without session cookies. Key management via dashboard UI (Iter 14+) or admin CLI. |
+| 16.14 | Extract route handlers from index.js | new | Split `index.js` (~1700 LOC) into route modules: `routes/auth.js`, `routes/crm.js`, `routes/lightrag.js`, `routes/connectors.js`, `routes/jobs.js`, `routes/outbound.js`, `routes/analytics.js`. Each module exports a Fastify plugin `(app, { pool, cache, ... })`. `index.js` becomes thin orchestrator (~200 LOC): bootstrap, middleware, plugin registration. No behavior change — pure refactor. This is the prerequisite for future Core API extraction if the platform scales to multiple products. |
 
 **Exit criteria:**
 - All 28 audit issues resolved (24 remaining + 4 already done: BE-02, BE-09, BE-11, 16.4)
@@ -240,6 +243,8 @@ Effort: S = 1-2 days, M = 3-5 days, L = 5-8 days
 - All migrations pass on clean PostgreSQL
 - CI pipeline fully green (unit + E2E + coverage ≥70% + bundle size)
 - Query p95 < 500ms for top-5 queries
+- API keys work for machine clients (`X-API-Key` header)
+- `index.js` is ≤200 LOC; all route handlers in `routes/*.js` modules
 
 ---
 
@@ -286,6 +291,8 @@ Remaining: 11 + 13 can start now (parallel), then 14, then 16.
 | **B-3: computeClientValueScore → SQL** | LOW priority. Works correctly in JS. Move to matview when performance justifies. |
 | **B-4: use-project-portfolio.js split** | Evaluated — splitting not justified. 335 lines is acceptable for a context hook. |
 | **B-6: Grafana dashboards** | Datasources provisioned. Pre-built dashboards are nice-to-have, not blocking. |
+| **Core API extraction** | If 3+ products consume the dashboard API, extract shared business logic into a standalone Core API service. Prerequisites done in Wave 2: OpenAPI spec (16.9), API-key auth (16.13), route modules (16.14). Trigger: when dashboard deploys break other products, or API needs independent scaling. |
+| **Event bus / webhooks** | For cross-product coordination (e.g., bot creates deal → dashboard syncs immediately). Not needed while eventual consistency via 15-min sync is acceptable. Consider Redis Streams or webhook contracts when real-time coordination required. |
 
 ---
 
@@ -363,8 +370,10 @@ Remaining: 11 + 13 can start now (parallel), then 14, then 16.
 | Iter 16: added 16.10 (clean-DB migration test) | No CI step to verify all migrations run cleanly on empty PostgreSQL. |
 | Iter 16: added 16.11 (final regression suite) | No explicit "all green" gate before release. |
 | Iter 16: added 16.12 (query execution time metrics) | No query performance visibility in `/metrics`. Can't detect slow queries in production. |
-| Iter 16: priority LOW → HIGH, depends on 11–15 | Final iteration must run after everything else. |
-| Total tasks: 59 → 69 | +10 new tasks (3 in Iter 15, 7 in Iter 16). |
+| Iter 16: added 16.13 (machine-to-machine auth / API keys) | Session cookies don't work for service-to-service. Other products (TMA, bot, calls) need API-key auth to consume the API. |
+| Iter 16: added 16.14 (extract route handlers from index.js) | 1700-LOC index.js is the #1 blocker for future Core API extraction. Split into `routes/*.js` modules — pure refactor, no behavior change. |
+| Iter 16: priority LOW → HIGH, effort M → L, depends on 11–15 | Final iteration must run after everything else. 12 tasks now (was 3). |
+| Total tasks: 59 → 71 | +12 new tasks (3 in Iter 15, 9 in Iter 16). |
 
 ---
 
