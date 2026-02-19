@@ -9,6 +9,8 @@ import { fileURLToPath } from "node:url";
 import Fastify from "fastify";
 import cookie from "@fastify/cookie";
 import cors from "@fastify/cors";
+import swagger from "@fastify/swagger";
+import swaggerUi from "@fastify/swagger-ui";
 import bcrypt from "bcrypt";
 
 import { createDbPool } from "./lib/db.js";
@@ -44,6 +46,7 @@ import { createRedisPubSub } from "./lib/redis-pubsub.js";
 import { createSseBroadcaster } from "./lib/sse-broadcaster.js";
 import { createCacheLayer } from "./lib/cache.js";
 import { requiredEnv } from "./lib/utils.js";
+import { createApiKeyAuth } from "./lib/api-keys.js";
 import {
   registerHealthRoutes,
   registerAuthRoutes,
@@ -57,6 +60,7 @@ import {
   registerOfferRoutes,
   registerSignalRoutes,
   registerOutboundRoutes,
+  registerApiKeyRoutes,
 } from "./routes/index.js";
 
 function isBcryptHash(value) {
@@ -358,6 +362,40 @@ async function main() {
     credentials: true,
   });
 
+  await app.register(swagger, {
+    openapi: {
+      info: {
+        title: "Labpics Dashboard API",
+        version: "1.0.0",
+        description: "Operations console API for project management, CRM, signals, and analytics",
+      },
+      tags: [
+        { name: "health", description: "Health and metrics" },
+        { name: "auth", description: "Authentication" },
+        { name: "projects", description: "Project management" },
+        { name: "crm", description: "CRM accounts and opportunities" },
+        { name: "signals", description: "Signals and risk patterns" },
+        { name: "offers", description: "Offers and upsell" },
+        { name: "jobs", description: "Scheduled jobs and sync" },
+        { name: "lightrag", description: "LightRAG search and query" },
+        { name: "connectors", description: "Data source connectors" },
+        { name: "intelligence", description: "Analytics and intelligence" },
+        { name: "outbound", description: "Outbound campaigns" },
+        { name: "data", description: "Portfolio data" },
+      ],
+      components: {
+        securitySchemes: {
+          cookieAuth: { type: "apiKey", in: "cookie", name: "sid" },
+          apiKeyAuth: { type: "apiKey", in: "header", name: "X-API-Key" },
+        },
+      },
+      security: [{ cookieAuth: [] }],
+    },
+  });
+  await app.register(swaggerUi, {
+    routePrefix: "/api-docs",
+  });
+
   // Security headers
   app.addHook("onSend", async (request, reply) => {
     reply.header("X-Frame-Options", "DENY");
@@ -378,6 +416,7 @@ async function main() {
   });
 
   const pool = createDbPool(databaseUrl, app.log);
+  const apiKeyAuthHandler = createApiKeyAuth(pool);
   const currentFile = fileURLToPath(import.meta.url);
   const currentDir = path.dirname(currentFile);
   const migrationsDir = path.join(currentDir, "..", "db", "migrations");
@@ -637,7 +676,7 @@ async function main() {
 
     const rawPath = request.url.split("?")[0];
     const pathName = routePathForAuthCheck(rawPath);
-    const isPublic = pathName === "/health" || pathName === "/metrics" || pathName.startsWith("/auth/");
+    const isPublic = pathName === "/health" || pathName === "/metrics" || pathName.startsWith("/auth/") || pathName.startsWith("/api-docs");
 
     // Rate limit unauthenticated requests by IP (except health/metrics)
     if (!isPublic) {
@@ -648,6 +687,16 @@ async function main() {
     }
 
     if (isPublic) return;
+
+    // API key auth: if X-API-Key header is present, authenticate via key
+    if (request.headers["x-api-key"]) {
+      try {
+        await apiKeyAuthHandler(request);
+        if (request.auth) return; // successfully authenticated via API key
+      } catch (err) {
+        return sendError(reply, requestId, new ApiError(err.statusCode || 401, "unauthorized", err.message));
+      }
+    }
 
     const sid = request.cookies?.[cookieName];
     if (!sid) {
@@ -691,7 +740,7 @@ async function main() {
   app.addHook("preValidation", async (request, reply) => {
     const rawPath = request.url.split("?")[0];
     const pathName = routePathForAuthCheck(rawPath);
-    const isPublic = pathName === "/health" || pathName === "/metrics" || pathName.startsWith("/auth/");
+    const isPublic = pathName === "/health" || pathName === "/metrics" || pathName.startsWith("/auth/") || pathName.startsWith("/api-docs");
     if (isPublic) return;
     if (!request.auth?.session_id) return;
     if (request.auth?.active_project_id && request.auth?.account_scope_id) return;
@@ -754,6 +803,7 @@ async function main() {
   registerOfferRoutes(routeCtx);
   registerSignalRoutes(routeCtx);
   registerOutboundRoutes(routeCtx);
+  registerApiKeyRoutes(routeCtx);
 
 
   app.setErrorHandler((error, request, reply) => {
