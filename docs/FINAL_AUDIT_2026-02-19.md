@@ -37,6 +37,22 @@
 - **Влияние:** CDN/прокси закешируют данные одного пользователя и отдадут другому → **утечка данных**.
 - **Решение:** При реализации использовать `Cache-Control: private` для всех auth'd endpoints. Обновить Issue с пометкой.
 
+### 1.5 [CRITICAL] DB: `idempotency_keys.project_id` без FK constraint
+- **Файл:** `server/db/migrations/0023_idempotency_keys.sql`
+- **Суть:** `project_id uuid NOT NULL` без `REFERENCES projects(id)`. Нарушает referential integrity — orphaned rows при удалении проекта.
+- **Влияние:** Нет CASCADE delete, scope guard trigger не может валидировать корректно.
+- **Решение:** Добавить миграцию 0024:
+  ```sql
+  ALTER TABLE idempotency_keys ADD CONSTRAINT idempotency_keys_project_fk
+    FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE;
+  ```
+
+### 1.6 [CRITICAL] DB: Нет DOWN-миграций (rollback)
+- **Файл:** `server/db/migrate-lib.js`
+- **Суть:** Migration runner поддерживает только forward. Нет rollback capability.
+- **Влияние:** Если миграция ломает production — нет автоматического способа откатить.
+- **Решение:** Документировать rollback процедуру. В migration runner добавить `applyRollback()`. Для критичных миграций — писать paired rollback SQL.
+
 ---
 
 ## 2. ВЫСОКОПРИОРИТЕТНЫЕ ПРОБЛЕМЫ
