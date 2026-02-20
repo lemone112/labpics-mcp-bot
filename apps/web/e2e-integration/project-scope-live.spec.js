@@ -5,21 +5,25 @@ function uniqueProjectName(prefix) {
 }
 
 async function signIn(page, username = "admin", password = "admin") {
+  const consoleLogs = [];
+  page.on("console", (msg) => consoleLogs.push(`[${msg.type()}] ${msg.text()}`));
+  page.on("pageerror", (err) => consoleLogs.push(`[PAGE_ERROR] ${err.message}`));
+  const networkRequests = [];
+  page.on("request", (req) => networkRequests.push(`${req.method()} ${req.url()}`));
+
   await page.goto("/login");
   await expect(page.getByTestId("login-username")).toBeVisible();
   await page.getByTestId("login-username").fill(username);
   await page.getByTestId("login-password").fill(password);
+  await page.getByTestId("login-submit").click();
+  await page.waitForTimeout(5_000);
 
-  // Capture the login API response for debugging
-  const [response] = await Promise.all([
-    page.waitForResponse((res) => res.url().includes("/auth/login"), { timeout: 15_000 }),
-    page.getByTestId("login-submit").click(),
-  ]);
-  const status = response.status();
-  const body = await response.text().catch(() => "");
-  console.log(`[signIn] POST /auth/login → ${status} | ${body.slice(0, 500)}`);
+  const currentUrl = page.url();
+  console.log(`[signIn] URL after click: ${currentUrl}`);
+  console.log(`[signIn] Console:\n${consoleLogs.join("\n")}`);
+  console.log(`[signIn] Network (non-_next):\n${networkRequests.filter((r) => !r.includes("_next")).join("\n")}`);
 
-  await expect(page).toHaveURL(/\/control-tower\/dashboard$/, { timeout: 10_000 });
+  await expect(page).toHaveURL(/\/control-tower\/dashboard$/);
 }
 
 async function createProject(page, name) {
