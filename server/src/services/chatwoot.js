@@ -864,11 +864,13 @@ export async function runChatwootSync(pool, scope, logger = console) {
       updated_at: toIsoTime(inbox?.updated_at || inbox?.created_at),
     });
   }
-  if (inboxRows.length) {
-    touchedInboxes = await upsertInboxesBatch(pool, scope, inboxRows);
-  }
 
+  // Collect all per-conversation data from API before writing to DB.
   const contactsById = new Map();
+  const allConvoRows = [];
+  const allMessageRows = [];
+  const allChunkRows = [];
+  const allAttachmentRows = [];
 
   for (const conversation of conversations) {
     const conversationId = toBigIntOrNull(conversation?.id);
@@ -879,7 +881,7 @@ export async function runChatwootSync(pool, scope, logger = console) {
     const convoContact = extractConversationContact(conversation, scope.projectId, accountId, convoUpdatedAt);
     if (convoContact) contactsById.set(convoContact.id, convoContact);
 
-    await upsertConversation(pool, scope, {
+    allConvoRows.push({
       id: convoGlobalId,
       account_id: Number(accountId),
       conversation_id: conversationId,
@@ -899,9 +901,6 @@ export async function runChatwootSync(pool, scope, logger = console) {
       logger
     );
     const messages = readMessages(msgPayload).slice(-maxMessagesPerConversation);
-    const messageRows = [];
-    const pendingChunkRows = [];
-    const attachmentRows = [];
 
     for (const message of messages) {
       const messageId = toBigIntOrNull(message?.id);
@@ -918,7 +917,7 @@ export async function runChatwootSync(pool, scope, logger = console) {
 
       const convIdRaw = toBigIntOrNull(message?.conversation_id) ?? conversationId;
 
-      messageRows.push({
+      allMessageRows.push({
         id: msgGlobalId,
         account_id: Number(accountId),
         message_id: messageId,
@@ -937,7 +936,7 @@ export async function runChatwootSync(pool, scope, logger = console) {
       processedMessages++;
 
       if (!message?.private) {
-        pendingChunkRows.push(
+        allChunkRows.push(
           ...buildChunkRows({
             conversationGlobalId: convoGlobalId,
             messageGlobalId: msgGlobalId,
@@ -954,7 +953,7 @@ export async function runChatwootSync(pool, scope, logger = console) {
         const attachment = attachments[idx];
         const attachmentId = asTextOrNull(attachment?.id || attachment?.file_id || `${messageId}:${idx}`, 200);
         if (!attachmentId) continue;
-        attachmentRows.push({
+        allAttachmentRows.push({
           id: `cwa:${scope.projectId}:${accountId}:${attachmentId}`,
           account_id: Number(accountId),
           message_global_id: msgGlobalId,
@@ -976,30 +975,66 @@ export async function runChatwootSync(pool, scope, logger = console) {
         newestMsgId = msgGlobalId;
       }
     }
+  }
 
-    if (messageRows.length) {
-      await upsertMessagesBatch(pool, scope, messageRows);
+  // Wrap all DB writes + watermark in a single transaction so the
+  // watermark only advances when every upsert has been committed.
+  const client = await pool.connect();
+  let touchedContacts = 0;
+  try {
+    await client.query("BEGIN");
+
+    if (inboxRows.length) {
+      touchedInboxes = await upsertInboxesBatch(client, scope, inboxRows);
     }
 
-    if (attachmentRows.length) {
-      touchedAttachments += await upsertAttachmentsBatch(pool, scope, attachmentRows);
+    for (const convoRow of allConvoRows) {
+      await upsertConversation(client, scope, convoRow);
     }
 
-    if (pendingChunkRows.length) {
-      const chunkResult = await insertChunkRows(pool, scope, pendingChunkRows);
+    if (allMessageRows.length) {
+      await upsertMessagesBatch(client, scope, allMessageRows);
+    }
+
+    if (allAttachmentRows.length) {
+      touchedAttachments = await upsertAttachmentsBatch(client, scope, allAttachmentRows);
+    }
+
+    if (allChunkRows.length) {
+      const chunkResult = await insertChunkRows(client, scope, allChunkRows);
       insertedChunks += chunkResult.inserted;
       reembeddedChunks += chunkResult.reset_pending;
     }
-  }
 
-  let touchedContacts = 0;
-  if (contactsById.size) {
-    const allContacts = [...contactsById.values()];
-    const batchSize = 200;
-    for (let i = 0; i < allContacts.length; i += batchSize) {
-      const chunk = allContacts.slice(i, i + batchSize);
-      touchedContacts += await upsertContactsBatch(pool, scope, chunk);
+    if (contactsById.size) {
+      const allContacts = [...contactsById.values()];
+      const batchSize = 200;
+      for (let i = 0; i < allContacts.length; i += batchSize) {
+        const chunk = allContacts.slice(i, i + batchSize);
+        touchedContacts += await upsertContactsBatch(client, scope, chunk);
+      }
     }
+
+    await upsertWatermark(client, scope, source, newestTs, newestMsgId, {
+      project_id: scope.projectId,
+      account_scope_id: scope.accountScopeId,
+      processed_conversations: processedConversations,
+      processed_messages: processedMessages,
+      inserted_chunks: insertedChunks,
+      reembedded_chunks: reembeddedChunks,
+      touched_contacts: touchedContacts,
+      touched_inboxes: touchedInboxes,
+      touched_attachments: touchedAttachments,
+      since,
+      synced_at: new Date().toISOString(),
+    });
+
+    await client.query("COMMIT");
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
   }
 
   const storage = await getStorageSummary(pool, scope, storageBudgetGb);
@@ -1013,21 +1048,6 @@ export async function runChatwootSync(pool, scope, logger = console) {
       "database usage is near configured storage budget"
     );
   }
-
-  await upsertWatermark(pool, scope, source, newestTs, newestMsgId, {
-    project_id: scope.projectId,
-    account_scope_id: scope.accountScopeId,
-    processed_conversations: processedConversations,
-    processed_messages: processedMessages,
-    inserted_chunks: insertedChunks,
-    reembedded_chunks: reembeddedChunks,
-    touched_contacts: touchedContacts,
-    touched_inboxes: touchedInboxes,
-    touched_attachments: touchedAttachments,
-    since,
-    synced_at: new Date().toISOString(),
-    storage,
-  });
 
   return {
     source,

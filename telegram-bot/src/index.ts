@@ -6,6 +6,18 @@ import { tgSendMessage } from "./telegram";
 import { isAllowed } from "./services/auth";
 import { menuKeyboard } from "./ui/keyboards";
 
+function timingSafeEqual(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
+  const encoder = new TextEncoder();
+  const left = encoder.encode(a);
+  const right = encoder.encode(b);
+  let result = 0;
+  for (let i = 0; i < left.length; i++) {
+    result |= left[i] ^ right[i];
+  }
+  return result === 0;
+}
+
 function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
     status,
@@ -30,11 +42,12 @@ export default {
 
     // Validate webhook secret to prevent spoofed updates (P1 security)
     const webhookSecret = env.TELEGRAM_WEBHOOK_SECRET;
-    if (webhookSecret) {
-      const headerSecret = request.headers.get("x-telegram-bot-api-secret-token") ?? "";
-      if (headerSecret !== webhookSecret) {
-        return json({ ok: false, error: "unauthorized" }, 401);
-      }
+    if (!webhookSecret) {
+      return json({ ok: false, error: "webhook secret not configured" }, 500);
+    }
+    const headerSecret = request.headers.get("x-telegram-bot-api-secret-token") ?? "";
+    if (!timingSafeEqual(headerSecret, webhookSecret)) {
+      return json({ ok: false, error: "unauthorized" }, 401);
     }
 
     let update: TelegramUpdate;
@@ -61,8 +74,8 @@ export default {
       if (chatId && allowed) {
         try {
           await tgSendMessage(env, chatId, formatUserError(err), menuKeyboard());
-        } catch {
-          // last resort — don't let error reporting break the webhook
+        } catch (sendErr) {
+          console.error("[webhook] failed to send error message to user", sendErr);
         }
       }
 

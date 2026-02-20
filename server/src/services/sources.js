@@ -28,7 +28,14 @@ export async function resolveProjectSourceBinding(pool, scope, sourceKind, fallb
     return fallback;
   } catch (error) {
     if (String(error?.code) === "23505") {
-      throw new Error(`${sourceKind}_source_bound_to_another_project`);
+      const detail = String(error?.detail || "").toLowerCase();
+      if (detail.includes("source_kind") && detail.includes("external_id")) {
+        throw new Error(`${sourceKind}_external_id_already_bound_to_another_project`);
+      }
+      if (detail.includes("project_id") && detail.includes("source_kind")) {
+        throw new Error(`${sourceKind}_project_already_has_binding`);
+      }
+      throw new Error(`${sourceKind}_source_binding_conflict`);
     }
     throw error;
   }

@@ -1,4 +1,4 @@
-import { processDueOutbounds } from "./outbox.js";
+import { processDueOutbounds, cleanupOldOutboundMessages } from "./outbox.js";
 import { runEmbeddings } from "./embeddings.js";
 import { extractSignalsAndNba } from "./signals.js";
 import { refreshUpsellRadar } from "./upsell.js";
@@ -93,6 +93,34 @@ function truncateError(error, max = 1000) {
   return String(error?.message || error || "scheduler_error").slice(0, max);
 }
 
+/** Per-job timeout in milliseconds.  Override via JOB_TIMEOUT_<TYPE>_MS. */
+const DEFAULT_JOB_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes
+
+function jobTimeoutMs(jobType) {
+  const envKey = `JOB_TIMEOUT_${jobType.toUpperCase()}_MS`;
+  const raw = parseInt(process.env[envKey] || "", 10);
+  if (Number.isFinite(raw) && raw > 0) return Math.min(raw, 30 * 60 * 1000);
+  return DEFAULT_JOB_TIMEOUT_MS;
+}
+
+function withTimeout(promise, ms) {
+  let timer;
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`job timed out after ${ms}ms`)), ms);
+  });
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+}
+
+/** Exponential backoff for failed scheduler jobs (capped at 2 hours). */
+function schedulerBackoffSeconds(consecutiveFailures) {
+  const attempt = Math.max(1, Math.min(10, consecutiveFailures));
+  const base = 60; // 1 minute base
+  const seconds = base * Math.pow(2, attempt - 1);
+  const cap = 2 * 60 * 60; // 2 hours
+  const jitter = 1 + (Math.random() - 0.5) * 0.3;
+  return Math.min(cap, Math.round(seconds * jitter));
+}
+
 function createHandlers(customHandlers = {}) {
   const handlers = {
     chatwoot_sync: async ({ pool, scope, logger }) => runConnectorSync(pool, scope, "chatwoot", logger),
@@ -137,6 +165,8 @@ function createHandlers(customHandlers = {}) {
           limit: 300,
         }
       ),
+    outbound_retention_cleanup: async ({ pool, scope, logger }) =>
+      cleanupOldOutboundMessages(pool, scope, logger),
   };
   return { ...handlers, ...customHandlers };
 }
@@ -155,6 +185,7 @@ export async function ensureDefaultScheduledJobs(pool, scope) {
     { jobType: "campaign_scheduler", cadenceSeconds: 300 },
     { jobType: "analytics_aggregates", cadenceSeconds: 1800 },
     { jobType: "loops_contacts_sync", cadenceSeconds: 3600 },
+    { jobType: "outbound_retention_cleanup", cadenceSeconds: 86400 },
   ];
   for (const item of defaults) {
     await pool.query(
@@ -258,8 +289,9 @@ export async function runSchedulerTick(pool, scope, options = {}) {
     const runId = runRows[0]?.id;
 
     try {
+      const timeoutMs = jobTimeoutMs(job.job_type);
       const details = handler
-        ? await handler({ pool, scope, payload: job.payload || {}, logger })
+        ? await withTimeout(handler({ pool, scope, payload: job.payload || {}, logger }), timeoutMs)
         : { status: "ok", skipped: true, reason: "no_handler" };
 
       await pool.query(
@@ -280,6 +312,7 @@ export async function runSchedulerTick(pool, scope, options = {}) {
             last_status = 'ok',
             last_error = NULL,
             next_run_at = now() + (($2::int)::text || ' seconds')::interval,
+            payload = payload - 'consecutive_failures',
             updated_at = now()
           WHERE id = $1
         `,
@@ -301,6 +334,9 @@ export async function runSchedulerTick(pool, scope, options = {}) {
         `,
         [runId, err]
       );
+      const prevFailures = parseInt(job.payload?.consecutive_failures || 0, 10) || 0;
+      const failures = prevFailures + 1;
+      const backoffSec = schedulerBackoffSeconds(failures);
       await pool.query(
         `
           UPDATE scheduled_jobs
@@ -308,11 +344,12 @@ export async function runSchedulerTick(pool, scope, options = {}) {
             last_run_at = now(),
             last_status = 'failed',
             last_error = $2,
-            next_run_at = now() + interval '5 minutes',
+            next_run_at = now() + (($3::int)::text || ' seconds')::interval,
+            payload = jsonb_set(COALESCE(payload, '{}'::jsonb), '{consecutive_failures}', $4::jsonb),
             updated_at = now()
           WHERE id = $1
         `,
-        [job.id, err]
+        [job.id, err, backoffSec, JSON.stringify(failures)]
       );
       stats.failed++;
       stats.details.push({ job_type: job.job_type, status: "failed", error: err });

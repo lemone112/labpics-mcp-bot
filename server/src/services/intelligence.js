@@ -32,6 +32,35 @@ async function computeAnalyticsCore(pool, scope, periodDays = 30) {
           AND account_scope_id = $2
           AND created_at >= (SELECT period_start FROM period_window)
       ),
+      outbound AS (
+        SELECT count(*)::int AS outbound_messages
+        FROM cw_messages
+        WHERE project_id = $1
+          AND account_scope_id = $2
+          AND created_at >= (SELECT period_start FROM period_window)
+          AND message_type = '1'
+      ),
+      response_times AS (
+        SELECT COALESCE(
+          round(avg(EXTRACT(EPOCH FROM (reply.created_at - msg.created_at)) / 60))::int,
+          0
+        ) AS avg_response_minutes
+        FROM cw_messages msg
+        INNER JOIN LATERAL (
+          SELECT created_at FROM cw_messages reply
+          WHERE reply.conversation_id = msg.conversation_id
+            AND reply.project_id = msg.project_id
+            AND reply.account_scope_id = msg.account_scope_id
+            AND reply.message_type = '1'
+            AND reply.created_at > msg.created_at
+          ORDER BY reply.created_at ASC
+          LIMIT 1
+        ) reply ON true
+        WHERE msg.project_id = $1
+          AND msg.account_scope_id = $2
+          AND msg.message_type = '0'
+          AND msg.created_at >= (SELECT period_start FROM period_window)
+      ),
       delivery AS (
         SELECT
           count(*) FILTER (WHERE completed_at IS NULL)::int AS open_issues,
@@ -55,12 +84,14 @@ async function computeAnalyticsCore(pool, scope, periodDays = 30) {
         (SELECT period_end FROM period_window) AS period_end,
         comms.inbound_messages,
         comms.unique_contacts,
+        outbound.outbound_messages,
+        response_times.avg_response_minutes,
         delivery.open_issues,
         delivery.overdue_issues,
         delivery.completed_issues,
         pipeline.pipeline_amount,
         pipeline.expected_revenue
-      FROM comms, delivery, pipeline
+      FROM comms, outbound, response_times, delivery, pipeline
     `,
     [scope.projectId, scope.accountScopeId, periodDays]
   );
@@ -119,11 +150,13 @@ export async function refreshAnalytics(pool, scope, periodDays = 30) {
         avg_response_minutes,
         payload
       )
-      VALUES ($1, $2, $3, $4, $5, 0, $6, 0, '{}'::jsonb)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, '{}'::jsonb)
       ON CONFLICT (project_id, period_start, period_end)
       DO UPDATE SET
         inbound_messages = EXCLUDED.inbound_messages,
+        outbound_messages = EXCLUDED.outbound_messages,
         unique_contacts = EXCLUDED.unique_contacts,
+        avg_response_minutes = EXCLUDED.avg_response_minutes,
         created_at = now()
     `,
     [
@@ -132,7 +165,9 @@ export async function refreshAnalytics(pool, scope, periodDays = 30) {
       periodStart,
       periodEnd,
       Number(core?.inbound_messages || 0),
+      Number(core?.outbound_messages || 0),
       Number(core?.unique_contacts || 0),
+      Number(core?.avg_response_minutes || 0),
     ]
   );
 
@@ -274,13 +309,13 @@ export async function refreshRiskAndHealth(pool, scope) {
   const signalPressure = Math.min(40, severityWeighted / 10);
   const overduePressure = Math.min(30, Number(overdue.rows?.[0]?.overdue_issues || 0) * 2);
   const failedJobPressure = Math.min(20, Number(failedJobs.rows?.[0]?.failed_jobs || 0) * 3);
-  const totalPressure = signalPressure + overduePressure + failedJobPressure;
+  const totalPressure = signalPressure + overduePressure;
   const healthScore = clampScore(100 - totalPressure, 0, 100);
 
   const factors = [
     { key: "signal_pressure", value: Number(signalPressure.toFixed(2)) },
     { key: "overdue_pressure", value: Number(overduePressure.toFixed(2)) },
-    { key: "failed_job_pressure", value: Number(failedJobPressure.toFixed(2)) },
+    { key: "failed_job_pressure", value: Number(failedJobPressure.toFixed(2)), operational_only: true },
   ];
 
   await pool.query(

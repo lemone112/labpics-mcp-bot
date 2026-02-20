@@ -16,6 +16,7 @@ import { syncConnectorEventLog } from "./event-log.js";
 import { failProcessRun, finishProcessRun, startProcessRun, warnProcess } from "./process-log.js";
 import { previewIdentitySuggestions } from "./identity-graph.js";
 import { runSyncReconciliation } from "./reconciliation.js";
+import { withTransaction } from "../lib/db.js";
 
 const CONNECTORS = ["chatwoot", "linear", "attio"];
 
@@ -101,21 +102,35 @@ export async function runConnectorSync(pool, scope, connector, logger = console)
         }
       );
     }
-    const eventSync = await syncConnectorEventLog(pool, scope, {
-      connector: normalizedConnector,
-      since_ts: state?.cursor_ts || result?.since || null,
-      until_ts: result?.cursor_ts || new Date().toISOString(),
+    let eventSync = null;
+    try {
+      eventSync = await syncConnectorEventLog(pool, scope, {
+        connector: normalizedConnector,
+        since_ts: state?.cursor_ts || result?.since || null,
+        until_ts: result?.cursor_ts || new Date().toISOString(),
+      });
+    } catch (eventLogErr) {
+      const eventLogMsg = String(eventLogErr?.message || eventLogErr);
+      logger.error(
+        { connector: normalizedConnector, error: eventLogMsg },
+        "event log sync failed (non-fatal)"
+      );
+      await warnProcess(pool, scope, `sync_${normalizedConnector}`, "Event log sync failed", {
+        payload: { connector: normalizedConnector, error: eventLogMsg },
+      });
+    }
+    const resolvedErrors = await withTransaction(pool, async (client) => {
+      await markConnectorSyncSuccess(client, scope, normalizedConnector, mode, {
+        cursor_ts: result?.cursor_ts || null,
+        cursor_id: result?.cursor_id || null,
+        page_cursor: null,
+        meta: {
+          ...result,
+          event_log: eventSync,
+        },
+      });
+      return resolveConnectorErrors(client, scope, normalizedConnector);
     });
-    await markConnectorSyncSuccess(pool, scope, normalizedConnector, mode, {
-      cursor_ts: result?.cursor_ts || null,
-      cursor_id: result?.cursor_id || null,
-      page_cursor: null,
-      meta: {
-        ...result,
-        event_log: eventSync,
-      },
-    });
-    const resolvedErrors = await resolveConnectorErrors(pool, scope, normalizedConnector);
     await finishProcessRun(pool, scope, run, {
       counters: {
         resolved_errors: resolvedErrors,

@@ -63,7 +63,7 @@ export async function handleCallback(env: Env, update: TelegramUpdate): Promise<
     case CallbackOp.PA:
       return handlePickerCallback(env, chatId, fromId, "PA", parsed.args[0] ?? "");
     case CallbackOp.D:
-      return handleDraftCallback(env, chatId, parsed.args);
+      return handleDraftCallback(env, chatId, fromId, parsed.args);
     default:
       await tgSendMessage(env, chatId, "Unsupported action.", menuKeyboard());
   }

@@ -29,6 +29,8 @@
    - [`docs/scenarios.md`](./scenarios.md)
 10. План развития:
    - [`docs/mvp-vs-roadmap.md`](./mvp-vs-roadmap.md)
+   - [`docs/iteration-plan-wave2.md`](./iteration-plan-wave2.md) — Wave 2 (Iter 10–16)
+   - [`docs/iteration-plan-wave3.md`](./iteration-plan-wave3.md) — Wave 3 (Iter 44–51)
 11. Спеки:
    - [`docs/specs/README.md`](./specs/README.md)
 12. Термины:

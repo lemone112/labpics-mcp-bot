@@ -66,7 +66,7 @@ export function registerAuthRoutes(ctx) {
         entityType: "session", entityId: null, status: "failed",
         requestId: request.requestId,
         payload: { ip: request.ip }, evidenceRefs: [],
-      }).catch(() => {});
+      }).catch((err) => console.error({ action: "audit_write_failed", error: String(err?.message || err) }, "auth audit event failed"));
       return sendError(reply, request.requestId, new ApiError(401, "invalid_credentials", "Invalid credentials"));
     }
 
@@ -78,7 +78,7 @@ export function registerAuthRoutes(ctx) {
       entityType: "session", entityId: sid, status: "ok",
       requestId: request.requestId,
       payload: { ip: request.ip }, evidenceRefs: [],
-    }).catch(() => {});
+    }).catch((err) => console.error({ action: "audit_write_failed", error: String(err?.message || err) }, "auth audit event failed"));
 
     reply.setCookie(cookieName, sid, cookieOptions);
     reply.setCookie(csrfCookieName, csrfToken, csrfCookieOptions);
@@ -122,7 +122,7 @@ export function registerAuthRoutes(ctx) {
         entityType: "session", entityId: sid, status: "ok",
         requestId: request.requestId,
         payload: { ip: request.ip }, evidenceRefs: [],
-      }).catch(() => {});
+      }).catch((err) => console.error({ action: "audit_write_failed", error: String(err?.message || err) }, "auth audit event failed"));
     }
     reply.clearCookie(cookieName, cookieOptions);
     reply.clearCookie(csrfCookieName, csrfCookieOptions);

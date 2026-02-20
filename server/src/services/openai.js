@@ -29,11 +29,14 @@ function parseEmbeddingsResponse(text) {
   }
 
   const data = Array.isArray(parsed?.data) ? parsed.data : [];
-  return data.map((row) => row?.embedding).filter((embedding) => Array.isArray(embedding));
+  const embeddings = data.map((row) => row?.embedding).filter((embedding) => Array.isArray(embedding));
+  const totalTokens = parsed?.usage?.total_tokens || 0;
+  return { embeddings, totalTokens };
 }
 
-async function createEmbeddingsBatch({ apiKey, model, inputs, timeoutMs, logger }) {
-  const res = await fetchWithRetry("https://api.openai.com/v1/embeddings", {
+async function createEmbeddingsBatch({ apiKey, model, inputs, timeoutMs, baseUrl, logger }) {
+  const url = `${baseUrl}/embeddings`;
+  const res = await fetchWithRetry(url, {
     method: "POST",
     timeoutMs,
     retries: 2,
@@ -50,11 +53,11 @@ async function createEmbeddingsBatch({ apiKey, model, inputs, timeoutMs, logger 
     throw new Error(`OpenAI embeddings failed (${res.status})`);
   }
 
-  const embeddings = parseEmbeddingsResponse(text);
-  if (embeddings.length !== inputs.length) {
-    throw new Error(`OpenAI embeddings count mismatch: got ${embeddings.length}, expected ${inputs.length}`);
+  const result = parseEmbeddingsResponse(text);
+  if (result.embeddings.length !== inputs.length) {
+    throw new Error(`OpenAI embeddings count mismatch: got ${result.embeddings.length}, expected ${inputs.length}`);
   }
-  return embeddings;
+  return result;
 }
 
 export async function createEmbeddings(inputs, logger = console) {
@@ -63,27 +66,37 @@ export async function createEmbeddings(inputs, logger = console) {
   if (!input.length) return { model, embeddings: [] };
 
   const apiKey = requiredEnv("OPENAI_API_KEY");
+  const baseUrl = (process.env.OPENAI_BASE_URL || "https://api.openai.com/v1").replace(/\/+$/, "");
   const timeoutMs = toPositiveInt(process.env.OPENAI_TIMEOUT_MS, 20_000, 1_000, 120_000);
   const maxInputsPerRequest = toPositiveInt(process.env.OPENAI_EMBED_MAX_INPUTS, 100, 1, 100);
   const expectedDim = toPositiveInt(process.env.EMBEDDING_DIM, 1536, 128, 4096);
 
+  const tokenBudget = toPositiveInt(process.env.OPENAI_TOKEN_BUDGET_PER_RUN, 500_000, 1000, 10_000_000);
+
   const chunks = chunkArray(input, maxInputsPerRequest);
   const embeddings = [];
+  let totalTokens = 0;
   for (const chunk of chunks) {
-    const batchEmbeddings = await createEmbeddingsBatch({
+    if (totalTokens >= tokenBudget) {
+      logger.warn({ totalTokens, tokenBudget, remaining: input.length - embeddings.length }, "token budget exceeded, stopping batch");
+      break;
+    }
+    const batchResult = await createEmbeddingsBatch({
       apiKey,
       model,
       inputs: chunk,
       timeoutMs,
+      baseUrl,
       logger,
     });
-    embeddings.push(...batchEmbeddings);
+    // Validate dimensions immediately after each batch to fail fast
+    const batchWrongDim = batchResult.embeddings.find((v) => v.length !== expectedDim);
+    if (batchWrongDim) {
+      throw new Error(`OpenAI embeddings dimension mismatch. Expected ${expectedDim}, got ${batchWrongDim.length}`);
+    }
+    embeddings.push(...batchResult.embeddings);
+    totalTokens += batchResult.totalTokens;
   }
 
-  const wrongDim = embeddings.find((vector) => vector.length !== expectedDim);
-  if (wrongDim) {
-    throw new Error(`OpenAI embeddings dimension mismatch. Expected ${expectedDim}, got ${wrongDim.length}`);
-  }
-
-  return { model, embeddings };
+  return { model, embeddings, totalTokens, budgetExhausted: embeddings.length < input.length };
 }

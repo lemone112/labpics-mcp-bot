@@ -98,16 +98,27 @@ export function registerHealthRoutes(ctx) {
 
     const cleanup = sseBroadcaster.addClient(projectId, reply, request.auth?.session_id || null);
 
-    // Heartbeat every 30s to keep connection alive
+    // Heartbeat every 25s to keep connection alive (below common 30s proxy timeouts)
     const heartbeat = setInterval(() => {
       try {
+        if (reply.raw.destroyed || !reply.raw.writable) {
+          clearInterval(heartbeat);
+          cleanup();
+          return;
+        }
         reply.raw.write(": heartbeat\n\n");
       } catch {
         clearInterval(heartbeat);
+        cleanup();
       }
-    }, 30_000);
+    }, 25_000);
 
     request.raw.on("close", () => {
+      clearInterval(heartbeat);
+      cleanup();
+    });
+
+    request.raw.on("error", () => {
       clearInterval(heartbeat);
       cleanup();
     });
