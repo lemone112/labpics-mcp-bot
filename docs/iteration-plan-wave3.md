@@ -1,6 +1,6 @@
-# Unified Iteration Plan — All Open Work (262 issues)
+# Unified Iteration Plan — All Open Work (276 issues)
 
-> Обновлено: 2026-02-20 (v5 — post-critique)
+> Обновлено: 2026-02-20 (v6 — monorepo restructure)
 > Source of truth: [GitHub Milestones](https://github.com/lemone112/labpics-dashboard/milestones)
 >
 > **Контекст:** Design studio lab.pics, 2–5 PM + Owner, 5–10 активных проектов,
@@ -10,6 +10,7 @@
 > **NEW:** 6-agent parallel critique (2026-02-20) — see `docs/critique-findings-2026-02-20.md`.
 > Closed Iter 27–43 — superseded (roadmap placeholders).
 > ✅ **Iter 55 — DONE** (committed as `27200c0`, all 306 tests pass).
+> ✅ **Iter 61-63, 52-54 — DONE** (Phase 0 critical fixes + TS migration of lib/).
 
 ---
 
@@ -52,6 +53,7 @@ Phase 6 — Mobile & Responsive
   Iter 22  Mobile & Responsive ─────────── 8 tasks  P1
 
 Phase 7 — Quality & Tech Debt
+  Iter 64  Monorepo Restructure & Docs ── 14 tasks  P1  ← apps/ layout, docs cleanup        NEW
   Iter 16  QA & Release Readiness ──────── 3 tasks  HIGH
   Iter 24  Design Validation & QA ──────── 9 tasks  P1
   Iter 25  Performance & Caching ────────── 9 tasks  P2
@@ -69,7 +71,7 @@ Phase 9 — Comprehensive Testing ★★★ (incremental, not final-phase-only)
   Iter 60  TG Bot & Performance Testing ── 8 tasks  P1
 ```
 
-**Total: 262 issues across 32 iterations in 10 phases.**
+**Total: 276 issues across 33 iterations in 10 phases.**
 
 ### Key changes from v4 → v5 (critique-driven):
 - **NEW Phase 0** — 3 new iterations (61-63) for critique findings not in any existing plan
@@ -121,7 +123,8 @@ Phase 5 (lowered priority):                                ▼
   Iter 51 (TG Bot Advanced) ← requires 50
 
 Phase 6: Iter 22 (Mobile) ← requires 21
-Phase 7: Iter 16, 24, 25, 26, 15 — parallel, independent
+Phase 7: Iter 64 (Monorepo) — no deps, best done early
+         Iter 16, 24, 25, 26, 15 — parallel, independent
 Phase 8: Iter 55 ✅ DONE, Iter 56 (Config) — P2
 
 Phase 9 (incremental, not sequential):
@@ -413,6 +416,79 @@ Fix 3x connector bottleneck (sequential → parallel). Quick wins.
 ---
 
 ## Phase 7 — Quality & Tech Debt (39 tasks)
+
+### Iter 64 — Monorepo Restructure & Documentation Cleanup (P1, 14 tasks) ★ NEW
+
+> **Задача:** Привести репозиторий к идеальной `apps/` структуре и навести порядок в документации.
+> Нет зависимостей — можно делать в любой момент (но лучше до масштабных UI изменений).
+> **Приоритет P1** — не блокирует фичи, но критично для developer velocity и onboarding.
+
+**Целевая структура:**
+```
+labpics-dashboard/
+├── apps/
+│   ├── api/                    # ← server/ (Fastify API + worker)
+│   │   ├── src/
+│   │   │   ├── domains/        # ← services/ → группировка по доменам
+│   │   │   │   ├── connectors/ #   connector-sync, connector-state
+│   │   │   │   ├── crm/        #   accounts, opportunities, offers
+│   │   │   │   ├── analytics/  #   intelligence, analytics, upsell, signals
+│   │   │   │   ├── rag/        #   embeddings, lightrag, search, chunking
+│   │   │   │   ├── outbound/   #   outbox, campaigns, opt-out
+│   │   │   │   └── identity/   #   identity-graph, recommendations
+│   │   │   ├── infra/          # ← lib/ (db, redis, http, cache, sse, etc.)
+│   │   │   ├── routes/         #   HTTP route handlers
+│   │   │   └── types/          #   shared TypeScript types
+│   │   ├── migrations/         #   SQL migrations
+│   │   ├── test/               #   unit + integration tests
+│   │   ├── Dockerfile
+│   │   └── package.json
+│   ├── web/                    # ← web/ (Next.js frontend)
+│   │   └── src/                #   app/, features/, hooks/, components/
+│   └── telegram-bot/           # ← telegram-bot/ (TG assistant)
+├── packages/
+│   └── shared-types/           # cross-service TypeScript types
+├── docs/
+│   ├── architecture/           #   system diagrams, data model, API
+│   ├── product/                #   decisions, glossary, overview, scenarios
+│   ├── specs/                  #   feature specifications (0001-0017)
+│   ├── design/                 #   design system, motion, components (from web/*.md)
+│   ├── operations/             #   deployment, runbooks, rollback
+│   ├── iterations/             #   iteration plans, logs, backlog
+│   └── audits/                 #   audit reports, critique findings
+├── infra/
+│   ├── caddy/
+│   └── scripts/                # ← scripts/ (smoke tests, utilities)
+├── docker-compose.yml
+├── package.json                #   npm workspaces root
+└── CLAUDE.md
+```
+
+| # | Task | Priority | Описание |
+|---|------|----------|----------|
+| 64.1 | Create `apps/` directory, move `server/` → `apps/api/` | P0 | Переименование, обновление docker-compose.yml build context |
+| 64.2 | Move `web/` → `apps/web/` | P0 | Обновление docker-compose.yml, Caddyfile paths |
+| 64.3 | Move `telegram-bot/` → `apps/telegram-bot/` | P0 | Обновление docker-compose.yml profile |
+| 64.4 | Reorganize `services/` → `domains/` (6 domain groups) | P1 | connectors, crm, analytics, rag, outbound, identity |
+| 64.5 | Rename `lib/` → `infra/` with internal grouping | P1 | db, redis, http, cache, sse, rate-limit, etc. |
+| 64.6 | Add npm workspaces to root `package.json` | P0 | `"workspaces": ["apps/*", "packages/*"]` |
+| 64.7 | Create `packages/shared-types/` scaffold | P1 | Cross-service types (ProjectScope, AuthPayload, Logger) |
+| 64.8 | Reorganize `docs/` into category subfolders | P1 | architecture/, product/, specs/, design/, operations/, iterations/, audits/ |
+| 64.9 | Move `web/*.md` design docs → `docs/design/` | P1 | DESIGN_SYSTEM_2026, MOTION_GUIDELINES, COMPONENT_SELECTION, QUALITY_GATES |
+| 64.10 | Clean up obsolete/duplicate docs | P1 | Remove stale audit drafts, merge overlapping files, update cross-references |
+| 64.11 | Move `scripts/` → `infra/scripts/` | P2 | Smoke tests, utilities consolidated under infra |
+| 64.12 | Update all Dockerfiles for new paths | P0 | Build contexts, COPY paths, WORKDIR |
+| 64.13 | Update CI/CD workflows for new paths | P1 | If any GitHub Actions exist |
+| 64.14 | Update CLAUDE.md and README.md for new structure | P0 | Monorepo structure section, path references |
+
+**Правила рефакторинга:**
+- Каждый шаг — отдельный коммит (откат без потерь)
+- Все import paths обновляются автоматически (IDE refactor или скрипт)
+- Docker build проверяется после каждого перемещения
+- `npm test` и `npm run lint` проходят после каждого шага
+- Документация обновляется in-place (не создаём новые файлы, пока не перенесём старые)
+
+---
 
 ### Iter 16 — QA & Release Readiness (3 open tasks)
 
@@ -751,6 +827,10 @@ Full-stack интеграционные тесты с реальной PostgreSQ
 
 ## Changelog
 
+- **v6** (2026-02-20): **Monorepo restructure iteration** — added Iter 64 (14 tasks) for full `apps/` layout
+  migration + documentation cleanup. Placed in Phase 7 (Quality & Tech Debt) with P1 priority.
+  Target: ideal `apps/api/`, `apps/web/`, `apps/telegram-bot/` structure with domain-grouped services,
+  `packages/shared-types/`, and categorized `docs/` subfolders. 276 total issues across 33 iterations.
 - **v5** (2026-02-20): **6-agent parallel critique** — 86 verified findings across Security, Backend,
   DB/RAG, Business, Frontend, QA agents. Added Phase 0 with 3 new iterations (Iter 61-63, 24 tasks).
   Expanded Iter 53 (+4 tasks), Iter 54 (+2 tasks, raised P1→P0). Reprioritized: LightRAG CRITICAL→P1,
