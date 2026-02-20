@@ -61,6 +61,7 @@ docs/
 6. **Итерации:**
    - [`iterations/iteration-plan-wave2.md`](./iterations/iteration-plan-wave2.md) — Wave 2 (Iter 10–16)
    - [`iterations/iteration-plan-wave3.md`](./iterations/iteration-plan-wave3.md) — Wave 3 (Iter 44–51)
+   - [`iterations/iteration-now-priorities.md`](./iterations/iteration-now-priorities.md) — текущий фокус (что берём в работу сейчас)
    - [`iterations/iteration-log.md`](./iterations/iteration-log.md) — лог итераций
    - [`iterations/backlog.md`](./iterations/backlog.md) — бэклог
 
