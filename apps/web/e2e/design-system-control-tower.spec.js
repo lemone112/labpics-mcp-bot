@@ -27,6 +27,11 @@ function emptyPortfolioPayload() {
 }
 
 async function installMocks(page, { hasProjects = true } = {}) {
+  // Middleware requires a session cookie to allow access to protected pages
+  await page.context().addCookies([
+    { name: "sid", value: "mock-session-for-e2e", domain: "localhost", path: "/" },
+  ]);
+
   await page.route("**/api/**", async (route) => {
     const request = route.request();
     const method = request.method();
