@@ -64,7 +64,7 @@ export function NavBadge({
     return (
       <span
         className={cn(
-          "inline-flex items-center rounded-sm px-1 py-px text-[9px] font-bold uppercase leading-tight",
+          "inline-flex items-center rounded-sm px-1 py-px text-[9px] font-bold tracking-wide leading-tight",
           severityClass,
           className,
         )}

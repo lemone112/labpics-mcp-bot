@@ -7,6 +7,7 @@ import { syncLoopsContacts } from "../outbound/loops.js";
 import { retryConnectorErrors, runAllConnectorsSync, runConnectorSync } from "../connectors/connector-sync.js";
 import { runSyncReconciliation } from "../connectors/reconciliation.js";
 import { toPositiveInt } from '../../infra/utils.js';
+import { createReportGenerationHandler } from "../analytics/report-scheduler.js";
 
 // ── Job duration metrics (44.2) ─────────────────────────────────
 // Lightweight in-memory histograms per job type. No external dependency needed.
@@ -312,6 +313,7 @@ function createHandlers(customHandlers = {}, options = {}) {
       ),
     outbound_retention_cleanup: async ({ pool, scope, logger }) =>
       cleanupOldOutboundMessages(pool, scope, logger),
+    report_generation: createReportGenerationHandler(),
   };
   return { ...handlers, ...customHandlers };
 }
@@ -335,6 +337,7 @@ export async function ensureDefaultScheduledJobs(pool, scope) {
     { jobType: "analytics_aggregates", cadenceSeconds: 1800 },
     { jobType: "loops_contacts_sync", cadenceSeconds: 3600 },
     { jobType: "outbound_retention_cleanup", cadenceSeconds: 86400 },
+    { jobType: "report_generation", cadenceSeconds: 3600 },
   ];
   for (const item of defaults) {
     await pool.query(

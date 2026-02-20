@@ -103,8 +103,7 @@ function ProgressBar({ value, className }) {
     <div className={cn("h-1.5 w-full overflow-hidden rounded-full bg-muted", className)}>
       <div
         ref={barRef}
-        className="h-full rounded-full bg-primary transition-colors"
-        style={{ width: `${value}%` }}
+        className="h-full rounded-full bg-primary transition-colors w-0"
       />
     </div>
   );
