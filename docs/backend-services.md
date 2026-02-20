@@ -136,42 +136,29 @@ server/src/
 
 > KAG pipeline (kag.js + kag/ directory) полностью удалён в Iter 10.
 
-#### forecasting.js (dead-code — [#117](https://github.com/lemone112/labpics-dashboard/issues/117))
-| | |
-|-|-|
-| **Назначение** | Прогнозирование рисков 7/14/30 дней |
-| **Статус** | **Нет вызывающего кода** после удаления KAG routes и scheduler jobs. Зависит от kag_risk_forecasts, kag_signals, kag_scores. Решение: удалить или рефакторить для LightRAG (Iter 11/16) |
-| **Tables** | kag_risk_forecasts, kag_signals, kag_scores, case_signatures, past_case_outcomes |
+#### ~~forecasting.js~~ — удалён (Iter 10, [#117](https://github.com/lemone112/labpics-dashboard/issues/117))
 
-#### recommendations-v2.js (dead-code — [#117](https://github.com/lemone112/labpics-dashboard/issues/117))
-| | |
-|-|-|
-| **Назначение** | Enhanced рекомендации с evidence gating |
-| **Статус** | **Нет вызывающего кода** после удаления KAG scheduler jobs. Зависит от kag_signals, kag_scores. Решение: удалить или рефакторить |
-| **Tables** | recommendations_v2, kag_signals, kag_scores, kag_risk_forecasts |
+Прогнозирование рисков. Файл удалён вместе с KAG pipeline. Функциональность заменена `intelligence.js` (risk/health refresh).
 
-#### recommendation-actions.js
+#### ~~recommendations-v2.js~~ — удалён (Iter 10, [#117](https://github.com/lemone112/labpics-dashboard/issues/117))
+
+Enhanced рекомендации с evidence gating. Файл удалён вместе с KAG pipeline.
+
+#### recommendation-actions.js (orphaned — не импортируется)
 | | |
 |-|-|
 | **Назначение** | Исполнение действий по рекомендациям |
 | **Exported** | `runRecommendationAction`, `listRecommendationActionRuns`, `retryRecommendationActionRun` |
 | **Tables** | recommendation_action_runs, recommendations_v2 |
-| **Action types** | create_or_update_task, send_message, set_reminder |
+| **Статус** | Файл существует, но **не импортируется** ни в routes, ни в scheduler. Кандидат на удаление. |
 
-#### similarity.js
-| | |
-|-|-|
-| **Назначение** | Case-based reasoning |
-| **Exported** | `rebuildCaseSignatures(pool, scope)`, `findSimilarCases(pool, scope, query, limit)` |
-| **Tables** | case_signatures, project_snapshots, past_case_outcomes |
-| **Cadence** | 1/week (case_signatures_refresh) |
+#### ~~similarity.js~~ — удалён
 
-#### snapshots.js (dead-code — [#117](https://github.com/lemone112/labpics-dashboard/issues/117))
-| | |
-|-|-|
-| **Назначение** | Дневные снимки состояния проектов |
-| **Статус** | **Нет вызывающего кода** после удаления kag_daily_pipeline scheduler job |
-| **Tables** | project_snapshots, past_case_outcomes |
+Case-based reasoning. Файл удалён вместе с KAG pipeline.
+
+#### ~~snapshots.js~~ — удалён (Iter 10, [#117](https://github.com/lemone112/labpics-dashboard/issues/117))
+
+Дневные снимки состояния проектов. Файл удалён вместе с KAG pipeline.
 
 ### 3.3 RAG & LightRAG
 
@@ -302,12 +289,19 @@ server/src/
 
 ## 4) API Endpoints — полный реестр
 
+> Каноническая reference: [`docs/api.md`](./api.md) (87 endpoints, 80 protected, 7 public).
+> Ниже — сводка по доменам для быстрой навигации.
+
 ### Auth & Session
 | Method | Path | Handler | Auth |
 |--------|------|---------|------|
 | POST | `/auth/login` | Login with credentials | No |
-| GET | `/auth/me` | Current user info | Yes |
+| GET | `/auth/me` | Current user info + CSRF | Yes |
 | POST | `/auth/logout` | Destroy session | Yes |
+| GET | `/auth/signup/status` | Signup status (410) | No |
+| POST | `/auth/signup/start` | Start signup (410) | No |
+| POST | `/auth/signup/confirm` | Confirm signup (410) | No |
+| POST | `/auth/telegram/webhook` | Telegram webhook (410) | No |
 | GET | `/health` | Health check | No |
 | GET | `/metrics` | Prometheus metrics | No |
 
@@ -340,17 +334,33 @@ server/src/
 | GET | `/jobs/scheduler` | Scheduler configuration |
 | POST | `/jobs/scheduler/tick` | Manual scheduler tick |
 
-### RAG & Search
+### Connectors (продолжение)
 | Method | Path | Handler |
 |--------|------|---------|
-| POST | `/search` | Vector similarity search |
+| GET | `/connectors/reconciliation/diff` | Reconciliation diff |
+| GET | `/connectors/errors/dead-letter` | Dead-letter errors |
+| POST | `/connectors/errors/dead-letter/:id/retry` | Retry dead-letter |
+
+### LightRAG & Search
+| Method | Path | Handler |
+|--------|------|---------|
+| POST | `/lightrag/query` | LightRAG query |
+| POST | `/lightrag/refresh` | Refresh embeddings |
+| GET | `/lightrag/status` | Embeddings status |
+| POST | `/lightrag/feedback` | Query feedback |
+| POST | `/search` | Legacy alias → LightRAG query |
+
+### SSE (Real-time)
+| Method | Path | Handler |
+|--------|------|---------|
+| GET | `/events/stream` | Server-Sent Events stream |
 
 ### Data (raw)
 | Method | Path | Handler |
 |--------|------|---------|
-| GET | `/contacts` | Chatwoot contacts |
-| GET | `/conversations` | Chatwoot conversations |
-| GET | `/messages` | Chatwoot messages |
+| GET | `/contacts` | Contacts (search) |
+| GET | `/conversations` | Conversations |
+| GET | `/messages` | Messages (filter by conversation) |
 
 ### Signals & NBA
 | Method | Path | Handler |
@@ -411,6 +421,7 @@ server/src/
 | POST | `/outbound/:id/send` | Send outbound |
 | POST | `/outbound/opt-out` | Set opt-out |
 | POST | `/outbound/process` | Process due outbounds |
+| GET | `/outbound` | List outbound messages |
 
 ### Email Marketing
 | Method | Path | Handler |
@@ -427,11 +438,18 @@ server/src/
 | GET | `/continuity/actions` | List actions |
 | POST | `/continuity/apply` | Apply actions |
 
-### Audit
+### Audit & Evidence
 | Method | Path | Handler |
 |--------|------|---------|
 | GET | `/audit` | Audit events |
-| GET | `/evidence/search` | Search evidence |
+| GET | `/evidence/search` | Full-text evidence search |
+
+### API Keys
+| Method | Path | Handler |
+|--------|------|---------|
+| GET | `/api-keys` | List project API keys |
+| POST | `/api-keys` | Create API key |
+| POST | `/api-keys/revoke` | Revoke API key |
 
 ---
 
@@ -493,7 +511,7 @@ index.js (routes)
        └── scheduler.js → scheduled_jobs, worker_runs
             └── triggers all jobs above on cadence
 
-       (dead-code: forecasting.js, recommendations-v2.js, snapshots.js — see #117)
+       (удалены: forecasting.js, recommendations-v2.js, similarity.js, snapshots.js — #117)
 ```
 
 ---

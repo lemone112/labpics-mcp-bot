@@ -170,8 +170,8 @@ export default function SignalsFeaturePage() {
         <Card data-motion-item>
           <CardHeader className="flex-row items-center justify-between">
             <CardTitle>Действия</CardTitle>
-            <Button size="sm" variant="outline" onClick={load} disabled={busy}>
-              {busy ? "Обновление..." : "Обновить"}
+            <Button size="sm" variant="outline" onClick={load} loading={busy}>
+              Обновить
             </Button>
           </CardHeader>
           <CardContent className="flex flex-wrap gap-2">

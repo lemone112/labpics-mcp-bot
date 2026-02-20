@@ -93,8 +93,8 @@ export default function AnalyticsFeaturePage() {
         <Card data-motion-item>
           <CardHeader className="flex-row items-center justify-between">
             <CardTitle>Обновить снэпшоты</CardTitle>
-            <Button variant="outline" size="sm" onClick={load} disabled={busy}>
-              {busy ? "Обновление..." : "Обновить"}
+            <Button variant="outline" size="sm" onClick={load} loading={busy}>
+              Обновить
             </Button>
           </CardHeader>
           <CardContent className="flex flex-wrap gap-2">

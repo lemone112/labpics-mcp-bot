@@ -144,8 +144,8 @@ export default function OffersFeaturePage() {
         <Card data-motion-item>
           <CardHeader className="flex-row items-center justify-between">
             <CardTitle>Создать оффер</CardTitle>
-            <Button variant="outline" size="sm" onClick={load} disabled={busy}>
-              {busy ? "Обновление..." : "Обновить"}
+            <Button variant="outline" size="sm" onClick={load} loading={busy}>
+              Обновить
             </Button>
           </CardHeader>
           <CardContent className="grid grid-cols-1 gap-2 md:grid-cols-4">

@@ -103,14 +103,11 @@ export default function ProjectsFeaturePage() {
                         <Button
                           variant={activeProjectId === project.id ? "secondary" : "outline"}
                           size="sm"
+                          loading={activatingProjectId === String(project.id)}
                           disabled={busy}
                           onClick={() => onSelect(project.id)}
                         >
-                          {activatingProjectId === String(project.id)
-                            ? "Переключение..."
-                            : activeProjectId === project.id
-                              ? "Активен"
-                              : "Выбрать"}
+                          {activeProjectId === project.id ? "Активен" : "Выбрать"}
                         </Button>
                       </TableCell>
                     </TableRow>
