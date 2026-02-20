@@ -56,13 +56,25 @@ export function createSseBroadcaster(logger = console) {
 
     const payload = `event: ${eventType}\ndata: ${JSON.stringify(data)}\n\n`;
     let sent = 0;
-    for (const { reply } of projectClients) {
+    const dead = [];
+    for (const entry of projectClients) {
       try {
-        reply.raw.write(payload);
+        if (entry.reply.raw.destroyed === true || entry.reply.raw.writable === false) {
+          dead.push(entry);
+          continue;
+        }
+        entry.reply.raw.write(payload);
         sent++;
       } catch {
-        // Client disconnected; will be cleaned up by the close handler
+        dead.push(entry);
       }
+    }
+    for (const entry of dead) {
+      projectClients.delete(entry);
+      totalConnections = Math.max(0, totalConnections - 1);
+    }
+    if (projectClients.size === 0) {
+      clients.delete(projectId);
     }
     return sent;
   }

@@ -14,18 +14,31 @@ export function createRedisClient({ url, logger = console, name = "redis" } = {}
     return null;
   }
 
+  const maxRetries = parseInt(process.env.REDIS_MAX_RETRIES || "", 10) || 20;
+
   const client = new Redis(redisUrl, {
     maxRetriesPerRequest: 3,
     retryStrategy(times) {
-      if (times > 10) return null; // stop retrying after 10 attempts
-      return Math.min(times * 500, 5000);
+      if (times > maxRetries) return null;
+      const baseMs = Math.min(times * 500, 30_000);
+      const jitter = Math.floor(Math.random() * Math.min(times * 100, 2000));
+      return baseMs + jitter;
     },
     lazyConnect: false,
     connectionName: name,
+    enableReadyCheck: true,
+    reconnectOnError(err) {
+      const msg = String(err?.message || "");
+      return msg.includes("READONLY") || msg.includes("ECONNRESET");
+    },
   });
 
   client.on("connect", () => {
     logger.info({ name }, "redis connected");
+  });
+
+  client.on("ready", () => {
+    logger.info({ name }, "redis ready");
   });
 
   client.on("error", (err) => {
@@ -34,6 +47,10 @@ export function createRedisClient({ url, logger = console, name = "redis" } = {}
 
   client.on("close", () => {
     logger.info({ name }, "redis connection closed");
+  });
+
+  client.on("reconnecting", (delay) => {
+    logger.info({ name, delay }, "redis reconnecting");
   });
 
   return client;

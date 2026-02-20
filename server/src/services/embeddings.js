@@ -170,6 +170,10 @@ export async function runEmbeddings(pool, scope, logger = console) {
   try {
     const result = await createEmbeddings(claimedRows.map((row) => row.text), logger);
     model = result.model || model;
+    const totalTokens = result.totalTokens || 0;
+    if (totalTokens > 0) {
+      logger.info({ model, totalTokens, chunks: claimedRows.length }, "embedding tokens used");
+    }
 
     const readyRows = [];
     const retryIds = [];
@@ -204,6 +208,7 @@ export async function runEmbeddings(pool, scope, logger = console) {
       failed: retryIds.length,
       status: "ok",
       model,
+      totalTokens,
     };
   } catch (error) {
     await markClaimedAsPending(pool, scope, claimedIds, error);

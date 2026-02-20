@@ -110,9 +110,22 @@ export async function fetchWithRetry(url, options = {}) {
       clearTimeout(timer);
 
       if (attempt < retries && shouldRetryStatus(response.status)) {
-        logger.warn({ url, status: response.status, attempt, retries }, "retrying fetch due to response status");
+        let waitMs = backoffMs * (attempt + 1);
+        if (response.status === 429) {
+          const retryAfter = response.headers.get("retry-after");
+          if (retryAfter) {
+            const parsed = Number(retryAfter);
+            waitMs = Number.isFinite(parsed)
+              ? parsed * 1000
+              : Math.max(0, new Date(retryAfter).getTime() - Date.now());
+            waitMs = Math.min(Math.max(waitMs, 1000), 120_000);
+          } else {
+            waitMs = Math.min(2000 * Math.pow(2, attempt), 60_000);
+          }
+        }
+        logger.warn({ url, status: response.status, attempt, retries, waitMs }, "retrying fetch due to response status");
         if (breaker) breaker.recordFailure();
-        await sleep(backoffMs * (attempt + 1));
+        await sleep(waitMs);
         continue;
       }
 
