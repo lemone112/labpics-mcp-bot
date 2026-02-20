@@ -6,8 +6,8 @@ function similarityScore(a, b) {
   if (!left || !right) return 0;
   if (left === right) return 1;
   if (left.includes(right) || right.includes(left)) return 0.86;
-  const leftWords = new Set(left.split(/[^a-z0-9]+/g).filter(Boolean));
-  const rightWords = new Set(right.split(/[^a-z0-9]+/g).filter(Boolean));
+  const leftWords = new Set(left.split(/[^\p{L}\p{N}]+/gu).filter(Boolean));
+  const rightWords = new Set(right.split(/[^\p{L}\p{N}]+/gu).filter(Boolean));
   if (!leftWords.size || !rightWords.size) return 0;
   let overlap = 0;
   for (const word of leftWords) {
@@ -17,7 +17,10 @@ function similarityScore(a, b) {
 }
 
 function dedupeKey(leftType, leftId, rightType, rightId) {
-  return crypto.createHash("sha1").update(`${leftType}:${leftId}|${rightType}:${rightId}`).digest("hex");
+  const a = `${leftType}:${leftId}`;
+  const b = `${rightType}:${rightId}`;
+  const sorted = a <= b ? `${a}|${b}` : `${b}|${a}`;
+  return crypto.createHash("sha1").update(sorted).digest("hex");
 }
 
 async function upsertSuggestions(pool, scope, suggestions) {

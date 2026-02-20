@@ -69,7 +69,6 @@ export async function markConnectorSyncRunning(pool, scope, connector, mode, exi
       VALUES ($1, $2, $3, $4, 'running', $5, now(), now())
       ON CONFLICT (project_id, connector)
       DO UPDATE SET
-        account_scope_id = EXCLUDED.account_scope_id,
         mode = EXCLUDED.mode,
         status = 'running',
         retry_count = $5,
@@ -102,7 +101,6 @@ export async function markConnectorSyncSuccess(pool, scope, connector, mode, pat
       VALUES ($1, $2, $3, $4, $5, $6, $7, now(), now(), 'ok', 0, NULL, $8::jsonb, now())
       ON CONFLICT (project_id, connector)
       DO UPDATE SET
-        account_scope_id = EXCLUDED.account_scope_id,
         mode = EXCLUDED.mode,
         cursor_ts = EXCLUDED.cursor_ts,
         cursor_id = EXCLUDED.cursor_id,
@@ -146,7 +144,6 @@ export async function markConnectorSyncFailure(pool, scope, connector, mode, err
       VALUES ($1, $2, $3, $4, 'failed', $5, $6, now(), now())
       ON CONFLICT (project_id, connector)
       DO UPDATE SET
-        account_scope_id = EXCLUDED.account_scope_id,
         mode = EXCLUDED.mode,
         status = 'failed',
         retry_count = $5,
