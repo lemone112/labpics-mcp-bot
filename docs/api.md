@@ -2,6 +2,7 @@
 
 Обновлено: 2026-02-20
 
+
 Базовый backend URL: `http://localhost:8080`
 UI обычно ходит через `NEXT_PUBLIC_API_BASE_URL` (например `/api`).
 
