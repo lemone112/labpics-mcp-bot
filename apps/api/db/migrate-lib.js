@@ -28,16 +28,24 @@ export async function applyMigrations(pool, migrationsDir, logger = console) {
     const fullPath = path.join(migrationsDir, filename);
     const sql = await readFile(fullPath, "utf8");
 
+    const needsNoTx = /\bCONCURRENTLY\b/i.test(sql);
+
     const client = await pool.connect();
     try {
-      await client.query("BEGIN");
-      await client.query(sql);
-      await client.query("INSERT INTO schema_migrations(filename) VALUES ($1)", [filename]);
-      await client.query("COMMIT");
+      if (needsNoTx) {
+        // CREATE INDEX CONCURRENTLY cannot run inside a transaction block
+        await client.query(sql);
+        await client.query("INSERT INTO schema_migrations(filename) VALUES ($1)", [filename]);
+      } else {
+        await client.query("BEGIN");
+        await client.query(sql);
+        await client.query("INSERT INTO schema_migrations(filename) VALUES ($1)", [filename]);
+        await client.query("COMMIT");
+      }
       executed.push(filename);
       logger.info({ filename }, "migration applied");
     } catch (error) {
-      await client.query("ROLLBACK");
+      if (!needsNoTx) await client.query("ROLLBACK");
       throw error;
     } finally {
       client.release();
