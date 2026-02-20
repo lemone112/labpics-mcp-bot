@@ -680,6 +680,21 @@ async function main() {
     app.post(`/v1${pathName}`, opts || {}, handler);
   }
 
+  function isPublicPath(pathName) {
+    const isPublicAuth =
+      pathName === "/auth/login" ||
+      pathName === "/auth/me" ||
+      pathName.startsWith("/auth/signup") ||
+      pathName === "/auth/telegram/webhook";
+    const isApiDocsPublic = !isProd && pathName.startsWith("/api-docs");
+    return (
+      pathName === "/health" ||
+      pathName === "/metrics" ||
+      isPublicAuth ||
+      isApiDocsPublic
+    );
+  }
+
   // Tight rate limit for expensive/CPU-intensive endpoints (10 req/min per IP+path)
   const EXPENSIVE_PATHS = new Set([
     "/search", "/lightrag/query", "/lightrag/refresh",
@@ -706,8 +721,7 @@ async function main() {
 
     const rawPath = request.url.split("?")[0];
     const pathName = routePathForAuthCheck(rawPath);
-    const isPublicAuth = pathName === "/auth/login" || pathName === "/auth/me" || pathName.startsWith("/auth/signup") || pathName === "/auth/telegram/webhook";
-    const isPublic = pathName === "/health" || pathName === "/metrics" || isPublicAuth || pathName.startsWith("/api-docs");
+    const isPublic = isPublicPath(pathName);
 
     // Rate limit unauthenticated requests by IP (except health/metrics)
     if (!isPublic) {
@@ -791,8 +805,7 @@ async function main() {
   app.addHook("preValidation", async (request, reply) => {
     const rawPath = request.url.split("?")[0];
     const pathName = routePathForAuthCheck(rawPath);
-    const isPublicAuth = pathName === "/auth/login" || pathName === "/auth/me" || pathName.startsWith("/auth/signup") || pathName === "/auth/telegram/webhook";
-    const isPublic = pathName === "/health" || pathName === "/metrics" || isPublicAuth || pathName.startsWith("/api-docs");
+    const isPublic = isPublicPath(pathName);
     if (isPublic) return;
     if (!request.auth?.session_id) return;
     if (request.auth?.active_project_id && request.auth?.account_scope_id) return;
@@ -809,8 +822,7 @@ async function main() {
   app.addHook("preHandler", async (request, reply) => {
     const rawPath = request.url.split("?")[0];
     const pathName = routePathForAuthCheck(rawPath);
-    const isPublicAuth = pathName === "/auth/login" || pathName === "/auth/me" || pathName.startsWith("/auth/signup") || pathName === "/auth/telegram/webhook";
-    const isPublic = pathName === "/health" || pathName === "/metrics" || isPublicAuth || pathName.startsWith("/api-docs");
+    const isPublic = isPublicPath(pathName);
     if (isPublic) return;
     if (!request.auth?.session_id) return;
 

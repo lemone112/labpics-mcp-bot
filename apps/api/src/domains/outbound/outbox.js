@@ -550,20 +550,30 @@ export async function cleanupOldOutboundMessages(pool, scope, logger = console) 
 
 export async function processDueOutbounds(pool, scope, actorUsername = "scheduler", requestId = null, limit = 20) {
   const safeLimit = toPositiveInt(limit, 20, 1, 200);
+  const claimDelaySeconds = toPositiveInt(process.env.OUTBOUND_CLAIM_DELAY_SECONDS, 120, 10, 3600);
   const { rows } = await pool.query(
     `
-      SELECT *
-      FROM outbound_messages
-      WHERE project_id = $1
-        AND account_scope_id = $2
-        AND status IN ('approved', 'failed')
-        AND COALESCE(next_attempt_at, now()) <= now()
-        AND retry_count < max_retries
-      ORDER BY created_at ASC
-      LIMIT $3
-      FOR UPDATE SKIP LOCKED
+      WITH due AS (
+        SELECT id
+        FROM outbound_messages
+        WHERE project_id = $1
+          AND account_scope_id = $2
+          AND status IN ('approved', 'failed')
+          AND COALESCE(next_attempt_at, now()) <= now()
+          AND retry_count < max_retries
+        ORDER BY created_at ASC
+        LIMIT $3
+        FOR UPDATE SKIP LOCKED
+      )
+      UPDATE outbound_messages AS om
+      SET
+        next_attempt_at = now() + ($4::text || ' seconds')::interval,
+        updated_at = now()
+      FROM due
+      WHERE om.id = due.id
+      RETURNING om.*
     `,
-    [scope.projectId, scope.accountScopeId, safeLimit]
+    [scope.projectId, scope.accountScopeId, safeLimit, String(claimDelaySeconds)]
   );
 
   let sent = 0;
