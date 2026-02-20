@@ -1,25 +1,24 @@
 {
-  "devDependencies": {
-    "@biomejs/biome": "^2.4.2",
-    "shadcn": "^3.8.5"
-  },
   "name": "labpics-dashboard",
   "version": "1.0.0",
-  "description": "Репозиторий ориентирован на **web-платформу**:",
-  "main": "index.js",
-  "directories": {
-    "doc": "docs"
-  },
+  "private": true,
+  "description": "lab.pics design studio management platform",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
   "scripts": {
     "lint": "biome check .",
     "lint:fix": "biome check --write .",
     "format": "biome format --write ."
   },
+  "devDependencies": {
+    "@biomejs/biome": "^2.4.2",
+    "shadcn": "^3.8.5"
+  },
   "repository": {
     "type": "git",
     "url": "http://local_proxy@127.0.0.1:53493/git/lemone112/labpics-dashboard"
   },
-  "keywords": [],
-  "author": "",
   "license": "ISC"
 }

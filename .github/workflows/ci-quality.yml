@@ -21,60 +21,60 @@ jobs:
           node-version: 22
           cache: npm
           cache-dependency-path: |
-            server/package-lock.json
-            web/package-lock.json
-            telegram-bot/package-lock.json
+            apps/api/package-lock.json
+            apps/web/package-lock.json
+            apps/telegram-bot/package-lock.json
 
       - name: Install server dependencies
-        working-directory: server
+        working-directory: apps/api
         run: npm ci
 
       - name: Install web dependencies
-        working-directory: web
+        working-directory: apps/web
         run: npm ci
 
       - name: Security audit (server)
-        working-directory: server
+        working-directory: apps/api
         run: npm audit --audit-level=high
 
       - name: Security audit (web)
-        working-directory: web
+        working-directory: apps/web
         run: npm audit --audit-level=high
 
       - name: Server typecheck
-        working-directory: server
+        working-directory: apps/api
         run: npm run typecheck
 
       - name: Server tests with coverage
-        working-directory: server
+        working-directory: apps/api
         run: npm run test:coverage
 
       - name: Web typecheck
-        working-directory: web
+        working-directory: apps/web
         run: npm run typecheck
 
       - name: Web lint
-        working-directory: web
+        working-directory: apps/web
         run: npm run lint
 
       - name: Web build
-        working-directory: web
+        working-directory: apps/web
         run: npm run build
 
       - name: Bundle size check
-        working-directory: web
+        working-directory: apps/web
         run: npm run bundle:check
 
       - name: Install Playwright browsers
-        working-directory: web
+        working-directory: apps/web
         run: npx playwright install --with-deps chromium
 
       - name: Web mocked e2e
-        working-directory: web
+        working-directory: apps/web
         run: npm run test:e2e
 
       - name: Web live integration e2e (strict docker)
-        working-directory: web
+        working-directory: apps/web
         env:
           E2E_REQUIRE_DOCKER: "1"
         run: npm run test:e2e:integration
@@ -109,14 +109,14 @@ jobs:
         with:
           node-version: 22
           cache: npm
-          cache-dependency-path: telegram-bot/package-lock.json
+          cache-dependency-path: apps/telegram-bot/package-lock.json
 
       - name: Install bot dependencies
-        working-directory: telegram-bot
+        working-directory: apps/telegram-bot
         run: npm ci
 
       - name: Typecheck bot
-        working-directory: telegram-bot
+        working-directory: apps/telegram-bot
         run: npm run typecheck
 
   smoke:
@@ -145,7 +145,7 @@ jobs:
           done
 
       - name: Run smoke tests
-        run: ./scripts/smoke-test.sh http://localhost:8080
+        run: ./infra/scripts/smoke-test.sh http://localhost:8080
 
       - name: Collect logs on failure
         if: failure()

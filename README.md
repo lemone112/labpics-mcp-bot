@@ -3,23 +3,33 @@
 Операционная платформа для design studio lab.pics: 2–5 PM + Owner, 5–10 активных проектов,
 CRM/PM/support-интеграции, knowledge graph (LightRAG), Telegram bot.
 
-**Статус:** 196 open issues в 25 итерациях (Iter 11–56), 8 execution phases.
-Единый план: [`docs/iteration-plan-wave3.md`](./docs/iteration-plan-wave3.md).
+**Статус:** 276 open issues в 33 итерациях (Iter 11–64), 10 execution phases.
+Единый план: [`docs/iterations/iteration-plan-wave3.md`](./docs/iterations/iteration-plan-wave3.md).
 
 ### Структура монорепо
 
-- `server/` — Fastify API + platform layers (scope/audit/outbox/scheduler) + Redis Pub/Sub + SSE
-- `web/` — Next.js 16 UI (App Router, shadcn/ui, Radix, Tailwind v4, anime.js)
-- `telegram-bot/` — Telegram assistant bot (TypeScript, Supabase, Composio MCP, Docker)
-- `infra/` — Caddy, deployment configs
-- `scripts/` — smoke tests, утилиты
-- `docs/` — каноническая документация
-- `docker-compose.yml` — локальный и серверный запуск стека (Postgres, Redis, server, worker, web)
+```
+labpics-dashboard/
+├── apps/
+│   ├── api/             # Fastify API + worker (Fastify, PostgreSQL, pgvector, LightRAG)
+│   │   └── src/
+│   │       ├── domains/ # Business logic (connectors, analytics, rag, outbound, identity, core)
+│   │       ├── infra/   # Infrastructure (db, redis, http, cache, sse, rate-limit)
+│   │       ├── routes/  # HTTP route handlers
+│   │       └── types/   # TypeScript types
+│   ├── web/             # Next.js 16 UI (App Router, shadcn/ui, Radix, Tailwind v4, anime.js)
+│   └── telegram-bot/    # Telegram assistant bot (TypeScript, PostgreSQL, Composio MCP)
+├── packages/
+│   └── shared-types/    # Cross-service TypeScript types
+├── docs/                # Canonical documentation (architecture, product, specs, design, operations)
+├── infra/               # Caddy, Prometheus, Grafana, scripts
+└── docker-compose.yml   # Full stack: Postgres, Redis, API, Worker, Web, Edge (Caddy)
+```
 
 Текущий релиз работает в режиме **LightRAG-only** (KAG pipeline полностью удалён в Iter 10).
 
-Worker-контур введен как единый scheduler/worker слой (`server/src/worker-loop.js`).
-Real-time обновления: Redis Pub/Sub → SSE endpoint → auto-refresh в браузере. См. [`docs/redis-sse.md`](./docs/redis-sse.md).
+Worker-контур введен как единый scheduler/worker слой (`apps/api/src/worker-loop.js`).
+Real-time обновления: Redis Pub/Sub → SSE endpoint → auto-refresh в браузере. См. [`docs/architecture/redis-sse.md`](./docs/architecture/redis-sse.md).
 
 ### Wave 3 — ключевые направления (Iter 44–51)
 
@@ -38,21 +48,22 @@ Real-time обновления: Redis Pub/Sub → SSE endpoint → auto-refresh 
 Стартовые точки:
 
 - Индекс документации: [`docs/index.md`](./docs/index.md)
-- **Единый план исполнения (Wave 3):** [`docs/iteration-plan-wave3.md`](./docs/iteration-plan-wave3.md) — 196 issues, 8 phases
-- Архитектурный reference (Wave 2): [`docs/iteration-plan-wave2.md`](./docs/iteration-plan-wave2.md)
-- Нормативный контракт LightRAG-only: [`docs/lightrag-contract.md`](./docs/lightrag-contract.md)
+- **Единый план исполнения (Wave 3):** [`docs/iterations/iteration-plan-wave3.md`](./docs/iterations/iteration-plan-wave3.md) — 276 issues, 10 phases
+- Архитектурный reference (Wave 2): [`docs/iterations/iteration-plan-wave2.md`](./docs/iterations/iteration-plan-wave2.md)
+- Нормативный контракт LightRAG-only: [`docs/architecture/lightrag-contract.md`](./docs/architecture/lightrag-contract.md)
 - Продуктовый обзор: [`docs/product/overview.md`](./docs/product/overview.md)
-- Архитектура: [`docs/architecture.md`](./docs/architecture.md)
-- Frontend + дизайн: [`docs/frontend-design.md`](./docs/frontend-design.md)
-- Platform layer (scope/audit/outbox/worker): [`docs/platform-architecture.md`](./docs/platform-architecture.md)
-- API reference: [`docs/api.md`](./docs/api.md)
-- Real-time и кеширование (Redis, SSE, auto-refresh): [`docs/redis-sse.md`](./docs/redis-sse.md)
-- Backend-сервисы: [`docs/backend-services.md`](./docs/backend-services.md)
-- Тестирование: [`docs/testing.md`](./docs/testing.md)
-- Runbooks: [`docs/runbooks.md`](./docs/runbooks.md)
-- Roadmap: [`docs/mvp-vs-roadmap.md`](./docs/mvp-vs-roadmap.md)
+- Архитектура: [`docs/architecture/architecture.md`](./docs/architecture/architecture.md)
+- Frontend + дизайн: [`docs/architecture/frontend-design.md`](./docs/architecture/frontend-design.md)
+- Platform layer (scope/audit/outbox/worker): [`docs/architecture/platform-architecture.md`](./docs/architecture/platform-architecture.md)
+- API reference: [`docs/architecture/api.md`](./docs/architecture/api.md)
+- Real-time и кеширование (Redis, SSE, auto-refresh): [`docs/architecture/redis-sse.md`](./docs/architecture/redis-sse.md)
+- Backend-сервисы: [`docs/architecture/backend-services.md`](./docs/architecture/backend-services.md)
+- Тестирование: [`docs/operations/testing.md`](./docs/operations/testing.md)
+- Runbooks: [`docs/operations/runbooks.md`](./docs/operations/runbooks.md)
+- Roadmap: [`docs/product/mvp-vs-roadmap.md`](./docs/product/mvp-vs-roadmap.md)
 - Спеки: [`docs/specs/README.md`](./docs/specs/README.md)
-- Telegram Bot: [`telegram-bot/docs/`](./telegram-bot/docs/) (архитектура, UX, Composio, Supabase schema)
+- Design System: [`docs/design/DESIGN_SYSTEM_2026.md`](./docs/design/DESIGN_SYSTEM_2026.md)
+- Telegram Bot: [`apps/telegram-bot/docs/`](./apps/telegram-bot/docs/) (архитектура, UX, Composio, PostgreSQL schema)
 
 ---
 
@@ -126,11 +137,11 @@ Protected routes требуют session cookie + CSRF header (`x-csrf-token`) д
 - `GET /conversations`
 - `GET /messages`
 
-Полный API reference: [`docs/api.md`](./docs/api.md)
+Полный API reference: [`docs/architecture/api.md`](./docs/architecture/api.md)
 
 ---
 
-## 2) UI (`web`) — текущий статус
+## 2) UI (`apps/web`) — текущий статус
 
 UI построен на **shadcn/ui** + Radix + Tailwind v4 + anime.js. Поверхности:
 
@@ -179,19 +190,19 @@ docker compose up --build
 
 ```bash
 # Backend unit tests (Node.js test runner)
-cd server && npm test
+cd apps/api && npm test
 
 # Frontend lint + design audit
-cd web && npm run lint
+cd apps/web && npm run lint
 
 # E2E tests (Playwright)
-cd web && npm run test:e2e
+cd apps/web && npm run test:e2e
 ```
 
-Подробнее: [`docs/testing.md`](./docs/testing.md)
+Подробнее: [`docs/operations/testing.md`](./docs/operations/testing.md)
 
 ---
 
 ## 5) Деплой
 
-См. [`docs/deployment.md`](./docs/deployment.md) и [`docs/runbooks.md`](./docs/runbooks.md).
+См. [`docs/operations/deployment.md`](./docs/operations/deployment.md) и [`docs/operations/runbooks.md`](./docs/operations/runbooks.md).
