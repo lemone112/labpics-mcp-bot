@@ -99,20 +99,20 @@ export default function JobsFeaturePage() {
             </p>
           </CardHeader>
           <CardContent className="flex flex-wrap gap-3">
-            <Button disabled={busyJob.length > 0} onClick={() => runJob("/jobs/chatwoot/sync", "chatwoot_sync")}>
-              {busyJob === "chatwoot_sync" ? "Выполняется..." : "Синхронизация Chatwoot"}
+            <Button loading={busyJob === "chatwoot_sync"} disabled={busyJob.length > 0} onClick={() => runJob("/jobs/chatwoot/sync", "chatwoot_sync")}>
+              Синхронизация Chatwoot
             </Button>
-            <Button variant="secondary" disabled={busyJob.length > 0} onClick={() => runJob("/jobs/attio/sync", "attio_sync")}>
-              {busyJob === "attio_sync" ? "Выполняется..." : "Синхронизация Attio"}
+            <Button variant="secondary" loading={busyJob === "attio_sync"} disabled={busyJob.length > 0} onClick={() => runJob("/jobs/attio/sync", "attio_sync")}>
+              Синхронизация Attio
             </Button>
-            <Button variant="secondary" disabled={busyJob.length > 0} onClick={() => runJob("/jobs/linear/sync", "linear_sync")}>
-              {busyJob === "linear_sync" ? "Выполняется..." : "Синхронизация Linear"}
+            <Button variant="secondary" loading={busyJob === "linear_sync"} disabled={busyJob.length > 0} onClick={() => runJob("/jobs/linear/sync", "linear_sync")}>
+              Синхронизация Linear
             </Button>
-            <Button variant="secondary" disabled={busyJob.length > 0} onClick={() => runJob("/jobs/embeddings/run", "embeddings_run")}>
-              {busyJob === "embeddings_run" ? "Выполняется..." : "Генерация эмбеддингов"}
+            <Button variant="secondary" loading={busyJob === "embeddings_run"} disabled={busyJob.length > 0} onClick={() => runJob("/jobs/embeddings/run", "embeddings_run")}>
+              Генерация эмбеддингов
             </Button>
-            <Button variant="outline" disabled={busyJob.length > 0} onClick={() => runJob("/jobs/scheduler/tick", "scheduler_tick")}>
-              {busyJob === "scheduler_tick" ? "Выполняется..." : "Тик планировщика"}
+            <Button variant="outline" loading={busyJob === "scheduler_tick"} disabled={busyJob.length > 0} onClick={() => runJob("/jobs/scheduler/tick", "scheduler_tick")}>
+              Тик планировщика
             </Button>
             <LastUpdatedIndicator
               secondsAgo={autoRefresh.secondsAgo}

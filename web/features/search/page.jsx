@@ -93,8 +93,8 @@ export default function SearchFeaturePage() {
                 value={topK}
                 onChange={(e) => setTopK(e.target.value)}
               />
-              <Button type="submit" disabled={busy}>
-                {busy ? "Ищу..." : "Выполнить"}
+              <Button type="submit" loading={busy}>
+                Выполнить
               </Button>
             </form>
 

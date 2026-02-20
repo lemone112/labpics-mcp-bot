@@ -145,8 +145,8 @@ export default function CrmFeaturePage() {
         <Card data-motion-item>
           <CardHeader className="flex-row items-center justify-between">
             <CardTitle>Обзор CRM</CardTitle>
-            <Button size="sm" variant="outline" onClick={load} disabled={busy}>
-              {busy ? "Обновление..." : "Обновить"}
+            <Button size="sm" variant="outline" onClick={load} loading={busy}>
+              Обновить
             </Button>
           </CardHeader>
           <CardContent>
