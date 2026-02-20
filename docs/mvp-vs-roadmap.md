@@ -1,6 +1,6 @@
 # Статус продукта и roadmap (Production-Ready Plan)
 
-> Обновлено: 2026-02-19 (post Iter 0-12 + Design Audit. Source of truth: [GitHub Issues](https://github.com/lemone112/labpics-dashboard/milestones))
+> Обновлено: 2026-02-20 (post Wave 2 + Business Audit + Wave 3 plan. Source of truth: [GitHub Issues](https://github.com/lemone112/labpics-dashboard/milestones))
 > Детальный анализ: [`docs/product-structure-analysis.md`](./product-structure-analysis.md)
 
 ---
@@ -148,28 +148,89 @@
 | 15 | TypeScript, CI/CD & Infrastructure | [#77–#90](https://github.com/lemone112/labpics-dashboard/milestone/4) | MEDIUM | TS migration, Pino logging, Biome |
 | 16 | QA & Release Readiness | [#91–#102, #117–#119](https://github.com/lemone112/labpics-dashboard/milestone/5) | HIGH | E2E tests, dead-code cleanup, polish |
 
+### Целевая архитектура (после Iter 11 + 49–51)
+
+```
+┌──────────────────────────────────────────────────────────┐
+│              Telegram Bot (Iter 50–51)                    │
+│  ┌──────────────┐  ┌───────────────┐  ┌───────────────┐ │
+│  │ Composio MCP │  │ LightRAG MCP  │  │ Whisper API   │ │
+│  │ Linear +     │  │ daniel-       │  │ (OpenAI)      │ │
+│  │ Attio actions│  │ lightrag-mcp  │  │ voice → text  │ │
+│  └──────┬───────┘  └──────┬────────┘  └───────────────┘ │
+│         │                 │     CryptoBot-style кнопки   │
+│         │                 │     Push-уведомления          │
+└─────────┼─────────────────┼──────────────────────────────┘
+          │                 │
+          ▼                 ▼
+┌─────────────────────────────────────────────────────────┐
+│  Fastify API (Iter 11 + 44 + 49)                        │
+│  ├─ /lightrag/query → LightRAG Server (proxy)           │
+│  ├─ /auth/* → multi-user (Owner / PM roles)             │
+│  ├─ ACL filtering (project-scoped access)               │
+│  ├─ Structured citations + evidence                     │
+│  └─ Parallel connector sync (Promise.all)               │
+└──────────────────────┬──────────────────────────────────┘
+                       │
+┌──────────────────────▼──────────────────────────────────┐
+│  Labpics Web — Next.js (Iter 20–24 + 45–46 + 48)       │
+│  ├─ Control Tower (6 sections, hero + trust bar)        │
+│  ├─ Search UX (debounce, filters, autocomplete)         │
+│  ├─ Charts & Visualization (deep rework)                │
+│  ├─ System Monitoring (embedded, не Grafana)            │
+│  ├─ Reports (auto-generated, viewer UI)                 │
+│  ├─ Team management (Owner-only)                        │
+│  └─ Mobile responsive + a11y                            │
+└─────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────┐
+│  LightRAG Server — Python (Iter 11)                     │
+│  ├─ Knowledge graph (entity extraction, LLM-based)      │
+│  ├─ Dual-level retrieval (entities + themes)            │
+│  ├─ REST API: /query, /documents, /graph                │
+│  └─ Из форка lemone112/lightrag                         │
+└──────────────────────┬──────────────────────────────────┘
+                       │
+┌──────────────────────▼──────────────────────────────────┐
+│  PostgreSQL (shared DB)                                  │
+│  ├─ pgvector (embeddings 1536-dim)                      │
+│  ├─ PGGraph (entity relationships)                      │
+│  ├─ source_documents, entities, entity_links            │
+│  ├─ Connector data: Chatwoot, Linear, Attio             │
+│  ├─ users, project_users, sessions (Iter 49)            │
+│  ├─ report_templates, report_runs (Iter 48)             │
+│  └─ search_queries (Iter 45)                            │
+├─────────────────────────────────────────────────────────┤
+│  Redis: SSE Pub/Sub + cache + session store             │
+└──────────────────────▲──────────────────────────────────┘
+                       │
+          ┌────────────┴────────────┐
+          │                         │
+┌─────────┴──────────┐  ┌──────────┴─────────┐
+│  Connector Sync    │  │  Ingestion Pipeline │
+│  (worker, 5min)    │  │  (Iter 11.2)        │
+│  Chatwoot + Linear │  │  raw → source_docs  │
+│  + Attio (parallel)│  │  → entities → graph │
+└────────────────────┘  └────────────────────┘
+
+Инфраструктура:
+┌─────────────────────────────────────────────────────────┐
+│  Caddy 2.9.1 (reverse proxy, auto-TLS, HTTP/2)         │
+│  Prometheus + Loki + Grafana (мониторинг)               │
+│  Docker Compose (7+ сервисов, resource limits)          │
+│  VPS deploy (backup pg_dump + fail2ban)                 │
+└─────────────────────────────────────────────────────────┘
+```
+
+**Отличия от текущего состояния:**
+- Сейчас: custom hybrid RAG (pgvector + ILIKE), single-user, Composio MCP только
+- Целевое: HKUDS LightRAG + knowledge graph, multi-user, Composio + LightRAG MCP + Whisper
+
 ### Iter 11 — HKUDS LightRAG Integration (CRITICAL)
 
-Миграция с custom hybrid RAG на [HKUDS LightRAG](https://github.com/HKUDS/LightRAG) из форка [`lemone112/lightrag`](https://github.com/lemone112/lightrag). Knowledge graph + dual-level retrieval + PostgreSQL backend + MCP для Telegram бота.
+Миграция с custom hybrid RAG на [HKUDS LightRAG](https://github.com/HKUDS/LightRAG) из форка [`lemone112/lightrag`](https://github.com/lemone112/lightrag). Knowledge graph + dual-level retrieval + PostgreSQL backend.
 
-```
-┌─────────────────┐     ┌─────────────────────┐     ┌──────────────┐
-│  Telegram Bot   │────▶│ daniel-lightrag-mcp  │────▶│  LightRAG    │
-│  (LLM + MCP)   │     │ (22 tools, MCP)      │     │  Server      │
-└─────────────────┘     └─────────────────────┘     │  (Python)    │
-                                                     └──────┬───────┘
-┌─────────────────┐     ┌─────────────────────┐            │
-│  Labpics Web    │────▶│  Fastify API         │────▶ LightRAG REST API
-│  (Next.js)      │     │  (proxy endpoints)   │            │
-└─────────────────┘     └─────────────────────┘     ┌──────▼───────┐
-                                                     │  PostgreSQL  │
-                        ┌─────────────────────┐     │  pgvector    │
-                        │  Connector Sync      │────▶│  PGGraph     │
-                        │  (worker)            │     │  (shared DB) │
-                        └─────────────────────┘     └──────────────┘
-```
-
-**Критерии завершения:** LightRAG Server запущен, connector data в knowledge graph, `/lightrag/query` возвращает graph entities, Telegram бот работает через MCP, frontend без изменений (proxy)
+**Критерии завершения:** LightRAG Server запущен, connector data в knowledge graph, `/lightrag/query` возвращает graph entities, daniel-lightrag-mcp доступен для Telegram бота, frontend без изменений (proxy)
 
 ---
 
@@ -193,9 +254,18 @@
 ⬜ Iter 14 (design system) ──── 16 tasks — MEDIUM
 ⬜ Iter 15 (TS, CI/CD) ──────── 14 tasks — MEDIUM
 ⬜ Iter 16 (QA & release) ───── 15 tasks — HIGH
+--- Wave 3 (Iter 44–51) ---
+⬜ Iter 44 (scheduler) ──────── 7 tasks — P0
+⬜ Iter 45 (search UX) ──────── 8 tasks — P0
+⬜ Iter 46 (monitoring UI) ──── 7 tasks — P1
+⬜ Iter 47 (infrastructure) ─── 6 tasks — P1
+⬜ Iter 48 (reporting) ──────── 6 tasks — P1
+⬜ Iter 49 (multi-user) ─────── 8 tasks — P0
+⬜ Iter 50 (TG bot MVP) ─────── 8 tasks — P0
+⬜ Iter 51 (TG bot advanced) ── 7 tasks — P1
 ```
 
-**Итого:** 12 итераций завершены (77/79 задач). 5 итераций открыто (68 задач, из них 5 уже закрыты). Iter 11 — ключевая: HKUDS LightRAG + MCP.
+**Итого:** 12 итераций завершены (77/79 задач). Wave 2: 5 итераций (68 задач). Wave 3: 8 итераций (57 задач). Iter 11 — ключевая: HKUDS LightRAG + MCP.
 
 ---
 
@@ -232,13 +302,23 @@
 
 KAG (custom Knowledge Augmented Graph) — удалён в Iter 10. 2,770 LOC кода, routes, scheduler jobs, DB-таблицы. `kag_event_log` переименован в `connector_events`.
 
-### Telegram Bot Architecture
+### Telegram Bot Architecture (Iter 50–51)
 
 ```
-Telegram Bot (LLM) → daniel-lightrag-mcp (22 tools) → LightRAG Server → PostgreSQL
+Telegram Bot (TypeScript, Docker)
+├── Composio MCP ──→ Linear API (create/update tasks)
+│                ──→ Attio API  (update deals, add notes)
+├── LightRAG MCP ──→ LightRAG Server ──→ PostgreSQL (knowledge graph)
+├── Whisper API  ──→ OpenAI (voice → text)
+├── Fastify API  ──→ /portfolio/overview, /lightrag/query, /jobs/status
+└── Push: risks, deadlines, new messages, digests
 ```
 
-Бот получает доступ к knowledge graph через MCP: query, document management, graph operations. Данные из connectors (Chatwoot, Linear, Attio) автоматически попадают в LightRAG через ingestion pipeline.
+**3 канала ввода:** CryptoBot-style кнопки, свободный текст (NLU), голосовые сообщения (Whisper).
+**2 MCP провайдера:** Composio (действия в Linear + Attio), daniel-lightrag-mcp (поиск по knowledge graph).
+**Push-уведомления:** риски, дедлайны, новые сообщения клиентов, утренние/недельные дайджесты.
+
+> Composio MCP уже реализован (`telegram-bot/src/composio.ts`). LightRAG MCP — после Iter 11.
 
 ### JS → TS — инкрементальный подход
 
@@ -246,22 +326,63 @@ Telegram Bot (LLM) → daniel-lightrag-mcp (22 tools) → LightRAG Server → Po
 
 ---
 
-## 7) Явно вне scope
+## 7) Wave 3 — Product Growth (Iter 44–51)
 
-- KAG pipeline (удалён в Iter 10).
-- Black-box рекомендационные агенты без evidence.
-- RBAC / multi-user auth (single-user auth + scope достаточен для MVP).
-- Дорогие LLM-решения в критических операционных циклах.
-- Полная TypeScript миграция (только инкрементальный подход).
+> Детальный план: [`docs/iteration-plan-wave3.md`](./iteration-plan-wave3.md)
+> Основа: инфраструктурный аудит (Feb 2026) + бизнес Q&A сессия
+
+**Контекст:** Design studio lab.pics, 2–5 PM + Owner, 5–10 активных проектов, $5–20K avg.
+
+| Iter | Название | Issues | Приоритет | Фокус |
+|------|----------|--------|-----------|-------|
+| 44 | Scheduler & Connector Reliability | [#349–#355](https://github.com/lemone112/labpics-dashboard/milestone/34) | **P0** | Параллельный sync, метрики, dead jobs |
+| 45 | Search UX & Intelligence | [#356–#363](https://github.com/lemone112/labpics-dashboard/milestone/35) | **P0** | Debounce, пагинация, фильтры, аналитика |
+| 46 | System Monitoring UI | [#364–#370](https://github.com/lemone112/labpics-dashboard/milestone/36) | P1 | Мониторинг в дашборде (без Grafana) |
+| 47 | Infrastructure Hardening | [#371–#376](https://github.com/lemone112/labpics-dashboard/milestone/37) | P1 | Бэкапы, HTTP/2, fail2ban, deploy |
+| 48 | Automated Reporting | [#377–#382](https://github.com/lemone112/labpics-dashboard/milestone/38) | P1 | Автоотчёты: проект, финансы, KPI |
+| 49 | Multi-User & Access Control | [#383–#390](https://github.com/lemone112/labpics-dashboard/milestone/39) | **P0** | Owner/PM роли, доступ к проектам |
+| 50 | Telegram Bot MVP | [#391–#398](https://github.com/lemone112/labpics-dashboard/milestone/40) | **P0** | CryptoBot кнопки, статус, поиск, push |
+| 51 | Telegram Bot Advanced | [#399–#405](https://github.com/lemone112/labpics-dashboard/milestone/41) | P1 | Composio MCP, Whisper голос, дайджесты |
+
+**Итого Wave 3:** 57 задач в 8 итерациях.
+
+### Ключевые решения из аудита
+
+1. **Elasticsearch НЕ нужен** — PostgreSQL (pgvector + pg_trgm) достаточен для 5–10 проектов.
+2. **RabbitMQ/Celery НЕ нужны** — PostgreSQL scheduler с `FOR UPDATE SKIP LOCKED` достаточен. BullMQ — опция масштабирования.
+3. **Мониторинг: embed в UI** — стек (Prometheus + Grafana + Loki) уже развёрнут, нужно встроить метрики в дашборд.
+4. **Параллельный connector sync** — исправление 3x bottleneck (Promise.all вместо sequential loop).
+5. **Multi-user** — критично для команды из 2–5 PM. Owner видит всё, PM — свои проекты.
+6. **Telegram bot** — CryptoBot-style кнопки, Composio MCP для Linear+Attio, Whisper голос, push-уведомления.
+
+### Backlog (post Wave 3)
+
+| Область | Элемент |
+|---------|---------|
+| Integrations | Email connector (Gmail/Outlook), File attachments (S3/R2), Google Calendar, GitHub |
+| Finance | Invoicing (Stripe), Budget tracking per project |
+| Platform | Client portal (read-only), SaaS multi-tenancy, PDF/XLSX export |
+| AI | Sentiment analysis, Predictive churn, Cross-sell/upsell engine |
 
 ---
 
-## 8) Связанные документы
+## 8) Явно вне scope
+
+- KAG pipeline (удалён в Iter 10).
+- Black-box рекомендационные агенты без evidence.
+- Дорогие LLM-решения в критических операционных циклах.
+- Полная TypeScript миграция (только инкрементальный подход).
+- Elasticsearch, RabbitMQ (overkill для текущего масштаба).
+
+---
+
+## 9) Связанные документы
 
 - Детальный анализ: [`docs/product-structure-analysis.md`](./product-structure-analysis.md)
 - Iteration log: [`docs/iteration-log.md`](./iteration-log.md)
+- Wave 2 план: [`docs/iteration-plan-wave2.md`](./iteration-plan-wave2.md)
+- Wave 3 план: [`docs/iteration-plan-wave3.md`](./iteration-plan-wave3.md)
 - Платформенные инварианты: [`docs/platform-architecture.md`](./platform-architecture.md)
 - Redis/SSE архитектура: [`docs/redis-sse.md`](./redis-sse.md)
 - LightRAG контракт: [`docs/lightrag-contract.md`](./lightrag-contract.md)
-- LightRAG-only spec: [`docs/specs/0018-lightrag-only-mode.md`](./specs/0018-lightrag-only-mode.md)
 - Бэклог: [`docs/backlog.md`](./backlog.md)

@@ -1,6 +1,6 @@
 # Intelligence Layer Contract (нормативный документ)
 
-> Обновлено: 2026-02-19 (post Iter 10 cleanup, KAG fully removed)
+> Обновлено: 2026-02-20 (post Iter 10 cleanup, KAG fully removed)
 
 Этот документ обязателен к исполнению при любой разработке в репозитории.
 
@@ -31,6 +31,7 @@
    - `POST /search` (compatibility alias).
 4. Таблица `kag_event_log` переименована в `connector_events` (migration 0021).
 5. Любой PR, добавляющий зависимость от удалённого KAG кода, считается нарушением контракта.
+6. При миграции на HKUDS LightRAG (Iter 11) **обязательна** ACL-фильтрация по `project_id` и `user_role` (Owner видит всё, PM — свои проекты).
 
 ## 4) API Endpoints (intelligence layer)
 
@@ -41,7 +42,7 @@
 | `/lightrag/refresh` | POST | Trigger embedding refresh |
 | `/lightrag/feedback` | POST | Feedback на результаты (rating + comment) |
 | `/search` | POST | Compatibility alias для /lightrag/query |
-| `/lightrag/ingest` | POST | **Planned (Iter 11)** — добавить текст в RAG базу |
+| `/lightrag/ingest` | POST | **Planned (Iter 11)** — будет заменён на LightRAG `/documents` API |
 
 ## 5) API Schema (Spec 0018)
 
@@ -103,6 +104,8 @@
 
 ## 8) Миграция на HKUDS LightRAG (Iter 11 — запланировано)
 
+**Статус:** НЕ НАЧАТА. Текущая система — custom hybrid RAG (`server/src/services/lightrag.js`).
+
 Решение принято: миграция на [HKUDS LightRAG](https://github.com/HKUDS/LightRAG) из форка [`lemone112/lightrag`](https://github.com/lemone112/lightrag).
 
 **Что даёт:**
@@ -111,4 +114,10 @@
 - PostgreSQL backend (PGKVStorage + PGVectorStorage + PGGraphStorage) — shared DB
 - REST API сервер + MCP для Telegram бота ([daniel-lightrag-mcp](https://github.com/desimpkins/daniel-lightrag-mcp), 22 tools)
 
-**План:** см. Iter 11 в [`docs/mvp-vs-roadmap.md`](./mvp-vs-roadmap.md)
+**ACL-контракт (MUST):**
+- Все запросы фильтруются по `project_id` из сессии
+- Owner-роль видит данные всех проектов (portfolio scope)
+- PM-роль видит только назначенные проекты
+- ACL enforcement на уровне LightRAG query proxy, НЕ на уровне frontend
+
+**План:** см. Iter 11 в [`docs/iteration-plan-wave3.md`](./iteration-plan-wave3.md)

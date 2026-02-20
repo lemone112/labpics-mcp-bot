@@ -1,10 +1,14 @@
 # Архитектура системы
 
+Обновлено: 2026-02-20
+
 ## 1) Архитектурная цель
 
 Система строится вокруг одного интеллектуального контура:
 
-- **LightRAG** для retrieval-контекста по сообщениям, задачам и сделкам.
+- **HKUDS LightRAG** для knowledge graph + dual-level retrieval (low-level entity extraction + high-level semantic search) по сообщениям, задачам и сделкам. Миграция на HKUDS LightRAG Server с PostgreSQL-бэкендом (Iter 11).
+- **Multi-user** поддержка: RBAC, scope-изоляция данных по пользователям и ролям (Iter 49).
+- **Встроенный мониторинг**: embedded UI для метрик, здоровья коннекторов и системного состояния — без внешних инструментов типа Grafana (Iter 46).
 
 ## 2) Технологический стек
 
@@ -15,6 +19,9 @@
 - UI-система: `shadcn/ui + Radix + Tailwind tokens + anime.js`
 - Cache / Pub-Sub: `Redis 7` — Pub/Sub для real-time SSE, cascade events
 - Real-time: SSE (Server-Sent Events) — `GET /events/stream` — push обновлений в браузер
+- Telegram Bot: `TypeScript + Supabase + Composio MCP + Docker` (`telegram-bot/`)
+- LightRAG Server (planned): `Python, HKUDS LightRAG, PostgreSQL backend` (Iter 11)
+- MCP: `daniel-lightrag-mcp` (22 tools) + Composio MCP (Linear + Attio)
 
 ## 3) Компоненты
 
@@ -42,18 +49,20 @@
 
 ```
                     ┌─────────────────────────────────────────┐
-                    │              FRONTEND (Next.js)          │
-                    │  Dashboard · Portfolio · Search · CRM    │
-                    │  Signals · Analytics · Offers · Settings │
+                    │              FRONTEND (Next.js 16)       │
+                    │  Control Tower · Portfolio · Search · CRM │
+                    │  Signals · Analytics · Offers · System   │
+                    │  Reports · Team · Settings                │
                     └────────────────┬────────────────────────┘
-                                     │ REST API
+                                     │ REST API + SSE
                     ┌────────────────▼────────────────────────┐
                     │              BACKEND (Fastify v5)        │
                     │                                          │
                     │  ┌─── Routes ──┐  ┌── Middleware ─────┐  │
                     │  │ /api/*      │  │ auth · csrf · req │  │
-                    │  │ /connectors │  │ scope · error     │  │
+                    │  │ /connectors │  │ scope · rbac      │  │
                     │  │ /lightrag   │  └───────────────────┘  │
+                    │  │ /system     │                         │
                     │  └─────────────┘                         │
                     │                                          │
                     │  ┌─── Services ──────────────────────┐   │
@@ -61,25 +70,37 @@
                     │  │ portfolio · identity · intelligence│   │
                     │  │ connectors · offers · crm · outbox │   │
                     │  │ redis-pubsub · sse-broadcaster     │   │
+                    │  │ monitoring · reporting · users      │   │
                     │  └───────────────────────────────────┘   │
                     │                                          │
                     │  ┌─── Scheduler ─────────────────────┐   │
                     │  │ 15min sync · 5min retry · daily    │   │
-                    │  │ pipeline · weekly digest           │   │
+                    │  │ pipeline · weekly digest · reports  │   │
                     │  │ cascade triggers · Redis PUBLISH   │   │
                     │  └───────────────────────────────────┘   │
-                    └────────────────┬────────────────────────┘
-                                     │
-                    ┌────────────────▼────────────────────────┐
-                    │         PostgreSQL 16 + pgvector          │
-                    │  IVFFlat/HNSW · GIN · scope guards       │
-                    └──────────┬──────────┬──────────┬────────┘
-                               │          │          │
-                    ┌──────────▼┐  ┌──────▼──┐  ┌───▼───────┐
-                    │  Chatwoot  │  │  Linear  │  │   Attio   │
-                    │ messages   │  │  issues  │  │   deals   │
-                    │ contacts   │  │  cycles  │  │  accounts │
-                    └────────────┘  └─────────┘  └───────────┘
+                    └───────┬───────────────┬────────────────┘
+                            │               │
+               ┌────────────▼──┐    ┌───────▼──────┐
+               │  PostgreSQL 16 │    │   Redis 7    │
+               │  + pgvector    │    │  Pub/Sub +   │
+               │  + pg_trgm     │    │  cache       │
+               └──────┬────────┘    └──────────────┘
+                      │
+         ┌────────────┼────────────┐
+         │            │            │
+  ┌──────▼──┐  ┌──────▼──┐  ┌─────▼────┐
+  │ Chatwoot │  │  Linear  │  │  Attio   │
+  └─────────┘  └─────────┘  └──────────┘
+
+  ┌───────────────────────────────────────┐
+  │           TELEGRAM BOT                 │
+  │  TypeScript · Supabase · Docker        │
+  │  ┌──────────┐  ┌──────────────────┐   │
+  │  │ Composio  │  │ LightRAG MCP     │   │
+  │  │ MCP       │  │ (daniel-lightrag)│   │
+  │  └──────────┘  └──────────────────┘   │
+  │  + Whisper voice (planned)             │
+  └───────────────────────────────────────┘
 ```
 
 ### База данных
@@ -109,9 +130,33 @@
 - Dashboard показывает operational metrics + sync completeness.
 - Jobs/Connectors дают диагностику пайплайна.
 
+### 4.4 Telegram Bot
+
+1. Пользователь отправляет сообщение боту.
+2. Intent detection определяет тип запроса.
+3. Маршрутизация:
+   - Composio MCP — операции с Linear (задачи, циклы) и Attio (сделки, контакты).
+   - LightRAG MCP (`daniel-lightrag-mcp`) — семантический поиск по базе знаний.
+4. Формирование ответа и отправка пользователю.
+
+### 4.5 Monitoring
+
+1. Scheduler собирает метрики: время выполнения задач, статусы коннекторов, ошибки.
+2. Connector health: статус синхронизации, DLQ размер, latency.
+3. Отображение на странице System UI (embedded, без Grafana).
+
+### 4.6 Reporting
+
+1. Scheduled report generation по расписанию (daily, weekly).
+2. Шаблоны отчётов (templates) применяются к текущим данным.
+3. Результат сохраняется как snapshot.
+4. Просмотр через viewer UI на фронтенде (Reports).
+
 ## 5) Связанные документы
 
 - Platform invariants: [`docs/platform-architecture.md`](./platform-architecture.md)
 - Data model: [`docs/data-model.md`](./data-model.md)
 - Pipelines: [`docs/pipelines.md`](./pipelines.md)
 - API: [`docs/api.md`](./api.md)
+- Единый план: [`docs/iteration-plan-wave3.md`](./iteration-plan-wave3.md)
+- Telegram Bot: [`telegram-bot/docs/`](../telegram-bot/docs/)
