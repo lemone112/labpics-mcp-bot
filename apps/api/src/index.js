@@ -707,7 +707,7 @@ async function main() {
     const rawPath = request.url.split("?")[0];
     const pathName = routePathForAuthCheck(rawPath);
     const isPublicAuth = pathName === "/auth/login" || pathName === "/auth/me" || pathName.startsWith("/auth/signup") || pathName === "/auth/telegram/webhook";
-    const isPublic = pathName === "/health" || isPublicAuth || pathName.startsWith("/api-docs");
+    const isPublic = pathName === "/health" || pathName === "/metrics" || isPublicAuth || pathName.startsWith("/api-docs");
 
     // Rate limit unauthenticated requests by IP (except health/metrics)
     if (!isPublic) {
@@ -792,7 +792,7 @@ async function main() {
     const rawPath = request.url.split("?")[0];
     const pathName = routePathForAuthCheck(rawPath);
     const isPublicAuth = pathName === "/auth/login" || pathName === "/auth/me" || pathName.startsWith("/auth/signup") || pathName === "/auth/telegram/webhook";
-    const isPublic = pathName === "/health" || isPublicAuth || pathName.startsWith("/api-docs");
+    const isPublic = pathName === "/health" || pathName === "/metrics" || isPublicAuth || pathName.startsWith("/api-docs");
     if (isPublic) return;
     if (!request.auth?.session_id) return;
     if (request.auth?.active_project_id && request.auth?.account_scope_id) return;
@@ -810,7 +810,7 @@ async function main() {
     const rawPath = request.url.split("?")[0];
     const pathName = routePathForAuthCheck(rawPath);
     const isPublicAuth = pathName === "/auth/login" || pathName === "/auth/me" || pathName.startsWith("/auth/signup") || pathName === "/auth/telegram/webhook";
-    const isPublic = pathName === "/health" || isPublicAuth || pathName.startsWith("/api-docs");
+    const isPublic = pathName === "/health" || pathName === "/metrics" || isPublicAuth || pathName.startsWith("/api-docs");
     if (isPublic) return;
     if (!request.auth?.session_id) return;
 
