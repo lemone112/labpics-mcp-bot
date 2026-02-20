@@ -30,6 +30,8 @@ async function switchProjectFromSidebar(page, projectName, { mobile = false } = 
     await expect(sheet).toBeHidden();
     await page.getByTestId("mobile-projects-open").click();
     await expect(sheet.getByText(`Выбор: ${projectName}`)).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(sheet).toBeHidden();
     return;
   }
 
