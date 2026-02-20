@@ -197,6 +197,7 @@ async function loadLinearApiSnapshot(config, logger) {
   const cycles = Array.isArray(data?.cycles?.nodes) ? data.cycles.nodes : [];
   const issues = [];
   const seenIssueIds = new Set();
+  const seenCursors = new Set();
   const maxPages = toPositiveInt(process.env.LINEAR_SYNC_MAX_PAGES, 100, 1, 1000);
   let after = null;
   for (let page = 0; page < maxPages; page++) {
@@ -239,6 +240,8 @@ async function loadLinearApiSnapshot(config, logger) {
     }
     const pageInfo = issuesData?.issues?.pageInfo || {};
     if (!pageInfo?.hasNextPage || !pageInfo?.endCursor) break;
+    if (seenCursors.has(pageInfo.endCursor)) break;
+    seenCursors.add(pageInfo.endCursor);
     after = pageInfo.endCursor;
   }
   return {
@@ -665,21 +668,36 @@ export async function runLinearSync(pool, scope, logger = console) {
     ? await loadLinearMockSnapshot(pool, scope, workspaceId)
     : await loadLinearApiSnapshot(config, logger);
 
-  const touchedProjects = await upsertProjects(pool, scope, snapshot.projects);
-  const touchedStates = await upsertStates(pool, scope, snapshot.states || []);
-  const touchedCycles = await upsertCycles(pool, scope, snapshot.cycles || []);
-  const touchedIssues = await upsertIssues(pool, scope, snapshot.issues);
-  const cursor = computeCursor([...snapshot.projects, ...(snapshot.states || []), ...(snapshot.cycles || []), ...snapshot.issues]);
+  // Wrap all DB writes + watermark in a transaction so the watermark
+  // only advances when every upsert has been committed.
+  const client = await pool.connect();
+  let touchedProjects, touchedStates, touchedCycles, touchedIssues, cursor;
+  try {
+    await client.query("BEGIN");
 
-  await upsertWatermark(pool, scope, source, cursor.cursorTs, cursor.cursorId, {
-    mode: snapshot.mode,
-    touched_projects: touchedProjects,
-    touched_states: touchedStates,
-    touched_cycles: touchedCycles,
-    touched_issues: touchedIssues,
-    previous_cursor_ts: previousWatermark?.cursor_ts || null,
-    synced_at: new Date().toISOString(),
-  });
+    touchedProjects = await upsertProjects(client, scope, snapshot.projects);
+    touchedStates = await upsertStates(client, scope, snapshot.states || []);
+    touchedCycles = await upsertCycles(client, scope, snapshot.cycles || []);
+    touchedIssues = await upsertIssues(client, scope, snapshot.issues);
+    cursor = computeCursor([...snapshot.projects, ...(snapshot.states || []), ...(snapshot.cycles || []), ...snapshot.issues]);
+
+    await upsertWatermark(client, scope, source, cursor.cursorTs, cursor.cursorId, {
+      mode: snapshot.mode,
+      touched_projects: touchedProjects,
+      touched_states: touchedStates,
+      touched_cycles: touchedCycles,
+      touched_issues: touchedIssues,
+      previous_cursor_ts: previousWatermark?.cursor_ts || null,
+      synced_at: new Date().toISOString(),
+    });
+
+    await client.query("COMMIT");
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
+  }
 
   return {
     source,

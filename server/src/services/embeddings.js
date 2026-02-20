@@ -172,23 +172,36 @@ export async function runEmbeddings(pool, scope, logger = console) {
     model = result.model || model;
 
     const readyRows = [];
-    const failedIds = [];
+    const retryIds = [];
     for (let index = 0; index < claimedRows.length; index++) {
       const claimed = claimedRows[index];
       const embedding = result.embeddings[index];
       if (!Array.isArray(embedding) || !embedding.length) {
-        failedIds.push(claimed.id);
+        retryIds.push(claimed.id);
         continue;
       }
       readyRows.push({ id: claimed.id, embedding });
     }
 
-    await markReadyRows(pool, scope, readyRows, model);
-    await markFailedRows(pool, scope, failedIds, model, "embedding_missing_from_provider");
+    // Wrap ready + retry updates in a transaction so both succeed atomically.
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      await markReadyRows(client, scope, readyRows, model);
+      // Return chunks without embeddings to pending for retry instead
+      // of permanently failing them — the provider may succeed next time.
+      await markClaimedAsPending(client, scope, retryIds, "embedding_missing_from_provider_will_retry");
+      await client.query("COMMIT");
+    } catch (txErr) {
+      await client.query("ROLLBACK");
+      throw txErr;
+    } finally {
+      client.release();
+    }
 
     return {
       processed: readyRows.length,
-      failed: failedIds.length,
+      failed: retryIds.length,
       status: "ok",
       model,
     };
