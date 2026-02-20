@@ -2,7 +2,7 @@ name: Deploy (dev)
 
 on:
   push:
-    branches: [cursor/labpics_dashboard]
+    branches: [labpics_dashboard]
     paths:
       - "apps/api/**"
       - "apps/web/**"
