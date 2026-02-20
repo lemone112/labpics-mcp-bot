@@ -4,8 +4,8 @@ import { spawn } from "node:child_process";
 
 const currentFile = fileURLToPath(import.meta.url);
 const webDir = path.resolve(path.dirname(currentFile), "..");
-const repoRoot = path.resolve(webDir, "..");
-const serverDir = path.join(repoRoot, "server");
+const repoRoot = path.resolve(webDir, "../..");
+const serverDir = path.join(repoRoot, "apps", "api");
 
 const composeProjectName = process.env.E2E_COMPOSE_PROJECT_NAME || "labpics_e2e";
 const dbPort = process.env.E2E_DB_PORT || "55432";
