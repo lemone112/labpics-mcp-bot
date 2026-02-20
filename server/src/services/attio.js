@@ -1151,30 +1151,45 @@ export async function runAttioSync(pool, scope, logger = console) {
   const previousWatermark = await getWatermark(pool, scope, source);
   const snapshot = await loadAttioSnapshot(pool, scope, config, logger);
 
-  const touchedAccounts = await upsertCompanies(pool, scope, snapshot.companies);
-  const touchedOpportunities = await upsertOpportunities(pool, scope, snapshot.opportunities);
-  const touchedPeople = await upsertPeople(pool, scope, snapshot.people || []);
-  const touchedActivities = await upsertActivities(pool, scope, snapshot.activities || []);
-  const mirrorResult = await mirrorToCrmTables(pool, scope);
+  // Wrap all DB writes + watermark in a transaction so the watermark
+  // only advances when every upsert has been committed.
+  const client = await pool.connect();
+  let touchedAccounts, touchedOpportunities, touchedPeople, touchedActivities, mirrorResult, cursor;
+  try {
+    await client.query("BEGIN");
 
-  const cursor = computeCursor([
-    ...snapshot.companies,
-    ...snapshot.opportunities,
-    ...(snapshot.people || []),
-    ...(snapshot.activities || []),
-  ]);
-  await upsertWatermark(pool, scope, source, cursor.cursorTs, cursor.cursorId, {
-    mode: snapshot.mode,
-    touched_accounts: touchedAccounts,
-    touched_opportunities: touchedOpportunities,
-    touched_people: touchedPeople,
-    touched_activities: touchedActivities,
-    mirrored_crm_accounts: mirrorResult.touched_accounts,
-    mirrored_crm_opportunities: mirrorResult.touched_opportunities,
-    coverage: mirrorResult.coverage,
-    previous_cursor_ts: previousWatermark?.cursor_ts || null,
-    synced_at: new Date().toISOString(),
-  });
+    touchedAccounts = await upsertCompanies(client, scope, snapshot.companies);
+    touchedOpportunities = await upsertOpportunities(client, scope, snapshot.opportunities);
+    touchedPeople = await upsertPeople(client, scope, snapshot.people || []);
+    touchedActivities = await upsertActivities(client, scope, snapshot.activities || []);
+    mirrorResult = await mirrorToCrmTables(client, scope);
+
+    cursor = computeCursor([
+      ...snapshot.companies,
+      ...snapshot.opportunities,
+      ...(snapshot.people || []),
+      ...(snapshot.activities || []),
+    ]);
+    await upsertWatermark(client, scope, source, cursor.cursorTs, cursor.cursorId, {
+      mode: snapshot.mode,
+      touched_accounts: touchedAccounts,
+      touched_opportunities: touchedOpportunities,
+      touched_people: touchedPeople,
+      touched_activities: touchedActivities,
+      mirrored_crm_accounts: mirrorResult.touched_accounts,
+      mirrored_crm_opportunities: mirrorResult.touched_opportunities,
+      coverage: mirrorResult.coverage,
+      previous_cursor_ts: previousWatermark?.cursor_ts || null,
+      synced_at: new Date().toISOString(),
+    });
+
+    await client.query("COMMIT");
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
+  }
 
   return {
     source,

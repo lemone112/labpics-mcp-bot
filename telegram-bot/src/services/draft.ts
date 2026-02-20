@@ -50,17 +50,33 @@ export async function createStubDraft(
   return (data as { id: string }).id;
 }
 
-export async function cancelDraft(env: Env, draftId: string): Promise<void> {
-  await db(env)
+export async function cancelDraft(env: Env, draftId: string, telegramUserPk: string): Promise<boolean> {
+  const { data } = await db(env)
     .from("drafts")
     .update({ status: "CANCELLED" satisfies DraftStatus, updated_at: new Date().toISOString() } as Record<string, unknown>)
-    .eq("id", draftId);
+    .eq("id", draftId)
+    .eq("telegram_user_id", telegramUserPk)
+    .select("id")
+    .maybeSingle();
+
+  return data !== null;
 }
 
 export async function applyDraftStub(
   env: Env,
   draftId: string,
-): Promise<{ alreadyApplied: boolean }> {
+  telegramUserPk: string,
+): Promise<{ alreadyApplied: boolean } | null> {
+  // Verify ownership before applying
+  const { data: draft } = await db(env)
+    .from("drafts")
+    .select("id")
+    .eq("id", draftId)
+    .eq("telegram_user_id", telegramUserPk)
+    .maybeSingle();
+
+  if (!draft) return null;
+
   const applyKey = `draft:${draftId}:apply`;
   const ok = await insertIdempotencyKey(env, applyKey, draftId);
   if (!ok) return { alreadyApplied: true };
@@ -81,7 +97,8 @@ export async function applyDraftStub(
   await db(env)
     .from("drafts")
     .update({ status: "APPLIED" satisfies DraftStatus, updated_at: new Date().toISOString() } as Record<string, unknown>)
-    .eq("id", draftId);
+    .eq("id", draftId)
+    .eq("telegram_user_id", telegramUserPk);
 
   return { alreadyApplied: false };
 }
