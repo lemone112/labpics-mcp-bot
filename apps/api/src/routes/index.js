@@ -12,3 +12,4 @@ export { registerSignalRoutes } from "./signals.js";
 export { registerOutboundRoutes } from "./outbound.js";
 export { registerApiKeyRoutes } from "./api-keys.js";
 export { registerUserRoutes } from "./users.js";
+export { registerReportRoutes } from "./reports.js";

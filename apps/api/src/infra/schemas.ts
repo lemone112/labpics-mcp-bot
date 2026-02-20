@@ -139,6 +139,25 @@ export const SearchSchema = z.object({
 });
 
 // ---------------------------------------------------------------------------
+// 7.3  Search Analytics schemas (Iter 45)
+// ---------------------------------------------------------------------------
+
+export const SearchAnalyticsTrackSchema = z.object({
+  query: trimmedString(1, 4000),
+  result_count: z.coerce.number().int().min(0).max(10000).optional().default(0),
+  filters: z.object({}).passthrough().optional().default({}),
+  clicked_result_id: optionalTrimmedString(500),
+  clicked_source_type: optionalTrimmedString(100),
+  event_type: z.enum(["search", "click", "suggestion"]).optional().default("search"),
+  duration_ms: z.coerce.number().int().min(0).max(300000).optional().nullable(),
+});
+
+export const SearchAnalyticsSummarySchema = z.object({
+  days: z.coerce.number().int().min(1).max(365).optional().default(30),
+  top_queries_limit: z.coerce.number().int().min(1).max(100).optional().default(20),
+});
+
+// ---------------------------------------------------------------------------
 // 9.1  Signals & Identity schemas
 // ---------------------------------------------------------------------------
 
@@ -251,3 +270,5 @@ export type IdentityPreviewInput = z.infer<typeof IdentityPreviewSchema>;
 export type RecommendationActionInput = z.infer<typeof RecommendationActionSchema>;
 export type ConnectorRetryInput = z.infer<typeof ConnectorRetrySchema>;
 export type AnalyticsRefreshInput = z.infer<typeof AnalyticsRefreshSchema>;
+export type SearchAnalyticsTrackInput = z.infer<typeof SearchAnalyticsTrackSchema>;
+export type SearchAnalyticsSummaryInput = z.infer<typeof SearchAnalyticsSummarySchema>;
