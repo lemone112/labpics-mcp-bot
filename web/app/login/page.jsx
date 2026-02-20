@@ -8,29 +8,28 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { MotionGroup } from "@/components/ui/motion-group";
-import { Toast } from "@/components/ui/toast";
+import { useToast } from "@/components/ui/toast";
 
 export default function LoginPage() {
   const router = useRouter();
+  const { addToast } = useToast();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
-  const [toast, setToast] = useState({ type: "info", message: "" });
 
   async function onSubmit(event) {
     event.preventDefault();
     setLoading(true);
-    setToast({ type: "info", message: "" });
     try {
       await apiFetch("/auth/login", {
         method: "POST",
         body: { username, password },
       });
-      setToast({ type: "success", message: "Вход выполнен. Перенаправление..." });
+      addToast({ type: "success", message: "Вход выполнен. Перенаправление..." });
       router.push("/control-tower/dashboard");
       router.refresh();
     } catch (error) {
-      setToast({ type: "error", message: error?.message || "Ошибка входа" });
+      addToast({ type: "error", message: error?.message || "Ошибка входа" });
     } finally {
       setLoading(false);
     }
@@ -50,8 +49,9 @@ export default function LoginPage() {
           <CardContent>
             <form className="space-y-4" onSubmit={onSubmit}>
               <div className="space-y-1.5">
-                <label className="text-sm font-medium text-foreground">Логин</label>
+                <label htmlFor="login-username" className="text-sm font-medium text-foreground">Логин</label>
                 <Input
+                  id="login-username"
                   data-testid="login-username"
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
@@ -61,8 +61,9 @@ export default function LoginPage() {
               </div>
 
               <div className="space-y-1.5">
-                <label className="text-sm font-medium text-foreground">Пароль</label>
+                <label htmlFor="login-password" className="text-sm font-medium text-foreground">Пароль</label>
                 <Input
+                  id="login-password"
                   data-testid="login-password"
                   type="password"
                   value={password}
@@ -72,12 +73,10 @@ export default function LoginPage() {
                 />
               </div>
 
-              <Button data-testid="login-submit" type="submit" className="w-full" disabled={loading}>
+              <Button data-testid="login-submit" type="submit" className="w-full" loading={loading}>
                 {loading ? "Вход..." : "Войти"}
               </Button>
             </form>
-
-            <Toast className="mt-4" type={toast.type} message={toast.message} />
           </CardContent>
         </Card>
       </MotionGroup>

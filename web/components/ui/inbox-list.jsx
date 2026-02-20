@@ -2,6 +2,7 @@
 
 import { cn } from "@/lib/utils";
 import { StatusChip } from "@/components/ui/status-chip";
+import { EmptyState } from "@/components/ui/empty-state";
 
 export function InboxList({ items = [], className, onSelect = null }) {
   return (
@@ -26,9 +27,11 @@ export function InboxList({ items = [], className, onSelect = null }) {
         </button>
       ))}
       {!items.length ? (
-        <div className="rounded-xl border bg-muted/30 px-4 py-3 text-xs text-muted-foreground">
-          Список пуст
-        </div>
+        <EmptyState
+          title="Список пуст"
+          reason="Нет элементов для отображения."
+          steps={["Убедитесь, что данные загружены", "Попробуйте изменить фильтры"]}
+        />
       ) : null}
     </div>
   );

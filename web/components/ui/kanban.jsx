@@ -2,6 +2,7 @@
 
 import { cn } from "@/lib/utils";
 import { StatusChip } from "@/components/ui/status-chip";
+import { EmptyState } from "@/components/ui/empty-state";
 
 export function Kanban({ columns = [], className }) {
   return (
@@ -26,9 +27,7 @@ export function Kanban({ columns = [], className }) {
               </div>
             ))}
             {!column.items?.length ? (
-              <div className="rounded-xl border bg-muted/30 px-4 py-3 text-xs text-muted-foreground">
-                Нет элементов
-              </div>
+              <EmptyState title="Нет элементов" reason="В этой колонке пока нет карточек." />
             ) : null}
           </div>
         </section>

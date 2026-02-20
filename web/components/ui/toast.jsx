@@ -83,7 +83,7 @@ function ToastItem({ toast, onDismiss }) {
       <span className="flex-1">{toast.message}</span>
       <button
         onClick={() => onDismiss(toast.id)}
-        className="shrink-0 rounded-sm opacity-60 transition-opacity hover:opacity-100 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+        className="relative shrink-0 rounded-sm opacity-60 transition-opacity after:absolute after:-inset-2 after:content-[''] hover:opacity-100 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
         aria-label="Закрыть"
       >
         <X className="size-4" />
