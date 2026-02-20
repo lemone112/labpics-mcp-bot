@@ -1,5 +1,5 @@
-import { toPositiveInt } from "../lib/chunking.js";
-import { vectorLiteral } from "../lib/db.js";
+import { toPositiveInt } from "../../infra/chunking.js";
+import { vectorLiteral } from "../../infra/db.js";
 import { createEmbeddings } from "./openai.js";
 
 function truncateError(error, maxLen = 400) {

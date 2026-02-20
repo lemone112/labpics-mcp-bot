@@ -8,9 +8,9 @@ import {
   parseLimit,
   sendOk,
   sendError,
-} from "../src/lib/api-contract.js";
-import { getRequestScope, requireProjectScope } from "../src/lib/scope.js";
-import { normalizeEvidenceRefs } from "../src/services/audit.js";
+} from "../src/infra/api-contract.js";
+import { getRequestScope, requireProjectScope } from "../src/infra/scope.js";
+import { normalizeEvidenceRefs } from "../src/domains/core/audit.js";
 
 // ===========================================================================
 // api-contract.js

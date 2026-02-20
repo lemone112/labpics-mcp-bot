@@ -817,6 +817,8 @@ Full-stack интеграционные тесты с реальной PostgreSQ
 
 | Область | Элемент |
 |---------|---------|
+| Telegram Bot | **Подготовить PostgreSQL базу данных для Telegram бота** — миграция со схемы Supabase (`bot`) на shared PostgreSQL. Создать миграции, обновить модели, адаптировать docker-compose volumes/init. Блокирует Iter 50. |
+| Telegram Bot | Удалить все упоминания Supabase из `apps/telegram-bot/docs/` и `.claude/commands/` |
 | Integrations | Email connector (Gmail/Outlook), File attachments (S3/R2), Google Calendar, GitHub |
 | Finance | Invoicing (Stripe), Budget tracking per project |
 | Platform | Client portal (read-only), SaaS multi-tenancy, PDF/XLSX export |

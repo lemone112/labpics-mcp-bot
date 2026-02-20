@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { _CASCADE_CHAINS_FOR_TESTING as CASCADE_CHAINS } from "../src/services/scheduler.js";
+import { _CASCADE_CHAINS_FOR_TESTING as CASCADE_CHAINS } from "../src/domains/core/scheduler.js";
 
 test("cascade chains are defined for connectors_sync_cycle", () => {
   assert.ok(Array.isArray(CASCADE_CHAINS.connectors_sync_cycle));

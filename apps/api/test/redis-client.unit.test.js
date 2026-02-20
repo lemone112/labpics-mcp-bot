@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { createRedisClient } from "../src/lib/redis.js";
+import { createRedisClient } from "../src/infra/redis.js";
 
 test("createRedisClient returns null when no URL is provided", () => {
   const original = process.env.REDIS_URL;

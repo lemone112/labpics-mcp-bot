@@ -1,8 +1,8 @@
 import crypto from "node:crypto";
 
-import { fail } from "../lib/api-contract.js";
-import { normalizeEvidenceRefs, writeAuditEvent } from "./audit.js";
-import { toPositiveInt } from '../lib/utils.js';
+import { fail } from "../../infra/api-contract.js";
+import { normalizeEvidenceRefs, writeAuditEvent } from "../core/audit.js";
+import { toPositiveInt } from '../../infra/utils.js';
 
 function nowTs() {
   return new Date().toISOString();

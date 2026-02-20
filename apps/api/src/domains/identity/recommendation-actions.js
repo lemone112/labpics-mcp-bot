@@ -1,6 +1,6 @@
 import crypto from "node:crypto";
 
-import { approveOutbound, createOutboundDraft, sendOutbound } from "./outbox.js";
+import { approveOutbound, createOutboundDraft, sendOutbound } from "../outbound/outbox.js";
 
 export const RECOMMENDATION_ACTION_TYPES = {
   CREATE_OR_UPDATE_TASK: "create_or_update_task",

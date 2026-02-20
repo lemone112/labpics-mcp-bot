@@ -1,7 +1,7 @@
-import { parseBody, parseLimit, sendOk } from "../lib/api-contract.js";
-import { cacheKeyHash } from "../lib/cache.js";
-import { requireProjectScope } from "../lib/scope.js";
-import { writeAuditEvent } from "../services/audit.js";
+import { parseBody, parseLimit, sendOk } from "../infra/api-contract.js";
+import { cacheKeyHash } from "../infra/cache.js";
+import { requireProjectScope } from "../infra/scope.js";
+import { writeAuditEvent } from "../domains/core/audit.js";
 import {
   generateDailyDigest,
   generateWeeklyDigest,
@@ -11,8 +11,8 @@ import {
   getRiskOverview,
   refreshAnalytics,
   refreshRiskAndHealth,
-} from "../services/intelligence.js";
-import { getPortfolioMessages, getPortfolioOverview } from "../services/portfolio.js";
+} from "../domains/analytics/intelligence.js";
+import { getPortfolioMessages, getPortfolioOverview } from "../domains/analytics/portfolio.js";
 
 /**
  * Control-tower, portfolio, analytics, digests, risk routes.

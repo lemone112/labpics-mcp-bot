@@ -1,8 +1,8 @@
-import { ApiError, parseBody, sendError, sendOk } from "../lib/api-contract.js";
-import { cacheKeyHash } from "../lib/cache.js";
-import { requireProjectScope } from "../lib/scope.js";
-import { writeAuditEvent } from "../services/audit.js";
-import { getLightRagStatus, queryLightRag, refreshLightRag, submitLightRagFeedback } from "../services/lightrag.js";
+import { ApiError, parseBody, sendError, sendOk } from "../infra/api-contract.js";
+import { cacheKeyHash } from "../infra/cache.js";
+import { requireProjectScope } from "../infra/scope.js";
+import { writeAuditEvent } from "../domains/core/audit.js";
+import { getLightRagStatus, queryLightRag, refreshLightRag, submitLightRagFeedback } from "../domains/rag/lightrag.js";
 
 /**
  * @param {object} ctx

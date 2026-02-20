@@ -1,5 +1,5 @@
-import { fail } from "../lib/api-contract.js";
-import { toPositiveInt, toNumber, clamp } from '../lib/utils.js';
+import { fail } from "../../infra/api-contract.js";
+import { toPositiveInt, toNumber, clamp } from '../../infra/utils.js';
 
 function uniqueProjectIds(input) {
   if (!Array.isArray(input)) return [];

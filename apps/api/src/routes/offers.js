@@ -1,7 +1,7 @@
-import { ApiError, parseBody, parseLimit, sendError, sendOk } from "../lib/api-contract.js";
-import { requireProjectScope } from "../lib/scope.js";
-import { normalizeEvidenceRefs, writeAuditEvent } from "../services/audit.js";
-import { findCachedResponse, getIdempotencyKey, storeCachedResponse } from "../lib/idempotency.js";
+import { ApiError, parseBody, parseLimit, sendError, sendOk } from "../infra/api-contract.js";
+import { requireProjectScope } from "../infra/scope.js";
+import { normalizeEvidenceRefs, writeAuditEvent } from "../domains/core/audit.js";
+import { findCachedResponse, getIdempotencyKey, storeCachedResponse } from "../infra/idempotency.js";
 
 /**
  * @param {object} ctx

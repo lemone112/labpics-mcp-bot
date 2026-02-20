@@ -14,7 +14,7 @@ test("createRedisPubSub returns no-op when REDIS_URL not set", async () => {
   delete process.env.REDIS_URL;
 
   // Dynamic import to get fresh module
-  const { createRedisPubSub } = await import("../src/lib/redis-pubsub.js");
+  const { createRedisPubSub } = await import("../src/infra/redis-pubsub.js");
 
   const logger = {
     info: () => {},

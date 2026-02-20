@@ -1,6 +1,6 @@
 import { describe, it, beforeEach, afterEach } from "node:test";
 import assert from "node:assert/strict";
-import { fetchWithRetry, resetCircuitBreakers } from "../src/lib/http.js";
+import { fetchWithRetry, resetCircuitBreakers } from "../src/infra/http.js";
 
 const silentLogger = { warn: () => {}, info: () => {}, error: () => {} };
 

@@ -1,6 +1,6 @@
-import { ApiError, parseBody, sendError, sendOk } from "../lib/api-contract.js";
-import { requireProjectScope } from "../lib/scope.js";
-import { writeAuditEvent } from "../services/audit.js";
+import { ApiError, parseBody, sendError, sendOk } from "../infra/api-contract.js";
+import { requireProjectScope } from "../infra/scope.js";
+import { writeAuditEvent } from "../domains/core/audit.js";
 
 const LEGACY_SCOPE_PROJECT_NAME = "__legacy_scope__";
 

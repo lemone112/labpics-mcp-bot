@@ -1,6 +1,6 @@
-import { fetchWithRetry } from "../lib/http.js";
-import { toIsoTime, toPositiveInt } from "../lib/chunking.js";
-import { resolveProjectSourceBinding } from "./sources.js";
+import { fetchWithRetry } from "../../infra/http.js";
+import { toIsoTime, toPositiveInt } from "../../infra/chunking.js";
+import { resolveProjectSourceBinding } from "../core/sources.js";
 
 function asText(value, maxLen = 1000) {
   if (value == null) return null;

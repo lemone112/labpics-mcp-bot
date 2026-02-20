@@ -1,5 +1,5 @@
-import { parseLimit, sendOk } from "../lib/api-contract.js";
-import { requireProjectScope } from "../lib/scope.js";
+import { parseLimit, sendOk } from "../infra/api-contract.js";
+import { requireProjectScope } from "../infra/scope.js";
 
 /**
  * Contacts, conversations, messages routes.

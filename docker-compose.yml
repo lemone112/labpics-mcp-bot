@@ -230,8 +230,7 @@ services:
     restart: unless-stopped
     environment:
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
-      SUPABASE_URL: ${SUPABASE_URL:-}
-      SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY:-}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-app}:${POSTGRES_PASSWORD:-app}@db:5432/${POSTGRES_DB:-labpics}
       COMPOSIO_API_KEY: ${COMPOSIO_API_KEY:-}
       BOT_ALLOWED_TELEGRAM_USER_IDS: ${BOT_ALLOWED_TELEGRAM_USER_IDS:-}
     ports:

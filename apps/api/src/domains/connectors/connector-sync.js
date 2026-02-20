@@ -1,7 +1,7 @@
 import { runAttioSync } from "./attio.js";
 import { runChatwootSync } from "./chatwoot.js";
 import { runLinearSync } from "./linear.js";
-import { createComposioMcpRunner, createConnector } from "../connectors/index.js";
+import { createComposioMcpRunner, createConnector } from "../../connectors/index.js";
 import {
   getConnectorSyncState,
   listDueConnectorErrors,
@@ -13,10 +13,10 @@ import {
   resolveConnectorErrors,
 } from "./connector-state.js";
 import { syncConnectorEventLog } from "./event-log.js";
-import { failProcessRun, finishProcessRun, startProcessRun, warnProcess } from "./process-log.js";
-import { previewIdentitySuggestions } from "./identity-graph.js";
+import { failProcessRun, finishProcessRun, startProcessRun, warnProcess } from "../core/process-log.js";
+import { previewIdentitySuggestions } from "../identity/identity-graph.js";
 import { runSyncReconciliation } from "./reconciliation.js";
-import { withTransaction } from "../lib/db.js";
+import { withTransaction } from "../../infra/db.js";
 
 const CONNECTORS = ["chatwoot", "linear", "attio"];
 

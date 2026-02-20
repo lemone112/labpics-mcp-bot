@@ -1,5 +1,5 @@
-import { fetchWithRetry } from "../lib/http.js";
-import { toPositiveInt } from "../lib/chunking.js";
+import { fetchWithRetry } from "../../infra/http.js";
+import { toPositiveInt } from "../../infra/chunking.js";
 
 function requiredEnv(name) {
   const value = process.env[name];

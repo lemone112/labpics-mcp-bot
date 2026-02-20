@@ -1,5 +1,5 @@
-import { toPositiveInt, toNumber } from '../lib/utils.js';
-import { writeAuditEvent } from './audit.js';
+import { toPositiveInt, toNumber } from '../../infra/utils.js';
+import { writeAuditEvent } from '../core/audit.js';
 
 function clampPercent(value) {
   return Math.max(0, Math.min(100, Number(value || 0)));

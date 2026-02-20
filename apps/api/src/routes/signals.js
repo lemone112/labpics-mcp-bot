@@ -1,10 +1,10 @@
-import { ApiError, parseBody, sendError, sendOk } from "../lib/api-contract.js";
-import { requireProjectScope } from "../lib/scope.js";
-import { writeAuditEvent } from "../services/audit.js";
-import { extractSignalsAndNba, listNba, listSignals, updateNbaStatus, updateSignalStatus } from "../services/signals.js";
-import { listUpsellRadar, refreshUpsellRadar, updateUpsellStatus } from "../services/upsell.js";
-import { applyContinuityActions, buildContinuityPreview, listContinuityActions } from "../services/continuity.js";
-import { applyIdentitySuggestions, listIdentityLinks, listIdentitySuggestions, previewIdentitySuggestions } from "../services/identity-graph.js";
+import { ApiError, parseBody, sendError, sendOk } from "../infra/api-contract.js";
+import { requireProjectScope } from "../infra/scope.js";
+import { writeAuditEvent } from "../domains/core/audit.js";
+import { extractSignalsAndNba, listNba, listSignals, updateNbaStatus, updateSignalStatus } from "../domains/analytics/signals.js";
+import { listUpsellRadar, refreshUpsellRadar, updateUpsellStatus } from "../domains/analytics/upsell.js";
+import { applyContinuityActions, buildContinuityPreview, listContinuityActions } from "../domains/outbound/continuity.js";
+import { applyIdentitySuggestions, listIdentityLinks, listIdentitySuggestions, previewIdentitySuggestions } from "../domains/identity/identity-graph.js";
 
 /**
  * Signals, NBA, upsell, continuity, identity routes.

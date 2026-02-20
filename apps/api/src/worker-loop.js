@@ -1,10 +1,10 @@
 import "dotenv/config";
 
-import { createDbPool } from "./lib/db.js";
-import { createLogger } from "./lib/logger.js";
-import { createRedisPubSub } from "./lib/redis-pubsub.js";
-import { requiredEnv } from "./lib/utils.js";
-import { runSchedulerTick } from "./services/scheduler.js";
+import { createDbPool } from "./infra/db.js";
+import { createLogger } from "./infra/logger.js";
+import { createRedisPubSub } from "./infra/redis-pubsub.js";
+import { requiredEnv } from "./infra/utils.js";
+import { runSchedulerTick } from "./domains/core/scheduler.js";
 
 const logger = createLogger("worker-loop");
 

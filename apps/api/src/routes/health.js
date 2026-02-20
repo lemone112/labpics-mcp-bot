@@ -1,5 +1,5 @@
-import { sendOk } from "../lib/api-contract.js";
-import { getCircuitBreakerStates } from "../lib/http.js";
+import { sendOk } from "../infra/api-contract.js";
+import { getCircuitBreakerStates } from "../infra/http.js";
 
 /**
  * @param {object} ctx

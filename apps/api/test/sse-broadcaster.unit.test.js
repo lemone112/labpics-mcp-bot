@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { createSseBroadcaster } from "../src/lib/sse-broadcaster.js";
+import { createSseBroadcaster } from "../src/infra/sse-broadcaster.js";
 
 function createMockLogger() {
   const logs = [];

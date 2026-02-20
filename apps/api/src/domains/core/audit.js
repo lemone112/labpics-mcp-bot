@@ -1,4 +1,4 @@
-import { fail } from "../lib/api-contract.js";
+import { fail } from "../../infra/api-contract.js";
 
 const MAX_EVIDENCE_REFS = 50;
 

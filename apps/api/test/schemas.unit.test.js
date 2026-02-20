@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { parseBody } from "../src/lib/api-contract.js";
+import { parseBody } from "../src/infra/api-contract.js";
 import {
   LoginSchema,
   CreateProjectSchema,
@@ -14,7 +14,7 @@ import {
   LightRagQuerySchema,
   LightRagFeedbackSchema,
   SearchSchema,
-} from "../src/lib/schemas.js";
+} from "../src/infra/schemas.js";
 
 describe("parseBody", () => {
   it("throws ApiError on invalid input", () => {

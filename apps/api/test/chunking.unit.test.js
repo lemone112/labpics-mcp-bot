@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { chunkText, shortSnippet, toIsoTime, toPositiveInt } from "../src/lib/chunking.js";
+import { chunkText, shortSnippet, toIsoTime, toPositiveInt } from "../src/infra/chunking.js";
 
 describe("chunkText", () => {
   it("splits text into fixed-size chunks", () => {

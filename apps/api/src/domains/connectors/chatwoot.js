@@ -1,8 +1,8 @@
 import crypto from "node:crypto";
 
-import { fetchWithRetry } from "../lib/http.js";
-import { chunkText, toIsoTime, toPositiveInt } from "../lib/chunking.js";
-import { resolveProjectSourceBinding } from "./sources.js";
+import { fetchWithRetry } from "../../infra/http.js";
+import { chunkText, toIsoTime, toPositiveInt } from "../../infra/chunking.js";
+import { resolveProjectSourceBinding } from "../core/sources.js";
 
 function requiredEnv(name) {
   const value = process.env[name];

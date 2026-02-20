@@ -1,9 +1,9 @@
-import { fail, parseBody, parseLimit, sendOk } from "../lib/api-contract.js";
-import { requireProjectScope } from "../lib/scope.js";
-import { listAuditEvents } from "../services/audit.js";
-import { approveOutbound, createOutboundDraft, listOutbound, processDueOutbounds, sendOutbound, setOptOut } from "../services/outbox.js";
-import { findCachedResponse, getIdempotencyKey, storeCachedResponse } from "../lib/idempotency.js";
-import { syncLoopsContacts } from "../services/loops.js";
+import { fail, parseBody, parseLimit, sendOk } from "../infra/api-contract.js";
+import { requireProjectScope } from "../infra/scope.js";
+import { listAuditEvents } from "../domains/core/audit.js";
+import { approveOutbound, createOutboundDraft, listOutbound, processDueOutbounds, sendOutbound, setOptOut } from "../domains/outbound/outbox.js";
+import { findCachedResponse, getIdempotencyKey, storeCachedResponse } from "../infra/idempotency.js";
+import { syncLoopsContacts } from "../domains/outbound/loops.js";
 
 /**
  * Outbound, audit, evidence, loops routes.

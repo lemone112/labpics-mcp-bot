@@ -13,7 +13,7 @@ import {
   toBoolean,
   boolFromEnv,
   requiredEnv,
-} from "../src/lib/utils.js";
+} from "../src/infra/utils.js";
 
 describe("toPositiveInt", () => {
   it("parses valid integer", () => {

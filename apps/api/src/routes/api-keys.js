@@ -1,5 +1,5 @@
-import { generateApiKey } from "../lib/api-keys.js";
-import { ApiError, sendError } from "../lib/api-contract.js";
+import { generateApiKey } from "../infra/api-keys.js";
+import { ApiError, sendError } from "../infra/api-contract.js";
 
 export function registerApiKeyRoutes(ctx) {
   const { registerGet, registerPost, pool } = ctx;

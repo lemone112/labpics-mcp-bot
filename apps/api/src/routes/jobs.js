@@ -1,11 +1,11 @@
-import { ApiError, sendError, sendOk } from "../lib/api-contract.js";
-import { requireProjectScope } from "../lib/scope.js";
-import { writeAuditEvent } from "../services/audit.js";
-import { runEmbeddings } from "../services/embeddings.js";
-import { finishJob, getJobsStatus, startJob } from "../services/jobs.js";
-import { runConnectorSync } from "../services/connector-sync.js";
-import { listScheduledJobs, runSchedulerTick } from "../services/scheduler.js";
-import { parseLimit } from "../lib/api-contract.js";
+import { ApiError, sendError, sendOk } from "../infra/api-contract.js";
+import { requireProjectScope } from "../infra/scope.js";
+import { writeAuditEvent } from "../domains/core/audit.js";
+import { runEmbeddings } from "../domains/rag/embeddings.js";
+import { finishJob, getJobsStatus, startJob } from "../domains/core/jobs.js";
+import { runConnectorSync } from "../domains/connectors/connector-sync.js";
+import { listScheduledJobs, runSchedulerTick } from "../domains/core/scheduler.js";
+import { parseLimit } from "../infra/api-contract.js";
 
 /**
  * @param {object} ctx

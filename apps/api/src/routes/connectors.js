@@ -1,15 +1,15 @@
-import { ApiError, parseBody, parseLimit, sendError, sendOk } from "../lib/api-contract.js";
-import { requireProjectScope } from "../lib/scope.js";
-import { writeAuditEvent } from "../services/audit.js";
+import { ApiError, parseBody, parseLimit, sendError, sendOk } from "../infra/api-contract.js";
+import { requireProjectScope } from "../infra/scope.js";
+import { writeAuditEvent } from "../domains/core/audit.js";
 import {
   listConnectorErrors,
   listConnectorSyncState,
   retryConnectorErrors,
   runAllConnectorsSync,
   runConnectorSync,
-} from "../services/connector-sync.js";
-import { listDeadLetterErrors, retryDeadLetterError } from "../services/connector-state.js";
-import { getCompletenessDiff, listSyncReconciliation, runSyncReconciliation } from "../services/reconciliation.js";
+} from "../domains/connectors/connector-sync.js";
+import { listDeadLetterErrors, retryDeadLetterError } from "../domains/connectors/connector-state.js";
+import { getCompletenessDiff, listSyncReconciliation, runSyncReconciliation } from "../domains/connectors/reconciliation.js";
 
 /**
  * @param {object} ctx

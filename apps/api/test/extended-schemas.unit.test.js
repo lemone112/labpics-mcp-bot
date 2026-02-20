@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { parseBody } from "../src/lib/api-contract.js";
+import { parseBody } from "../src/infra/api-contract.js";
 import {
   SignalStatusSchema,
   NbaStatusSchema,
@@ -19,7 +19,7 @@ import {
   LoopsSyncSchema,
   UpsellStatusSchema,
   ContinuityApplySchema,
-} from "../src/lib/schemas.js";
+} from "../src/infra/schemas.js";
 
 // ===========================================================================
 // Iter 9 — Extended Input Validation
@@ -186,7 +186,7 @@ test("ContinuityApplySchema accepts string array", () => {
 // ---------------------------------------------------------------------------
 
 test("listDeadLetterErrors and retryDeadLetterError are exported", async () => {
-  const mod = await import("../src/services/connector-state.js");
+  const mod = await import("../src/domains/connectors/connector-state.js");
   assert.equal(typeof mod.listDeadLetterErrors, "function");
   assert.equal(typeof mod.retryDeadLetterError, "function");
 });

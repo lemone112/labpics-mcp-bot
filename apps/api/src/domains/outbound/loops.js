@@ -1,6 +1,6 @@
-import { fail } from "../lib/api-contract.js";
-import { writeAuditEvent } from "./audit.js";
-import { toPositiveInt } from '../lib/utils.js';
+import { fail } from "../../infra/api-contract.js";
+import { writeAuditEvent } from "../core/audit.js";
+import { toPositiveInt } from '../../infra/utils.js';
 
 const DEFAULT_LOOPS_API_BASE = "https://app.loops.so/api/v1";
 

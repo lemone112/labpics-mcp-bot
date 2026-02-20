@@ -1,12 +1,12 @@
-import { processDueOutbounds, cleanupOldOutboundMessages } from "./outbox.js";
-import { runEmbeddings } from "./embeddings.js";
-import { extractSignalsAndNba } from "./signals.js";
-import { refreshUpsellRadar } from "./upsell.js";
-import { generateDailyDigest, generateWeeklyDigest, refreshAnalytics, refreshRiskAndHealth } from "./intelligence.js";
-import { syncLoopsContacts } from "./loops.js";
-import { retryConnectorErrors, runAllConnectorsSync, runConnectorSync } from "./connector-sync.js";
-import { runSyncReconciliation } from "./reconciliation.js";
-import { toPositiveInt } from '../lib/utils.js';
+import { processDueOutbounds, cleanupOldOutboundMessages } from "../outbound/outbox.js";
+import { runEmbeddings } from "../rag/embeddings.js";
+import { extractSignalsAndNba } from "../analytics/signals.js";
+import { refreshUpsellRadar } from "../analytics/upsell.js";
+import { generateDailyDigest, generateWeeklyDigest, refreshAnalytics, refreshRiskAndHealth } from "../analytics/intelligence.js";
+import { syncLoopsContacts } from "../outbound/loops.js";
+import { retryConnectorErrors, runAllConnectorsSync, runConnectorSync } from "../connectors/connector-sync.js";
+import { runSyncReconciliation } from "../connectors/reconciliation.js";
+import { toPositiveInt } from '../../infra/utils.js';
 
 /**
  * After a job completes successfully, downstream jobs are triggered immediately

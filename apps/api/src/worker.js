@@ -1,8 +1,8 @@
 import "dotenv/config";
 
-import { createDbPool } from "./lib/db.js";
-import { createLogger } from "./lib/logger.js";
-import { runSchedulerTick } from "./services/scheduler.js";
+import { createDbPool } from "./infra/db.js";
+import { createLogger } from "./infra/logger.js";
+import { runSchedulerTick } from "./domains/core/scheduler.js";
 
 const logger = createLogger("worker");
 

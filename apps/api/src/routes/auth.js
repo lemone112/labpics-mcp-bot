@@ -1,5 +1,5 @@
-import { ApiError, sendError, sendOk } from "../lib/api-contract.js";
-import { writeAuditEvent } from "../services/audit.js";
+import { ApiError, sendError, sendOk } from "../infra/api-contract.js";
+import { writeAuditEvent } from "../domains/core/audit.js";
 
 /**
  * @param {object} ctx

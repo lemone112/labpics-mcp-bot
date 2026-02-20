@@ -1,5 +1,5 @@
 import "dotenv/config";
-import { validateEnv } from "./lib/env-check.js";
+import { validateEnv } from "./infra/env-check.js";
 validateEnv();
 
 import crypto from "node:crypto";
@@ -13,8 +13,8 @@ import swagger from "@fastify/swagger";
 import swaggerUi from "@fastify/swagger-ui";
 import bcrypt from "bcrypt";
 
-import { createDbPool } from "./lib/db.js";
-import { ApiError, fail, parseBody, sendError, toApiError } from "./lib/api-contract.js";
+import { createDbPool } from "./infra/db.js";
+import { ApiError, fail, parseBody, sendError, toApiError } from "./infra/api-contract.js";
 import {
   LoginSchema,
   CreateProjectSchema,
@@ -39,14 +39,14 @@ import {
   LoopsSyncSchema,
   UpsellStatusSchema,
   ContinuityApplySchema,
-} from "./lib/schemas.js";
-import { rateLimitHook } from "./lib/rate-limit.js";
+} from "./infra/schemas.js";
+import { rateLimitHook } from "./infra/rate-limit.js";
 import { applyMigrations } from "../db/migrate-lib.js";
-import { createRedisPubSub } from "./lib/redis-pubsub.js";
-import { createSseBroadcaster } from "./lib/sse-broadcaster.js";
-import { createCacheLayer } from "./lib/cache.js";
-import { requiredEnv } from "./lib/utils.js";
-import { createApiKeyAuth } from "./lib/api-keys.js";
+import { createRedisPubSub } from "./infra/redis-pubsub.js";
+import { createSseBroadcaster } from "./infra/sse-broadcaster.js";
+import { createCacheLayer } from "./infra/cache.js";
+import { requiredEnv } from "./infra/utils.js";
+import { createApiKeyAuth } from "./infra/api-keys.js";
 import {
   registerHealthRoutes,
   registerAuthRoutes,
