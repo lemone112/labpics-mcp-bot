@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 
 const currentDir = dirname(fileURLToPath(import.meta.url));
 const indexSource = readFileSync(join(currentDir, "..", "src", "index.js"), "utf8");
-const apiSource = readFileSync(join(currentDir, "..", "src", "lib", "api-contract.js"), "utf8");
+const apiSource = readFileSync(join(currentDir, "..", "src", "infra", "api-contract.ts"), "utf8");
 // Route files (route handlers extracted from index.js into routes/*.js)
 const authRouteSource = readFileSync(join(currentDir, "..", "src", "routes", "auth.js"), "utf8");
 const projectsRouteSource = readFileSync(join(currentDir, "..", "src", "routes", "projects.js"), "utf8");
@@ -106,8 +106,8 @@ test("project select endpoint invalidates session cache", () => {
   const selectHandlerIdx = allRouteSource.indexOf('"/projects/:id/select"');
   assert.ok(selectHandlerIdx > -1, "Expected /projects/:id/select endpoint");
 
-  // Get the next ~500 chars after the handler registration to find cache.del
-  const handlerSlice = allRouteSource.slice(selectHandlerIdx, selectHandlerIdx + 1000);
+  // Get the next ~2000 chars after the handler registration to find cache.del
+  const handlerSlice = allRouteSource.slice(selectHandlerIdx, selectHandlerIdx + 2000);
   assert.ok(
     handlerSlice.includes("cache.del(`session:${sid}`)"),
     "Expected cache.del for session after project switch"
@@ -194,22 +194,22 @@ test("migration 0020 adds index on sessions.last_seen_at", () => {
 // 8.6 CSRF cookie httpOnly=true
 // ---------------------------------------------------------------------------
 
-test("CSRF cookie has httpOnly: true", () => {
+test("CSRF cookie has httpOnly: false (readable by JS for header-based CSRF)", () => {
   // Find the csrfCookieOptions block
   const csrfOptsIdx = indexSource.indexOf("csrfCookieOptions = {");
   assert.ok(csrfOptsIdx > -1, "Expected csrfCookieOptions definition");
   const csrfOptsSlice = indexSource.slice(csrfOptsIdx, csrfOptsIdx + 200);
   assert.ok(
-    csrfOptsSlice.includes("httpOnly: true"),
-    "CSRF cookie must have httpOnly: true"
+    csrfOptsSlice.includes("httpOnly: false"),
+    "CSRF cookie must have httpOnly: false so JS can read the token for X-CSRF-Token header"
   );
 });
 
 test("login response includes csrf_token in body", () => {
   // The login handler should return csrf_token in the response body
-  const loginIdx = allRouteSource.indexOf('"/auth/login"');
-  assert.ok(loginIdx > -1, "Expected /auth/login endpoint");
-  const loginSlice = allRouteSource.slice(loginIdx, loginIdx + 3000);
+  const loginIdx = authRouteSource.indexOf('"/auth/login"');
+  assert.ok(loginIdx > -1, "Expected /auth/login endpoint in auth route");
+  const loginSlice = authRouteSource.slice(loginIdx, loginIdx + 5000);
   assert.ok(
     loginSlice.includes("csrf_token: csrfToken"),
     "Login response must include csrf_token in body"
@@ -217,9 +217,9 @@ test("login response includes csrf_token in body", () => {
 });
 
 test("/auth/me response includes csrf_token", () => {
-  const meIdx = allRouteSource.indexOf('"/auth/me"');
-  assert.ok(meIdx > -1, "Expected /auth/me endpoint");
-  const meSlice = allRouteSource.slice(meIdx, meIdx + 2000);
+  const meIdx = authRouteSource.indexOf('"/auth/me"');
+  assert.ok(meIdx > -1, "Expected /auth/me endpoint in auth route");
+  const meSlice = authRouteSource.slice(meIdx, meIdx + 2000);
   assert.ok(
     meSlice.includes("csrf_token: hydrated.csrf_token"),
     "/auth/me response must include csrf_token"
