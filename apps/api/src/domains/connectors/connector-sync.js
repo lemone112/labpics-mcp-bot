@@ -174,24 +174,50 @@ export async function runConnectorSync(pool, scope, connector, logger = console)
   }
 }
 
-export async function runAllConnectorsSync(pool, scope, logger = console) {
+export async function runAllConnectorsSync(pool, scope, logger = console, options = {}) {
   const run = await startProcessRun(pool, scope, "connectors_sync_cycle", {
     source: "system",
     payload: { connectors: CONNECTORS },
   });
-  const results = [];
-  for (const connector of CONNECTORS) {
+
+  // Emit SSE progress event if publishFn is provided
+  const publishFn = options.publishFn || null;
+  async function emitProgress(phase, detail = {}) {
+    if (typeof publishFn !== "function") return;
     try {
-      const result = await runConnectorSync(pool, scope, connector, logger);
-      results.push({ connector, status: "ok", ...result });
-    } catch (error) {
-      results.push({
-        connector,
-        status: "failed",
-        error: String(error?.message || error),
-      });
-    }
+      await publishFn("connector_sync_progress", JSON.stringify({
+        project_id: scope.projectId,
+        account_scope_id: scope.accountScopeId,
+        phase,
+        ...detail,
+        at: new Date().toISOString(),
+      }));
+    } catch { /* non-critical */ }
   }
+
+  await emitProgress("started", { connectors: CONNECTORS });
+
+  // Run all connectors in parallel using Promise.allSettled (44.1)
+  const settled = await Promise.allSettled(
+    CONNECTORS.map((connector) =>
+      runConnectorSync(pool, scope, connector, logger)
+        .then((result) => ({ connector, status: "ok", ...result }))
+    )
+  );
+
+  const results = settled.map((outcome, idx) => {
+    if (outcome.status === "fulfilled") return outcome.value;
+    return {
+      connector: CONNECTORS[idx],
+      status: "failed",
+      error: String(outcome.reason?.message || outcome.reason),
+    };
+  });
+
+  await emitProgress("connectors_done", {
+    ok: results.filter((r) => r.status === "ok").length,
+    failed: results.filter((r) => r.status === "failed").length,
+  });
   const summary = {
     total: CONNECTORS.length,
     ok: results.filter((row) => row.status === "ok").length,
@@ -203,18 +229,21 @@ export async function runAllConnectorsSync(pool, scope, logger = console) {
       payload: summary,
     });
   }
+  await emitProgress("matview_refresh");
   try {
     await pool.query('REFRESH MATERIALIZED VIEW CONCURRENTLY mv_portfolio_dashboard');
   } catch {
     // matview may not exist yet (pre-migration) — swallow
   }
 
+  await emitProgress("identity_preview");
   try {
     await previewIdentitySuggestions(pool, scope, 50);
   } catch {
     // identity preview failure is non-critical
   }
 
+  await emitProgress("reconciliation");
   let reconciliation = null;
   try {
     reconciliation = await runSyncReconciliation(pool, scope, { source: "sync_cycle" });
@@ -248,6 +277,9 @@ export async function runAllConnectorsSync(pool, scope, logger = console) {
       reconciliation,
     },
   });
+
+  await emitProgress("completed", { total: summary.total, ok: summary.ok, failed: summary.failed });
+
   return {
     ...summary,
     reconciliation,
