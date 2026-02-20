@@ -15,6 +15,9 @@ After any research, analysis, or audit — always review the result from a posit
 - Design must be **clean and modern**, following 2026 SaaS design trends.
 - UX must be **logical and intuitive** — minimal friction, clear hierarchy, predictable interactions.
 - UI must match current **SaaS-standard patterns**: consistent component usage, proper density, accessible contrast, smooth transitions.
+- **MANDATORY:** Before any UI/UX work, use the `ui-ux-pro-max` skill (`python3 .claude/skills/ui-ux-pro-max/scripts/search.py`) to get design recommendations — palette, typography, style, and anti-patterns.
+- **Components: shadcn/ui only.** Use clean, unmodified shadcn/ui primitives. No custom wrappers unless absolutely necessary. Extend via Tailwind classes, not component forks.
+- **Animation: anime.js only.** All motion and transitions beyond simple CSS hover/focus must use anime.js. No framer-motion, no react-spring, no GSAP. Keep animations purposeful — entrance, state change, feedback — per `web/MOTION_GUIDELINES.md`.
 
 ## Tech stack
 
@@ -31,6 +34,7 @@ After any research, analysis, or audit — always review the result from a posit
 - Component selection: `web/COMPONENT_SELECTION.md`
 - Quality gates: `web/QUALITY_GATES_UI.md`
 - Automated checks: `web/scripts/design-audit.mjs`, `web/scripts/ui-consistency-check.mjs`
+- **Design intelligence:** `.claude/skills/ui-ux-pro-max/` — searchable DB of 67 styles, 96 palettes, 57 font pairings, 99 UX guidelines. Use `--design-system` for full recommendations, `--domain` for targeted lookups, `--stack shadcn` for shadcn-specific patterns.
 
 ## Task tracking
 
