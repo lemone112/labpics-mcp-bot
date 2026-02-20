@@ -20,5 +20,4 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_idempotency_keys_project_key
   ON idempotency_keys (project_id, idempotency_key);
 
 CREATE INDEX IF NOT EXISTS idx_idempotency_keys_expires
-  ON idempotency_keys (expires_at)
-  WHERE expires_at < now();
+  ON idempotency_keys (expires_at);
