@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Search as SearchIcon, SlidersHorizontal } from "lucide-react";
 
 import { PageShell } from "@/components/page-shell";
@@ -40,11 +40,29 @@ export default function SearchFeaturePage() {
   const [answer, setAnswer] = useState("");
   const [meta, setMeta] = useState(null);
   const [hasSearched, setHasSearched] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
 
   // Filters state
   const [filters, setFilters] = useState(createDefaultFilters);
 
   const { addToast } = useToast();
+
+  const totalPages = Math.max(1, Math.ceil(evidence.length / pageSize));
+  const pagedEvidence = useMemo(() => {
+    const start = (currentPage - 1) * pageSize;
+    return evidence.slice(start, start + pageSize);
+  }, [evidence, currentPage, pageSize]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [query, filters, pageSize]);
+
+  useEffect(() => {
+    if (currentPage > totalPages) {
+      setCurrentPage(totalPages);
+    }
+  }, [currentPage, totalPages]);
 
   /**
    * Execute search with current query and filters.
@@ -65,6 +83,8 @@ export default function SearchFeaturePage() {
       const sourceFilter = searchFilters?.sourceTypes?.length
         ? searchFilters.sourceTypes
         : null;
+      const dateFrom = searchFilters?.dateRange?.from || null;
+      const dateTo = searchFilters?.dateRange?.to || null;
 
       const startTime = Date.now();
       const data = await apiFetch("/lightrag/query", {
@@ -73,8 +93,10 @@ export default function SearchFeaturePage() {
           query: q,
           topK: Number(topK) || 10,
           sourceFilter,
+          date_from: dateFrom,
+          date_to: dateTo,
         },
-        timeoutMs: 25_000,
+        timeoutMs: 10_000,
       });
       const clientDuration = Date.now() - startTime;
 
@@ -101,7 +123,7 @@ export default function SearchFeaturePage() {
         body: {
           query: q,
           result_count: totalResults,
-          filters: { sourceFilter, topK: Number(topK) || 10 },
+          filters: { sourceFilter, topK: Number(topK) || 10, dateFrom, dateTo },
           event_type: "search",
           duration_ms: data?.duration_ms || clientDuration,
         },
@@ -305,7 +327,7 @@ export default function SearchFeaturePage() {
                     </span>
                   ) : null}
                 </div>
-                {evidence.slice(0, 30).map((item, idx) => (
+                {pagedEvidence.map((item, idx) => (
                   <SearchResultCard
                     key={`${item.source_type}-${item.source_pk || idx}`}
                     item={item}
@@ -313,6 +335,50 @@ export default function SearchFeaturePage() {
                     onClickResult={onClickResult}
                   />
                 ))}
+
+                {evidence.length > 0 ? (
+                  <div className="mt-2 flex flex-wrap items-center justify-between gap-2 border-t pt-3">
+                    <p className="text-xs text-muted-foreground">
+                      Показано {(currentPage - 1) * pageSize + 1}-{Math.min(currentPage * pageSize, evidence.length)} из {evidence.length}
+                    </p>
+                    <div className="flex items-center gap-2">
+                      <label className="text-xs text-muted-foreground" htmlFor="search-page-size">
+                        На странице
+                      </label>
+                      <select
+                        id="search-page-size"
+                        value={String(pageSize)}
+                        onChange={(e) => setPageSize(Number(e.target.value))}
+                        className="h-8 rounded-md border border-input bg-background px-2 text-xs"
+                      >
+                        <option value="5">5</option>
+                        <option value="10">10</option>
+                        <option value="20">20</option>
+                      </select>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        disabled={currentPage <= 1}
+                        onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                      >
+                        Назад
+                      </Button>
+                      <span className="min-w-20 text-center text-xs text-muted-foreground">
+                        {currentPage} / {totalPages}
+                      </span>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        disabled={currentPage >= totalPages}
+                        onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                      >
+                        Вперёд
+                      </Button>
+                    </div>
+                  </div>
+                ) : null}
               </div>
             ) : hasSearched ? (
               <SearchResultsEmpty query={query} />
