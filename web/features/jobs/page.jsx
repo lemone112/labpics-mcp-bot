@@ -9,7 +9,7 @@ import { ProjectScopeRequired } from "@/components/project-scope-required";
 import { StatTile } from "@/components/ui/stat-tile";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { StatusChip } from "@/components/ui/status-chip";
-import { Toast } from "@/components/ui/toast";
+import { useToast } from "@/components/ui/toast";
 import { LastUpdatedIndicator } from "@/components/ui/last-updated-indicator";
 import { apiFetch } from "@/lib/api";
 import { useAuthGuard } from "@/hooks/use-auth-guard";
@@ -21,7 +21,7 @@ export default function JobsFeaturePage() {
   const { loading, session } = useAuthGuard();
   const { hasProject, projectId: gateProjectId, loadingProjects } = useProjectGate();
   const [status, setStatus] = useState(null);
-  const [toast, setToast] = useState({ type: "info", message: "" });
+  const { addToast } = useToast();
   const [busyJob, setBusyJob] = useState("");
 
   const loadStatus = useCallback(async () => {
@@ -29,7 +29,7 @@ export default function JobsFeaturePage() {
       const data = await apiFetch("/jobs/status");
       setStatus(data);
     } catch (error) {
-      setToast({ type: "error", message: error?.message || "Ошибка загрузки статуса задач" });
+      addToast({ type: "error", message: error?.message || "Ошибка загрузки статуса задач" });
     }
   }, []);
 
@@ -60,10 +60,10 @@ export default function JobsFeaturePage() {
     setBusyJob(name);
     try {
       await apiFetch(path, { method: "POST", timeoutMs: 60_000 });
-      setToast({ type: "success", message: `${name} завершена` });
+      addToast({ type: "success", message: `${name} завершена` });
       await loadStatus();
     } catch (error) {
-      setToast({ type: "error", message: error?.message || `${name} — ошибка` });
+      addToast({ type: "error", message: error?.message || `${name} — ошибка` });
     } finally {
       setBusyJob("");
     }
@@ -201,7 +201,6 @@ export default function JobsFeaturePage() {
           </CardContent>
         </Card>
 
-        <Toast type={toast.type} message={toast.message} />
       </div>
     </PageShell>
   );

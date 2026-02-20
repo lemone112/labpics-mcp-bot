@@ -9,7 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { PageLoadingSkeleton } from "@/components/ui/page-loading-skeleton";
 import { ProjectScopeRequired } from "@/components/project-scope-required";
-import { Toast } from "@/components/ui/toast";
+import { useToast } from "@/components/ui/toast";
 import { StatusChip } from "@/components/ui/status-chip";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -28,7 +28,7 @@ export default function SignalsFeaturePage() {
   const [continuityActions, setContinuityActions] = useState([]);
   const [query, setQuery] = useState("");
   const [busy, setBusy] = useState(false);
-  const [toast, setToast] = useState({ type: "info", message: "" });
+  const { addToast } = useToast();
   const [selectedSuggestions, setSelectedSuggestions] = useState({});
   const [selectedContinuity, setSelectedContinuity] = useState({});
 
@@ -61,10 +61,10 @@ export default function SignalsFeaturePage() {
         setContinuityActions(Array.isArray(continuityRes.value?.actions) ? continuityRes.value.actions : []);
       } else { errors.push("continuity"); }
       if (errors.length) {
-        setToast({ type: "error", message: `Не удалось загрузить: ${errors.join(", ")}` });
+        addToast({ type: "error", message: `Не удалось загрузить: ${errors.join(", ")}` });
       }
     } catch (error) {
-      setToast({ type: "error", message: error?.message || "Не удалось загрузить данные сигналов" });
+      addToast({ type: "error", message: error?.message || "Не удалось загрузить данные сигналов" });
     } finally {
       setBusy(false);
     }
@@ -87,30 +87,30 @@ export default function SignalsFeaturePage() {
   async function runExtraction() {
     try {
       await apiFetch("/signals/extract", { method: "POST" });
-      setToast({ type: "success", message: "Извлечение сигналов завершено" });
+      addToast({ type: "success", message: "Извлечение сигналов завершено" });
       await load();
     } catch (error) {
-      setToast({ type: "error", message: error?.message || "Ошибка извлечения сигналов" });
+      addToast({ type: "error", message: error?.message || "Ошибка извлечения сигналов" });
     }
   }
 
   async function refreshUpsell() {
     try {
       await apiFetch("/upsell/radar/refresh", { method: "POST" });
-      setToast({ type: "success", message: "Радар допродаж обновлён" });
+      addToast({ type: "success", message: "Радар допродаж обновлён" });
       await load();
     } catch (error) {
-      setToast({ type: "error", message: error?.message || "Ошибка обновления радара" });
+      addToast({ type: "error", message: error?.message || "Ошибка обновления радара" });
     }
   }
 
   async function previewIdentity() {
     try {
       await apiFetch("/identity/suggestions/preview", { method: "POST", body: { limit: 120 } });
-      setToast({ type: "success", message: "Предложения identity обновлены" });
+      addToast({ type: "success", message: "Предложения identity обновлены" });
       await load();
     } catch (error) {
-      setToast({ type: "error", message: error?.message || "Ошибка preview identity" });
+      addToast({ type: "error", message: error?.message || "Ошибка preview identity" });
     }
   }
 
@@ -123,20 +123,20 @@ export default function SignalsFeaturePage() {
         body: { suggestion_ids: ids },
       });
       setSelectedSuggestions({});
-      setToast({ type: "success", message: "Identity-связи применены" });
+      addToast({ type: "success", message: "Identity-связи применены" });
       await load();
     } catch (error) {
-      setToast({ type: "error", message: error?.message || "Ошибка применения identity" });
+      addToast({ type: "error", message: error?.message || "Ошибка применения identity" });
     }
   }
 
   async function previewContinuity() {
     try {
       await apiFetch("/continuity/preview", { method: "POST" });
-      setToast({ type: "success", message: "Предпросмотр continuity сгенерирован" });
+      addToast({ type: "success", message: "Предпросмотр continuity сгенерирован" });
       await load();
     } catch (error) {
-      setToast({ type: "error", message: error?.message || "Ошибка предпросмотра continuity" });
+      addToast({ type: "error", message: error?.message || "Ошибка предпросмотра continuity" });
     }
   }
 
@@ -146,10 +146,10 @@ export default function SignalsFeaturePage() {
     try {
       await apiFetch("/continuity/apply", { method: "POST", body: { action_ids: ids } });
       setSelectedContinuity({});
-      setToast({ type: "success", message: "Continuity-действия применены к бэклогу Linear" });
+      addToast({ type: "success", message: "Continuity-действия применены к бэклогу Linear" });
       await load();
     } catch (error) {
-      setToast({ type: "error", message: error?.message || "Ошибка применения continuity" });
+      addToast({ type: "error", message: error?.message || "Ошибка применения continuity" });
     }
   }
 
@@ -158,7 +158,7 @@ export default function SignalsFeaturePage() {
       await apiFetch(`/nba/${id}/status`, { method: "POST", body: { status } });
       await load();
     } catch (error) {
-      setToast({ type: "error", message: error?.message || "Не удалось обновить статус NBA" });
+      addToast({ type: "error", message: error?.message || "Не удалось обновить статус NBA" });
     }
   }
 
@@ -416,7 +416,6 @@ export default function SignalsFeaturePage() {
           </CardContent>
         </Card>
 
-        <Toast type={toast.type} message={toast.message} />
       </div>
     </PageShell>
   );

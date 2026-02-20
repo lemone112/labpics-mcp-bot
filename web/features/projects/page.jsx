@@ -8,7 +8,7 @@ import { PageLoadingSkeleton } from "@/components/ui/page-loading-skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Toast } from "@/components/ui/toast";
+import { useToast } from "@/components/ui/toast";
 import { EmptyState } from "@/components/ui/empty-state";
 import { apiFetch } from "@/lib/api";
 import { useAuthGuard } from "@/hooks/use-auth-guard";
@@ -18,7 +18,7 @@ export default function ProjectsFeaturePage() {
   const { loading, session } = useAuthGuard();
   const { projects, activeProjectId, loadingProjects, refreshProjects, activateProject, activatingProjectId } = useProjectPortfolio();
   const [name, setName] = useState("");
-  const [toast, setToast] = useState({ type: "info", message: "" });
+  const { addToast } = useToast();
   const [creating, setCreating] = useState(false);
   const busy = creating || Boolean(activatingProjectId);
 
@@ -28,10 +28,10 @@ export default function ProjectsFeaturePage() {
     try {
       await apiFetch("/projects", { method: "POST", body: { name } });
       setName("");
-      setToast({ type: "success", message: "Проект создан" });
+      addToast({ type: "success", message: "Проект создан" });
       await refreshProjects();
     } catch (error) {
-      setToast({ type: "error", message: error?.message || "Ошибка создания" });
+      addToast({ type: "error", message: error?.message || "Ошибка создания" });
     } finally {
       setCreating(false);
     }
@@ -40,9 +40,9 @@ export default function ProjectsFeaturePage() {
   async function onSelect(projectId) {
     try {
       await activateProject(projectId);
-      setToast({ type: "success", message: "Активный проект обновлён" });
+      addToast({ type: "success", message: "Активный проект обновлён" });
     } catch (error) {
-      setToast({ type: "error", message: error?.message || "Ошибка выбора" });
+      addToast({ type: "error", message: error?.message || "Ошибка выбора" });
     }
   }
 
@@ -123,7 +123,6 @@ export default function ProjectsFeaturePage() {
           </CardContent>
         </Card>
 
-        <Toast type={toast.type} message={toast.message} />
       </div>
     </PageShell>
   );

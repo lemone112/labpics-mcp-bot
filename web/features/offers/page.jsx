@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { PageLoadingSkeleton } from "@/components/ui/page-loading-skeleton";
 import { ProjectScopeRequired } from "@/components/project-scope-required";
-import { Toast } from "@/components/ui/toast";
+import { useToast } from "@/components/ui/toast";
 import { EmptyState } from "@/components/ui/empty-state";
 import { StatusChip } from "@/components/ui/status-chip";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -22,7 +22,7 @@ export default function OffersFeaturePage() {
   const [offers, setOffers] = useState([]);
   const [outbound, setOutbound] = useState([]);
   const [busy, setBusy] = useState(false);
-  const [toast, setToast] = useState({ type: "info", message: "" });
+  const { addToast } = useToast();
   const [form, setForm] = useState({ title: "", subtotal: "12000", discount_pct: "0" });
 
   const load = useCallback(async () => {
@@ -39,10 +39,10 @@ export default function OffersFeaturePage() {
         setOutbound(Array.isArray(outboundRes.value?.outbound) ? outboundRes.value.outbound : []);
       } else { errors.push("исходящие"); }
       if (errors.length) {
-        setToast({ type: "error", message: `Не удалось загрузить: ${errors.join(", ")}` });
+        addToast({ type: "error", message: `Не удалось загрузить: ${errors.join(", ")}` });
       }
     } catch (error) {
-      setToast({ type: "error", message: error?.message || "Ошибка загрузки офферов/исходящих" });
+      addToast({ type: "error", message: error?.message || "Ошибка загрузки офферов/исходящих" });
     } finally {
       setBusy(false);
     }
@@ -66,30 +66,30 @@ export default function OffersFeaturePage() {
         },
       });
       setForm({ title: "", subtotal: "12000", discount_pct: "0" });
-      setToast({ type: "success", message: "Оффер создан" });
+      addToast({ type: "success", message: "Оффер создан" });
       await load();
     } catch (error) {
-      setToast({ type: "error", message: error?.message || "Ошибка создания оффера" });
+      addToast({ type: "error", message: error?.message || "Ошибка создания оффера" });
     }
   }
 
   async function approveDiscount(id) {
     try {
       await apiFetch(`/offers/${id}/approve-discount`, { method: "POST", body: {} });
-      setToast({ type: "success", message: "Скидка утверждена" });
+      addToast({ type: "success", message: "Скидка утверждена" });
       await load();
     } catch (error) {
-      setToast({ type: "error", message: error?.message || "Ошибка утверждения скидки" });
+      addToast({ type: "error", message: error?.message || "Ошибка утверждения скидки" });
     }
   }
 
   async function approveAndSend(id) {
     try {
       await apiFetch(`/offers/${id}/approve-send`, { method: "POST", body: {} });
-      setToast({ type: "success", message: "Оффер помечен как отправленный" });
+      addToast({ type: "success", message: "Оффер помечен как отправленный" });
       await load();
     } catch (error) {
-      setToast({ type: "error", message: error?.message || "Ошибка утверждения отправки" });
+      addToast({ type: "error", message: error?.message || "Ошибка утверждения отправки" });
     }
   }
 
@@ -104,10 +104,10 @@ export default function OffersFeaturePage() {
           idempotency_key: `offer-draft-${Date.now()}`,
         },
       });
-      setToast({ type: "success", message: "Черновик исходящего создан" });
+      addToast({ type: "success", message: "Черновик исходящего создан" });
       await load();
     } catch (error) {
-      setToast({ type: "error", message: error?.message || "Ошибка создания черновика" });
+      addToast({ type: "error", message: error?.message || "Ошибка создания черновика" });
     }
   }
 
@@ -116,7 +116,7 @@ export default function OffersFeaturePage() {
       await apiFetch(`/outbound/${id}/approve`, { method: "POST", body: {} });
       await load();
     } catch (error) {
-      setToast({ type: "error", message: error?.message || "Ошибка утверждения исходящего" });
+      addToast({ type: "error", message: error?.message || "Ошибка утверждения исходящего" });
     }
   }
 
@@ -125,7 +125,7 @@ export default function OffersFeaturePage() {
       await apiFetch(`/outbound/${id}/send`, { method: "POST", body: {} });
       await load();
     } catch (error) {
-      setToast({ type: "error", message: error?.message || "Ошибка отправки исходящего" });
+      addToast({ type: "error", message: error?.message || "Ошибка отправки исходящего" });
     }
   }
 
@@ -277,7 +277,6 @@ export default function OffersFeaturePage() {
           </CardContent>
         </Card>
 
-        <Toast type={toast.type} message={toast.message} />
       </div>
     </PageShell>
   );

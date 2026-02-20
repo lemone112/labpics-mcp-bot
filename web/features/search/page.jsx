@@ -10,7 +10,7 @@ import { ProjectScopeRequired } from "@/components/project-scope-required";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Toast } from "@/components/ui/toast";
+import { useToast } from "@/components/ui/toast";
 import { EmptyState } from "@/components/ui/empty-state";
 import { apiFetch } from "@/lib/api";
 import { useAuthGuard } from "@/hooks/use-auth-guard";
@@ -26,12 +26,11 @@ export default function SearchFeaturePage() {
   const [busy, setBusy] = useState(false);
   const [meta, setMeta] = useState(null);
   const [answer, setAnswer] = useState("");
-  const [toast, setToast] = useState({ type: "info", message: "" });
+  const { addToast } = useToast();
 
   async function onSearch(event) {
     event.preventDefault();
     setBusy(true);
-    setToast({ type: "info", message: "" });
     try {
       const data = await apiFetch("/lightrag/query", {
         method: "POST",
@@ -45,9 +44,9 @@ export default function SearchFeaturePage() {
         stats: data?.stats || {},
         topK: data?.topK,
       });
-      setToast({ type: "success", message: `Найдено ${data?.stats?.chunks || 0} релевантных chunk-фрагментов` });
+      addToast({ type: "success", message: `Найдено ${data?.stats?.chunks || 0} релевантных chunk-фрагментов` });
     } catch (error) {
-      setToast({ type: "error", message: error?.message || "Не удалось выполнить запрос LightRAG" });
+      addToast({ type: "error", message: error?.message || "Не удалось выполнить запрос LightRAG" });
     } finally {
       setBusy(false);
     }
@@ -174,7 +173,6 @@ export default function SearchFeaturePage() {
           </CardContent>
         </Card>
 
-        <Toast type={toast.type} message={toast.message} />
       </div>
     </PageShell>
   );

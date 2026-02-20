@@ -50,7 +50,7 @@ export const FinanceSection = memo(function FinanceSection({ financePayload, mon
         <Card data-motion-item>
           <CardHeader><CardTitle>Выручка по проектам</CardTitle></CardHeader>
           <CardContent>
-            <ChartContainer>
+            <ChartContainer config={{ value: { label: "Выручка", markerClassName: "bg-primary" } }}>
               <BarChart data={revenueByProject}>
                 <CartesianGrid vertical={false} />
                 <XAxis dataKey="project_name" tickLine={false} axisLine={false} minTickGap={12} />
@@ -65,7 +65,7 @@ export const FinanceSection = memo(function FinanceSection({ financePayload, mon
         <Card data-motion-item>
           <CardHeader><CardTitle>Затраты по проектам</CardTitle></CardHeader>
           <CardContent>
-            <ChartContainer>
+            <ChartContainer config={{ value: { label: "Затраты", markerClassName: "bg-destructive" } }}>
               <BarChart data={costsByProject}>
                 <CartesianGrid vertical={false} />
                 <XAxis dataKey="project_name" tickLine={false} axisLine={false} minTickGap={12} />
@@ -80,7 +80,7 @@ export const FinanceSection = memo(function FinanceSection({ financePayload, mon
         <Card data-motion-item>
           <CardHeader><CardTitle>Маржа</CardTitle></CardHeader>
           <CardContent>
-            <ChartContainer>
+            <ChartContainer config={{ value: { label: "Маржа", markerClassName: "bg-chart-2" } }}>
               <BarChart data={marginByProject}>
                 <CartesianGrid vertical={false} />
                 <XAxis dataKey="project_name" tickLine={false} axisLine={false} minTickGap={12} />
@@ -95,7 +95,7 @@ export const FinanceSection = memo(function FinanceSection({ financePayload, mon
         <Card data-motion-item>
           <CardHeader><CardTitle>Темп затрат</CardTitle></CardHeader>
           <CardContent>
-            <ChartContainer>
+            <ChartContainer config={{ burn: { label: "Темп затрат", markerClassName: "bg-destructive" } }}>
               <LineChart data={burnTrendData}>
                 <CartesianGrid vertical={false} />
                 <XAxis dataKey="label" tickLine={false} axisLine={false} minTickGap={24} />
@@ -110,7 +110,7 @@ export const FinanceSection = memo(function FinanceSection({ financePayload, mon
         <Card data-motion-item>
           <CardHeader><CardTitle>Прогноз до завершения (дни)</CardTitle></CardHeader>
           <CardContent>
-            <ChartContainer>
+            <ChartContainer config={{ value: { label: "Дни до завершения", markerClassName: "bg-chart-4" } }}>
               <BarChart data={forecastCompletion}>
                 <CartesianGrid vertical={false} />
                 <XAxis dataKey="project_name" tickLine={false} axisLine={false} minTickGap={12} />
@@ -147,7 +147,7 @@ export const FinanceSection = memo(function FinanceSection({ financePayload, mon
         <Card data-motion-item>
           <CardHeader><CardTitle>Прокси юнит-экономики</CardTitle></CardHeader>
           <CardContent>
-            <ChartContainer>
+            <ChartContainer config={{ client_value_score: { label: "Ценность клиента", markerClassName: "bg-chart-5" } }}>
               <BarChart data={unitEconomics}>
                 <CartesianGrid vertical={false} />
                 <XAxis dataKey="project_name" tickLine={false} axisLine={false} minTickGap={12} />
@@ -162,7 +162,7 @@ export const FinanceSection = memo(function FinanceSection({ financePayload, mon
         <Card data-motion-item>
           <CardHeader><CardTitle>Воронка (стадии)</CardTitle></CardHeader>
           <CardContent>
-            <ChartContainer>
+            <ChartContainer config={{ amount: { label: "Сумма", markerClassName: "bg-chart-2" } }}>
               <PieChart>
                 <Pie data={funnelNodes} dataKey="amount" nameKey="stage" outerRadius={80} fill="hsl(var(--chart-2))" />
                 <ChartTooltip content={<ChartTooltipContent formatter={(value) => moneyFormatter.format(numberValue(value))} />} />

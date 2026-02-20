@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import dynamic from "next/dynamic";
 
 import { apiFetch } from "@/lib/api";
 import { useAuthGuard } from "@/hooks/use-auth-guard";
@@ -18,12 +19,20 @@ import { Toast } from "@/components/ui/toast";
 import { LastUpdatedIndicator } from "@/components/ui/last-updated-indicator";
 import { normalizePortfolioSection } from "@/lib/portfolio-sections";
 import { TITLES, SUBTITLES, PRIMARY_CTA, useFormatters } from "./lib/formatters";
-import { DashboardCharts } from "./sections/dashboard-charts";
 import { AgreementsSection } from "./sections/agreements-section";
 import { RisksSection } from "./sections/risks-section";
-import { FinanceSection } from "./sections/finance-section";
 import { OffersSection } from "./sections/offers-section";
 import { MessagesSection } from "./sections/messages-section";
+
+// Heavy chart sections dynamically imported to reduce initial bundle (Recharts is large)
+const DashboardCharts = dynamic(
+  () => import("./sections/dashboard-charts").then((mod) => mod.DashboardCharts),
+  { ssr: false, loading: () => <PageLoadingSkeleton /> }
+);
+const FinanceSection = dynamic(
+  () => import("./sections/finance-section").then((mod) => mod.FinanceSection),
+  { ssr: false, loading: () => <PageLoadingSkeleton /> }
+);
 
 const CTA_JOBS = {
   dashboard: "/jobs/chatwoot/sync",
@@ -42,6 +51,7 @@ export default function ControlTowerSectionPage({ section }) {
   const { moneyFormatter, numberFormatter } = useFormatters();
   const [selectedPersonId, setSelectedPersonId] = useState("");
   const [ctaBusy, setCtaBusy] = useState(false);
+  const [secondsAgo, setSecondsAgo] = useState(null);
 
   const onPrimaryCta = useCallback(async () => {
     const jobPath = CTA_JOBS[normalizedSection];
@@ -98,6 +108,25 @@ export default function ControlTowerSectionPage({ section }) {
     }
   }, [normalizedSection, messages.payload, selectedPersonId]);
 
+  const activeDataUpdatedAt =
+    normalizedSection === "messages"
+      ? messages.dataUpdatedAt
+      : overview.dataUpdatedAt;
+
+  const activeReload =
+    normalizedSection === "messages"
+      ? messages.reload
+      : overview.reload;
+
+  useEffect(() => {
+    if (!activeDataUpdatedAt) return;
+    setSecondsAgo(Math.floor((Date.now() - activeDataUpdatedAt) / 1000));
+    const timer = setInterval(() => {
+      setSecondsAgo(Math.floor((Date.now() - activeDataUpdatedAt) / 1000));
+    }, 5000);
+    return () => clearInterval(timer);
+  }, [activeDataUpdatedAt]);
+
   if (loading || !session || loadingProjects) {
     return (
       <PageShell title={TITLES[normalizedSection]} subtitle={SUBTITLES[normalizedSection]}>
@@ -122,26 +151,6 @@ export default function ControlTowerSectionPage({ section }) {
   const overviewPayload = overview.payload;
   const agreements = Array.isArray(overviewPayload?.agreements) ? overviewPayload.agreements : [];
   const risks = Array.isArray(overviewPayload?.risks) ? overviewPayload.risks : [];
-
-  const activeDataUpdatedAt =
-    normalizedSection === "messages"
-      ? messages.dataUpdatedAt
-      : overview.dataUpdatedAt;
-
-  const activeReload =
-    normalizedSection === "messages"
-      ? messages.reload
-      : overview.reload;
-
-  const [secondsAgo, setSecondsAgo] = useState(null);
-  useEffect(() => {
-    if (!activeDataUpdatedAt) return;
-    setSecondsAgo(Math.floor((Date.now() - activeDataUpdatedAt) / 1000));
-    const timer = setInterval(() => {
-      setSecondsAgo(Math.floor((Date.now() - activeDataUpdatedAt) / 1000));
-    }, 5000);
-    return () => clearInterval(timer);
-  }, [activeDataUpdatedAt]);
 
   return (
     <PageShell title={TITLES[normalizedSection]} subtitle={SUBTITLES[normalizedSection]}>

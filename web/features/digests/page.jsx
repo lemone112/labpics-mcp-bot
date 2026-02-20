@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { PageLoadingSkeleton } from "@/components/ui/page-loading-skeleton";
 import { ProjectScopeRequired } from "@/components/project-scope-required";
-import { Toast } from "@/components/ui/toast";
+import { useToast } from "@/components/ui/toast";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { apiFetch } from "@/lib/api";
 import { useAuthGuard } from "@/hooks/use-auth-guard";
@@ -19,7 +19,7 @@ export default function DigestsFeaturePage() {
   const [daily, setDaily] = useState([]);
   const [weekly, setWeekly] = useState([]);
   const [busy, setBusy] = useState(false);
-  const [toast, setToast] = useState({ type: "info", message: "" });
+  const { addToast } = useToast();
 
   const load = useCallback(async () => {
     if (!hasProject) return;
@@ -35,10 +35,10 @@ export default function DigestsFeaturePage() {
         setWeekly(Array.isArray(weeklyRes.value?.digests) ? weeklyRes.value.digests : []);
       } else { errors.push("еженедельные"); }
       if (errors.length) {
-        setToast({ type: "error", message: `Не удалось загрузить: ${errors.join(", ")} дайджесты` });
+        addToast({ type: "error", message: `Не удалось загрузить: ${errors.join(", ")} дайджесты` });
       }
     } catch (error) {
-      setToast({ type: "error", message: error?.message || "Ошибка загрузки дайджестов" });
+      addToast({ type: "error", message: error?.message || "Ошибка загрузки дайджестов" });
     } finally {
       setBusy(false);
     }
@@ -53,20 +53,20 @@ export default function DigestsFeaturePage() {
   async function generateDaily() {
     try {
       await apiFetch("/digests/daily/generate", { method: "POST" });
-      setToast({ type: "success", message: "Ежедневный дайджест сгенерирован" });
+      addToast({ type: "success", message: "Ежедневный дайджест сгенерирован" });
       await load();
     } catch (error) {
-      setToast({ type: "error", message: error?.message || "Ошибка генерации ежедневного дайджеста" });
+      addToast({ type: "error", message: error?.message || "Ошибка генерации ежедневного дайджеста" });
     }
   }
 
   async function generateWeekly() {
     try {
       await apiFetch("/digests/weekly/generate", { method: "POST" });
-      setToast({ type: "success", message: "Еженедельный дайджест сгенерирован" });
+      addToast({ type: "success", message: "Еженедельный дайджест сгенерирован" });
       await load();
     } catch (error) {
-      setToast({ type: "error", message: error?.message || "Ошибка генерации еженедельного дайджеста" });
+      addToast({ type: "error", message: error?.message || "Ошибка генерации еженедельного дайджеста" });
     }
   }
 
@@ -172,7 +172,6 @@ export default function DigestsFeaturePage() {
           </CardContent>
         </Card>
 
-        <Toast type={toast.type} message={toast.message} />
       </div>
     </PageShell>
   );

@@ -9,7 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageLoadingSkeleton } from "@/components/ui/page-loading-skeleton";
 import { ProjectScopeRequired } from "@/components/project-scope-required";
 import { StatTile } from "@/components/ui/stat-tile";
-import { Toast } from "@/components/ui/toast";
+import { useToast } from "@/components/ui/toast";
 import { Button } from "@/components/ui/button";
 import { Kanban } from "@/components/ui/kanban";
 import { Filters } from "@/components/ui/filters";
@@ -30,7 +30,7 @@ export default function CrmFeaturePage() {
   const [opportunities, setOpportunities] = useState([]);
   const [query, setQuery] = useState("");
   const [busy, setBusy] = useState(false);
-  const [toast, setToast] = useState({ type: "info", message: "" });
+  const { addToast } = useToast();
   const [newAccountName, setNewAccountName] = useState("");
   const [newOpportunityTitle, setNewOpportunityTitle] = useState("");
   const [newOpportunityAccountId, setNewOpportunityAccountId] = useState("");
@@ -56,10 +56,10 @@ export default function CrmFeaturePage() {
         setOpportunities(Array.isArray(opportunitiesRes.value?.opportunities) ? opportunitiesRes.value.opportunities : []);
       } else { errors.push("возможности"); }
       if (errors.length) {
-        setToast({ type: "error", message: `Не удалось загрузить: ${errors.join(", ")}` });
+        addToast({ type: "error", message: `Не удалось загрузить: ${errors.join(", ")}` });
       }
     } catch (error) {
-      setToast({ type: "error", message: error?.message || "Ошибка загрузки данных CRM" });
+      addToast({ type: "error", message: error?.message || "Ошибка загрузки данных CRM" });
     } finally {
       setBusy(false);
     }
@@ -105,10 +105,10 @@ export default function CrmFeaturePage() {
         body: { name: newAccountName.trim() },
       });
       setNewAccountName("");
-      setToast({ type: "success", message: "Аккаунт создан" });
+      addToast({ type: "success", message: "Аккаунт создан" });
       await load();
     } catch (error) {
-      setToast({ type: "error", message: error?.message || "Ошибка создания аккаунта" });
+      addToast({ type: "error", message: error?.message || "Ошибка создания аккаунта" });
     }
   }
 
@@ -126,10 +126,10 @@ export default function CrmFeaturePage() {
         },
       });
       setNewOpportunityTitle("");
-      setToast({ type: "success", message: "Возможность создана" });
+      addToast({ type: "success", message: "Возможность создана" });
       await load();
     } catch (error) {
-      setToast({ type: "error", message: error?.message || "Ошибка создания возможности" });
+      addToast({ type: "error", message: error?.message || "Ошибка создания возможности" });
     }
   }
 
@@ -257,7 +257,6 @@ export default function CrmFeaturePage() {
           </CardContent>
         </Card>
 
-        <Toast type={toast.type} message={toast.message} />
       </div>
     </PageShell>
   );

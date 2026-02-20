@@ -9,7 +9,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { PageLoadingSkeleton } from "@/components/ui/page-loading-skeleton";
 import { ProjectScopeRequired } from "@/components/project-scope-required";
-import { Toast } from "@/components/ui/toast";
+import { useToast } from "@/components/ui/toast";
+import { EmptyState } from "@/components/ui/empty-state";
 import { StatTile } from "@/components/ui/stat-tile";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { apiFetch } from "@/lib/api";
@@ -23,7 +24,7 @@ export default function AnalyticsFeaturePage() {
   const [risk, setRisk] = useState(null);
   const [evidence, setEvidence] = useState([]);
   const [busy, setBusy] = useState(false);
-  const [toast, setToast] = useState({ type: "info", message: "" });
+  const { addToast } = useToast();
 
   const load = useCallback(async () => {
     if (!hasProject) return;
@@ -46,10 +47,10 @@ export default function AnalyticsFeaturePage() {
         setEvidence(Array.isArray(evidenceRes.value?.evidence) ? evidenceRes.value.evidence : []);
       } else { errors.push("доказательства"); }
       if (errors.length) {
-        setToast({ type: "error", message: `Не удалось загрузить: ${errors.join(", ")}` });
+        addToast({ type: "error", message: `Не удалось загрузить: ${errors.join(", ")}` });
       }
     } catch (error) {
-      setToast({ type: "error", message: error?.message || "Ошибка загрузки аналитики" });
+      addToast({ type: "error", message: error?.message || "Ошибка загрузки аналитики" });
     } finally {
       setBusy(false);
     }
@@ -64,20 +65,20 @@ export default function AnalyticsFeaturePage() {
   async function refreshAnalytics() {
     try {
       await apiFetch("/analytics/refresh", { method: "POST", body: { period_days: 30 } });
-      setToast({ type: "success", message: "Снэпшоты аналитики обновлены" });
+      addToast({ type: "success", message: "Снэпшоты аналитики обновлены" });
       await load();
     } catch (error) {
-      setToast({ type: "error", message: error?.message || "Ошибка обновления аналитики" });
+      addToast({ type: "error", message: error?.message || "Ошибка обновления аналитики" });
     }
   }
 
   async function refreshRisk() {
     try {
       await apiFetch("/risk/refresh", { method: "POST" });
-      setToast({ type: "success", message: "Риски/здоровье обновлены" });
+      addToast({ type: "success", message: "Риски/здоровье обновлены" });
       await load();
     } catch (error) {
-      setToast({ type: "error", message: error?.message || "Ошибка обновления рисков" });
+      addToast({ type: "error", message: error?.message || "Ошибка обновления рисков" });
     }
   }
 
@@ -171,7 +172,9 @@ export default function AnalyticsFeaturePage() {
                 ))}
                 {!overview?.revenue?.length ? (
                   <TableRow>
-                    <TableCell colSpan={4} className="text-muted-foreground">Снэпшотов пока нет.</TableCell>
+                    <TableCell colSpan={4}>
+                      <EmptyState title="Снэпшотов пока нет" description="Обновите аналитику для генерации прогнозных снэпшотов." />
+                    </TableCell>
                   </TableRow>
                 ) : null}
               </TableBody>
@@ -204,7 +207,9 @@ export default function AnalyticsFeaturePage() {
                 ))}
                 {!risk?.risks?.length ? (
                   <TableRow>
-                    <TableCell colSpan={4} className="text-muted-foreground">Рисков пока нет.</TableCell>
+                    <TableCell colSpan={4}>
+                      <EmptyState title="Рисков пока нет" description="Обновите риски/здоровье для формирования радара." />
+                    </TableCell>
                   </TableRow>
                 ) : null}
               </TableBody>
@@ -245,7 +250,6 @@ export default function AnalyticsFeaturePage() {
           </CardContent>
         </Card>
 
-        <Toast type={toast.type} message={toast.message} />
       </div>
     </PageShell>
   );
