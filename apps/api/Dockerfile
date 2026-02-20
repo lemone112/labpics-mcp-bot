@@ -15,6 +15,7 @@ WORKDIR /app
 ENV NODE_ENV=production
 
 COPY --from=deps /app/node_modules ./node_modules
+COPY --from=deps /app/apps/api/node_modules ./node_modules
 COPY --chown=app:app apps/api/package.json ./package.json
 COPY --chown=app:app apps/api/src ./src
 COPY --chown=app:app apps/api/db ./db
