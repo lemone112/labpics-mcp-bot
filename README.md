@@ -3,7 +3,7 @@
 Операционная платформа для design studio lab.pics: 2–5 PM + Owner, 5–10 активных проектов,
 CRM/PM/support-интеграции, knowledge graph (LightRAG), Telegram bot.
 
-**Статус:** 159 open issues в 20 итерациях (Iter 11–51), 7 execution phases.
+**Статус:** 196 open issues в 25 итерациях (Iter 11–56), 8 execution phases.
 Единый план: [`docs/iteration-plan-wave3.md`](./docs/iteration-plan-wave3.md).
 
 ### Структура монорепо
@@ -38,7 +38,7 @@ Real-time обновления: Redis Pub/Sub → SSE endpoint → auto-refresh 
 Стартовые точки:
 
 - Индекс документации: [`docs/index.md`](./docs/index.md)
-- **Единый план исполнения (Wave 3):** [`docs/iteration-plan-wave3.md`](./docs/iteration-plan-wave3.md) — 159 issues, 7 phases
+- **Единый план исполнения (Wave 3):** [`docs/iteration-plan-wave3.md`](./docs/iteration-plan-wave3.md) — 196 issues, 8 phases
 - Архитектурный reference (Wave 2): [`docs/iteration-plan-wave2.md`](./docs/iteration-plan-wave2.md)
 - Нормативный контракт LightRAG-only: [`docs/lightrag-contract.md`](./docs/lightrag-contract.md)
 - Продуктовый обзор: [`docs/product/overview.md`](./docs/product/overview.md)

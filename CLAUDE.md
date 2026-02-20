@@ -35,7 +35,7 @@ After any research, analysis, or audit — always review the result from a posit
 ## Task tracking
 
 - All tasks tracked as GitHub Issues with Milestones (Iter 11–51).
-- Unified execution plan: `docs/iteration-plan-wave3.md` (159 issues, 7 phases, 20 iterations).
+- Unified execution plan: `docs/iteration-plan-wave3.md` (196 issues, 8 phases, 25 iterations).
 - `docs/iteration-plan-wave2.md` is the architectural reference; Issues are source of truth.
 
 ## Monorepo structure
