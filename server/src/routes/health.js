@@ -74,7 +74,7 @@ export function registerHealthRoutes(ctx) {
     // --- Circuit breakers ---
     for (const cb of cbStates) {
       lines.push(`app_circuit_breaker_state{host="${cb.name}",state="${cb.state}"} ${cb.state === "open" ? 1 : 0}`);
-      lines.push(`app_circuit_breaker_failures{host="${cb.name}"} ${cb.failureCount}`);
+      lines.push(`app_circuit_breaker_failures{host="${cb.name}"} ${cb.failures}`);
     }
     reply.type("text/plain; version=0.0.4");
     return lines.join("\n");

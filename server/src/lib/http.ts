@@ -42,20 +42,28 @@ export function createCircuitBreaker(name: string, opts: CircuitBreakerOptions =
   let failures = 0;
   let lastFailureAt = 0;
 
+  let probeInFlight = false;
+
   function recordSuccess(): void {
     if (state === "half-open") {
       logger.info({ circuit: name }, "circuit breaker closed (recovered)");
     }
     state = "closed";
     failures = 0;
+    probeInFlight = false;
   }
 
   function recordFailure(): void {
     failures++;
     lastFailureAt = Date.now();
+    probeInFlight = false;
     if (failures >= failureThreshold && state === "closed") {
       state = "open";
       logger.warn({ circuit: name, failures }, "circuit breaker opened");
+    }
+    if (state === "half-open") {
+      state = "open";
+      logger.warn({ circuit: name, failures }, "circuit breaker re-opened after half-open probe failure");
     }
   }
 
@@ -64,10 +72,13 @@ export function createCircuitBreaker(name: string, opts: CircuitBreakerOptions =
     if (state === "open") {
       if (Date.now() - lastFailureAt >= resetTimeoutMs) {
         state = "half-open";
+        probeInFlight = true;
         return true;
       }
       return false;
     }
+    // half-open: only allow the single probe request
+    if (probeInFlight) return false;
     return true;
   }
 

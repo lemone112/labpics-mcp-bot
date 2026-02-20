@@ -561,6 +561,7 @@ export async function processDueOutbounds(pool, scope, actorUsername = "schedule
         AND retry_count < max_retries
       ORDER BY created_at ASC
       LIMIT $3
+      FOR UPDATE SKIP LOCKED
     `,
     [scope.projectId, scope.accountScopeId, safeLimit]
   );

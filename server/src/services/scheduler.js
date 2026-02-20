@@ -111,14 +111,22 @@ function withTimeout(promise, ms) {
   return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
 }
 
-/** Exponential backoff for failed scheduler jobs (capped at 2 hours). */
-function schedulerBackoffSeconds(consecutiveFailures) {
+/** Base delay for exponential backoff (seconds). */
+const BACKOFF_BASE_SECONDS = 30;
+/** Maximum backoff cap (seconds). */
+const BACKOFF_CAP_SECONDS = 60 * 60; // 1 hour
+
+/** Exponential backoff for failed scheduler jobs (capped at 1 hour). */
+function schedulerBackoffSeconds(consecutiveFailures, retryAfterMs) {
+  // If the error carries a Retry-After value (e.g. from a 429 response), use it
+  if (typeof retryAfterMs === 'number' && retryAfterMs > 0) {
+    const retryAfterSec = Math.ceil(retryAfterMs / 1000);
+    return Math.min(retryAfterSec, BACKOFF_CAP_SECONDS);
+  }
   const attempt = Math.max(1, Math.min(10, consecutiveFailures));
-  const base = 60; // 1 minute base
-  const seconds = base * Math.pow(2, attempt - 1);
-  const cap = 2 * 60 * 60; // 2 hours
+  const seconds = BACKOFF_BASE_SECONDS * Math.pow(2, attempt - 1);
   const jitter = 1 + (Math.random() - 0.5) * 0.3;
-  return Math.min(cap, Math.round(seconds * jitter));
+  return Math.min(BACKOFF_CAP_SECONDS, Math.round(seconds * jitter));
 }
 
 function createHandlers(customHandlers = {}) {
@@ -171,7 +179,11 @@ function createHandlers(customHandlers = {}) {
   return { ...handlers, ...customHandlers };
 }
 
+let _defaultJobsEnsured = false;
+
 export async function ensureDefaultScheduledJobs(pool, scope) {
+  if (_defaultJobsEnsured) return;
+
   const defaults = [
     { jobType: "connectors_sync_cycle", cadenceSeconds: 900 },
     { jobType: "connectors_reconciliation_daily", cadenceSeconds: 86400 },
@@ -205,6 +217,7 @@ export async function ensureDefaultScheduledJobs(pool, scope) {
       [scope.projectId, scope.accountScopeId, item.jobType, item.cadenceSeconds]
     );
   }
+  _defaultJobsEnsured = true;
 }
 
 export async function listScheduledJobs(pool, scope) {
@@ -239,7 +252,11 @@ export async function runSchedulerTick(pool, scope, options = {}) {
 
   const dueRows = await pool.query(
     `
-      WITH claimed AS (
+      UPDATE scheduled_jobs
+      SET status = 'running',
+          started_at = now(),
+          updated_at = now()
+      WHERE id = ANY(
         SELECT id
         FROM scheduled_jobs
         WHERE project_id = $1
@@ -250,13 +267,7 @@ export async function runSchedulerTick(pool, scope, options = {}) {
         LIMIT $3
         FOR UPDATE SKIP LOCKED
       )
-      SELECT
-        s.id,
-        s.job_type,
-        s.cadence_seconds,
-        s.payload
-      FROM scheduled_jobs s
-      INNER JOIN claimed c ON c.id = s.id
+      RETURNING id, job_type, cadence_seconds, payload
     `,
     [scope.projectId, scope.accountScopeId, limit]
   );
@@ -308,6 +319,7 @@ export async function runSchedulerTick(pool, scope, options = {}) {
         `
           UPDATE scheduled_jobs
           SET
+            status = 'active',
             last_run_at = now(),
             last_status = 'ok',
             last_error = NULL,
@@ -336,11 +348,14 @@ export async function runSchedulerTick(pool, scope, options = {}) {
       );
       const prevFailures = parseInt(job.payload?.consecutive_failures || 0, 10) || 0;
       const failures = prevFailures + 1;
-      const backoffSec = schedulerBackoffSeconds(failures);
+      // Use Retry-After from the error if available (e.g. 429 responses)
+      const retryAfterMs = typeof error?.retryAfterMs === 'number' ? error.retryAfterMs : undefined;
+      const backoffSec = schedulerBackoffSeconds(failures, retryAfterMs);
       await pool.query(
         `
           UPDATE scheduled_jobs
           SET
+            status = 'active',
             last_run_at = now(),
             last_status = 'failed',
             last_error = $2,

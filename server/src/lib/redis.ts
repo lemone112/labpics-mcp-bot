@@ -17,7 +17,7 @@ export function createRedisClient({ url, logger = console, name = "redis" }: Red
   const maxRetries = parseInt(process.env.REDIS_MAX_RETRIES || "", 10) || 20;
 
   const client = new Redis(redisUrl, {
-    maxRetriesPerRequest: 3,
+    maxRetriesPerRequest: 1,
     retryStrategy(times: number) {
       if (times > maxRetries) return null;
       const baseMs = Math.min(times * 500, 30_000);

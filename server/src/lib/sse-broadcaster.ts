@@ -15,11 +15,33 @@ export interface SseBroadcaster {
   shutdown(): void;
 }
 
+const MAX_CONNECTIONS_PER_PROJECT = 20;
+const MAX_CONNECTIONS_GLOBAL = 500;
+
 export function createSseBroadcaster(logger: Logger | Console = console): SseBroadcaster {
   const clients = new Map<string, Set<SseClient>>();
   let totalConnections = 0;
 
   function addClient(projectId: string, reply: FastifyReply, sessionId: string | null): () => void {
+    const projectClients = clients.get(projectId);
+    const projectCount = projectClients ? projectClients.size : 0;
+
+    if (projectCount >= MAX_CONNECTIONS_PER_PROJECT) {
+      logger.warn(
+        { project_id: projectId, count: projectCount, max: MAX_CONNECTIONS_PER_PROJECT },
+        "sse connection limit reached for project"
+      );
+      return () => {};
+    }
+
+    if (totalConnections >= MAX_CONNECTIONS_GLOBAL) {
+      logger.warn(
+        { total: totalConnections, max: MAX_CONNECTIONS_GLOBAL },
+        "sse global connection limit reached"
+      );
+      return () => {};
+    }
+
     if (!clients.has(projectId)) {
       clients.set(projectId, new Set());
     }
@@ -105,7 +127,7 @@ export function createSseBroadcaster(logger: Logger | Console = console): SseBro
     return reaped;
   }
 
-  const reaperInterval = setInterval(reapDeadClients, 60_000);
+  const reaperInterval = setInterval(reapDeadClients, 30_000);
   reaperInterval.unref();
 
   function getStats() {

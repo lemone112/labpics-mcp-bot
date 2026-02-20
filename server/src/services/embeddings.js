@@ -225,10 +225,80 @@ export async function runEmbeddings(pool, scope, logger = console) {
       model,
       totalTokens,
     };
-  } catch (error) {
-    await markClaimedAsPending(pool, scope, claimedIds, error);
-    logger.error({ err: truncateError(error) }, "embedding batch failed and was returned to pending");
-    throw error;
+  } catch (batchError) {
+    // Batch failed — fall back to per-chunk embedding so we save
+    // successful embeddings and only fail the problematic ones.
+    logger.warn(
+      { err: truncateError(batchError), chunks: claimedRows.length },
+      "embedding batch failed, falling back to per-chunk processing"
+    );
+
+    const maxAttempts = toPositiveInt(process.env.EMBED_MAX_ATTEMPTS, 5, 1, 20);
+    const readyRows = [];
+    const failedIds = [];
+    const retryIds = [];
+
+    for (const claimed of claimedRows) {
+      try {
+        const singleResult = await createEmbeddings([claimed.text], logger);
+        model = singleResult.model || model;
+        const embedding = singleResult.embeddings[0];
+        if (Array.isArray(embedding) && embedding.length) {
+          readyRows.push({ id: claimed.id, embedding });
+        } else {
+          retryIds.push(claimed.id);
+        }
+      } catch {
+        // Check current embedding_attempts to decide retry vs permanent fail.
+        // claimPendingChunks already incremented embedding_attempts by 1,
+        // so the current value in DB reflects the count including this run.
+        failedIds.push(claimed.id);
+      }
+    }
+
+    // Persist per-chunk results atomically.
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      await markReadyRows(client, scope, readyRows, model);
+      await markClaimedAsPending(client, scope, retryIds, "embedding_missing_from_provider_will_retry");
+      // For chunks that threw individually: mark as failed if they've
+      // exceeded max attempts, otherwise return to pending for retry.
+      if (failedIds.length) {
+        // Split failed ids into those that exceeded max attempts vs those that can retry
+        const { rows: attemptRows } = await client.query(
+          `SELECT id, embedding_attempts FROM rag_chunks
+           WHERE id = ANY($1::uuid[]) AND project_id = $2 AND account_scope_id = $3`,
+          [failedIds, scope.projectId, scope.accountScopeId]
+        );
+        const exhaustedIds = [];
+        const retryableIds = [];
+        for (const row of attemptRows) {
+          if (row.embedding_attempts >= maxAttempts) {
+            exhaustedIds.push(row.id);
+          } else {
+            retryableIds.push(row.id);
+          }
+        }
+        await markFailedRows(client, scope, exhaustedIds, model, "max_attempts_exceeded_after_individual_retry");
+        await markClaimedAsPending(client, scope, retryableIds, truncateError(batchError));
+      }
+      await client.query("COMMIT");
+    } catch (txErr) {
+      await client.query("ROLLBACK");
+      // Last resort: return everything to pending so nothing is stuck as 'processing'
+      await markClaimedAsPending(pool, scope, claimedIds, txErr);
+      throw txErr;
+    } finally {
+      client.release();
+    }
+
+    return {
+      processed: readyRows.length,
+      failed: failedIds.length + retryIds.length,
+      status: "partial",
+      model,
+    };
   }
 }
 
