@@ -31,12 +31,12 @@
 
 | Проблема | Файл | Строки | Критичность | Статус |
 |----------|------|--------|-------------|--------|
-| Session SELECT + UPDATE на **каждый** HTTP-запрос | `index.js` | 498, 507 | HIGH | ✅ Iter 1: Redis cache + batch |
-| `last_seen_at` UPDATE при каждом запросе — лишняя write-нагрузка | `index.js` | 507 | HIGH | ✅ Iter 1: batched 30s |
-| `hydrateSessionScope()` может вызваться дважды (onRequest + preValidation) | `index.js` | 506, 527 | MEDIUM | Open |
+| Session SELECT + UPDATE на **каждый** HTTP-запрос | `apps/api/src/index.js` | 498, 507 | HIGH | ✅ Iter 1: Redis cache + batch |
+| `last_seen_at` UPDATE при каждом запросе — лишняя write-нагрузка | `apps/api/src/index.js` | 507 | HIGH | ✅ Iter 1: batched 30s |
+| `hydrateSessionScope()` может вызваться дважды (onRequest + preValidation) | `apps/api/src/index.js` | 506, 527 | MEDIUM | Open |
 | Plaintext credentials в `AUTH_CREDENTIALS` env var | `docker-compose.yml` | 43-45 | CRITICAL | ✅ Iter 0: required env |
-| Нет API rate limiting кроме login endpoint | `index.js` | 604-635 | CRITICAL | ✅ Iter 0: 200/60 rpm |
-| Нет bcrypt/argon2 — пароли не хешируются | `index.js` | ~605 | CRITICAL | ✅ Iter 0: bcrypt |
+| Нет API rate limiting кроме login endpoint | `apps/api/src/index.js` | 604-635 | CRITICAL | ✅ Iter 0: 200/60 rpm |
+| Нет bcrypt/argon2 — пароли не хешируются | `apps/api/src/index.js` | ~605 | CRITICAL | ✅ Iter 0: bcrypt |
 
 **Вердикт:** ~~Нужна доработка перед production.~~ Все CRITICAL закрыты. Iter 8: timing attack fix, security headers, session cache invalidation, CSRF hardening, trustProxy. Iter 9: Zod validation на все 32 POST endpoints. Remaining: hydrate dedup (MEDIUM).
 
@@ -50,12 +50,12 @@
 
 | Проблема | Файл | Критичность | Статус |
 |----------|------|-------------|--------|
-| Нет circuit breaker — при падении внешнего API sync зависает до timeout | `chatwoot.js`, `linear.js`, `attio.js` | HIGH | ✅ Iter 2: per-host CB |
+| Нет circuit breaker — при падении внешнего API sync зависает до timeout | `domains/connectors/chatwoot.js`, `domains/connectors/linear.js`, `domains/connectors/attio.js` | HIGH | ✅ Iter 2: per-host CB |
 | `connector_errors` — нет индекса по (project_id, status, error_kind) | migrations | MEDIUM | ✅ Iter 4.4 |
 | Нет алертов на падение `completeness_pct` | — | MEDIUM | ✅ Iter 2: audit event |
-| Нет diff-report полноты между циклами | `reconciliation.js` | MEDIUM | ✅ Iter 6.5: completeness diff |
-| Нет auto identity dedup preview | `connector-sync.js` | MEDIUM | ✅ Iter 6.4: preview at sync |
-| 80+ env vars дублируются между server и worker в docker-compose | `docker-compose.yml` | LOW | Open |
+| Нет diff-report полноты между циклами | `domains/connectors/reconciliation.js` | MEDIUM | ✅ Iter 6.5: completeness diff |
+| Нет auto identity dedup preview | `domains/connectors/connector-sync.js` | MEDIUM | ✅ Iter 6.4: preview at sync |
+| 80+ env vars дублируются между api и worker в docker-compose | `docker-compose.yml` | LOW | Open |
 
 **Вердикт:** ~~Нужен circuit breaker и мониторинг SLA.~~ Circuit breaker, alerting, strategic indexes, completeness diff и identity preview реализованы. CB states в `/metrics` (Iter 5). Dead letter visibility endpoints (Iter 9).
 
@@ -69,11 +69,11 @@
 
 | Проблема | Файл | Строки | Критичность | Статус |
 |----------|------|--------|-------------|--------|
-| 4 параллельных полнотабличных сканирования при каждом запросе | `lightrag.js` | 174-251 | HIGH | ✅ Iter 4.1: pg_trgm GIN |
-| ILIKE ANY() — sequential scan без index | `lightrag.js` | 176-224 | HIGH | ✅ Iter 4.1: pg_trgm GIN |
-| Нет кеширования повторных запросов (один и тот же вопрос = полный цикл) | `lightrag.js` | — | HIGH | ✅ Iter 1: TTL 300s |
+| 4 параллельных полнотабличных сканирования при каждом запросе | `domains/rag/lightrag.js` | 174-251 | HIGH | ✅ Iter 4.1: pg_trgm GIN |
+| ILIKE ANY() — sequential scan без index | `domains/rag/lightrag.js` | 176-224 | HIGH | ✅ Iter 4.1: pg_trgm GIN |
+| Нет кеширования повторных запросов (один и тот же вопрос = полный цикл) | `domains/rag/lightrag.js` | — | HIGH | ✅ Iter 1: TTL 300s |
 | Нет quality score / feedback loop | — | — | MEDIUM | ✅ Iter 6.1+6.2: quality score + feedback endpoint |
-| Нет фильтрации по типу источника | `lightrag.js` | — | MEDIUM | ✅ Iter 6.3: sourceFilter parameter |
+| Нет фильтрации по типу источника | `domains/rag/lightrag.js` | — | MEDIUM | ✅ Iter 6.3: sourceFilter parameter |
 | Vector index tuning (IVFFlat probes / HNSW ef_search) только через env vars | — | — | LOW | Open |
 
 **Вердикт:** ~~Под нагрузкой будет деградировать.~~ Кеширование (TTL 300s), pg_trgm GIN indexes, quality score, feedback loop и source filters реализованы. Remaining: vector index tuning (LOW).
@@ -88,11 +88,11 @@
 
 | Проблема | Файл | Строки | Критичность | Статус |
 |----------|------|--------|-------------|--------|
-| **11 LATERAL subqueries** на каждый проект в portfolio | `portfolio.js` | 113-177 | CRITICAL | ✅ Iter 4: matview + batch JOINed subqueries (10 LATERAL → 0) |
-| 18 параллельных pool.query в одном Promise.all | `portfolio.js` | 112-620 | HIGH | ✅ Mitigated: Iter 1 cache (TTL 90s) |
-| Health scores, analytics snapshots запрашиваются повторно в trends | `portfolio.js` | 431, 441, 457 | HIGH | ✅ Mitigated: cached result |
-| evidence_items сканируется дважды с ~70% одинаковой фильтрацией | `portfolio.js` | 216, 488 | MEDIUM | ✅ Iter 4.1: pg_trgm GIN on snippet |
-| `computeClientValueScore()` считается в JS вместо SQL | `portfolio.js` | 16-28 | LOW | Open |
+| **11 LATERAL subqueries** на каждый проект в portfolio | `domains/analytics/portfolio.js` | 113-177 | CRITICAL | ✅ Iter 4: matview + batch JOINed subqueries (10 LATERAL → 0) |
+| 18 параллельных pool.query в одном Promise.all | `domains/analytics/portfolio.js` | 112-620 | HIGH | ✅ Mitigated: Iter 1 cache (TTL 90s) |
+| Health scores, analytics snapshots запрашиваются повторно в trends | `domains/analytics/portfolio.js` | 431, 441, 457 | HIGH | ✅ Mitigated: cached result |
+| evidence_items сканируется дважды с ~70% одинаковой фильтрацией | `domains/analytics/portfolio.js` | 216, 488 | MEDIUM | ✅ Iter 4.1: pg_trgm GIN on snippet |
+| `computeClientValueScore()` считается в JS вместо SQL | `domains/analytics/portfolio.js` | 16-28 | LOW | Open |
 
 **Количественная оценка (обновлённая):** Cache hit → <50ms. Cold path: matview read (single indexed lookup) + batch queries (GROUP BY + DISTINCT ON). Expected cold path < 200ms for 10 projects. Pool usage minimal: 18 parallel queries now use pre-aggregated data.
 
@@ -108,13 +108,13 @@
 
 | Проблема | Файл | Критичность | Статус |
 |----------|------|-------------|--------|
-| Chart data transforms без `useMemo` в render path | `section-page.jsx` | HIGH | ✅ Iter 3.1: 9 chart useMemo |
-| `compactUniqueRisks()` O(n log n) sort в каждом render | `section-page.jsx:145-167` | HIGH | ✅ Iter 3.1: useMemo |
-| 1-секундный ticker в `useAutoRefresh` — continuous re-renders | `use-auto-refresh.js:57-62` | HIGH | ✅ Iter 3.3: 5s ticker |
-| Polling при SSE: снижен ×3, но не отключён | `use-auto-refresh.js` | MEDIUM | ✅ Iter 3.4: fully disabled |
-| Нет code splitting — все dashboard sections в одном bundle | `next.config.mjs` | MEDIUM | ✅ Iter 3.5: next/dynamic |
-| Нет React.memo на chart-компонентах | `section-page.jsx` | MEDIUM | ✅ Iter 3.2: 6 memo components |
-| `use-project-portfolio.js` — 335 строк, 21 values в context | hook | MEDIUM | Open (разделение неоправданно) |
+| Chart data transforms без `useMemo` в render path | `apps/web/features/control-tower/section-page.jsx` | HIGH | ✅ Iter 3.1: 9 chart useMemo |
+| `compactUniqueRisks()` O(n log n) sort в каждом render | `apps/web/features/control-tower/section-page.jsx:145-167` | HIGH | ✅ Iter 3.1: useMemo |
+| 1-секундный ticker в `useAutoRefresh` — continuous re-renders | `apps/web/hooks/use-auto-refresh.js:57-62` | HIGH | ✅ Iter 3.3: 5s ticker |
+| Polling при SSE: снижен ×3, но не отключён | `apps/web/hooks/use-auto-refresh.js` | MEDIUM | ✅ Iter 3.4: fully disabled |
+| Нет code splitting — все dashboard sections в одном bundle | `apps/web/next.config.mjs` | MEDIUM | ✅ Iter 3.5: next/dynamic |
+| Нет React.memo на chart-компонентах | `apps/web/features/control-tower/section-page.jsx` | MEDIUM | ✅ Iter 3.2: 6 memo components |
+| `apps/web/hooks/use-project-portfolio.js` — 335 строк, 21 values в context | hook | MEDIUM | Open (разделение неоправданно) |
 
 **Вердикт:** ~~Единственная зона без улучшений.~~ Все HIGH issues закрыты. Remaining: portfolio hook complexity (assessed, left as-is).
 
@@ -128,12 +128,12 @@
 
 | Проблема | Файл | Критичность | Статус |
 |----------|------|-------------|--------|
-| Контейнеры запускаются от root | Оба Dockerfile | CRITICAL | ✅ Iter 0: USER app:1001 |
+| Контейнеры запускаются от root | `apps/api/Dockerfile`, `apps/web/Dockerfile` | CRITICAL | ✅ Iter 0: USER app:1001 |
 | Нет resource limits (memory, CPU) | `docker-compose.yml` | CRITICAL | ✅ Iter 0: limits для всех |
 | PostgreSQL и Redis порты открыты на хосте | `docker-compose.yml` | HIGH | ✅ Iter 0: ports закрыты |
 | Нет backup strategy для PostgreSQL | — | CRITICAL | ✅ Iter 2: backup.sh |
 | Нет healthcheck для server и worker | `docker-compose.yml` | HIGH | ✅ Iter 0: healthchecks |
-| Нет graceful shutdown (SIGTERM handler) | `index.js`, `worker-loop.js` | HIGH | ✅ Iter 2: drain + cleanup |
+| Нет graceful shutdown (SIGTERM handler) | `apps/api/src/index.js`, `apps/api/src/worker-loop.js` | HIGH | ✅ Iter 2: drain + cleanup |
 | Нет structured logging | — | MEDIUM | ✅ Iter 2: Pino JSON |
 | Default credentials `admin:admin` | `docker-compose.yml` | CRITICAL | ✅ Iter 0: required env |
 
@@ -191,9 +191,9 @@ Redis **уже подключён** к системе. Текущее испол
 
 | Что | Где | Файл |
 |-----|-----|------|
-| Pub/Sub: канал `job_completed` | worker → server | `redis-pubsub.js` |
-| SSE broadcasting по project_id | server → browser | `sse-broadcaster.js` |
-| Health check (PING) | server startup | `redis.js` |
+| Pub/Sub: канал `job_completed` | worker → server | `apps/api/src/infra/redis-pubsub.js` |
+| SSE broadcasting по project_id | server → browser | `apps/api/src/infra/sse-broadcaster.js` |
+| Health check (PING) | server startup | `apps/api/src/infra/redis.js` |
 
 **Текущая конфигурация:** 128MB maxmemory, allkeys-lru eviction, два соединения (pub + sub).
 
@@ -261,7 +261,7 @@ Control Tower запрашивает watermarks на каждый load. Watermar
 | Redis downtime | Уже есть graceful degradation (fallback to DB) |
 | Memory pressure | 128MB достаточно; при необходимости поднять до 256MB |
 | Stale data | TTL 60-120s + явная инвалидация при job_completed |
-| Complexity overhead | Минимальный: один модуль `lib/cache.js`, ~100 строк |
+| Complexity overhead | Минимальный: один модуль `infra/cache.ts`, ~100 строк |
 
 **Финальный вердикт:** Redis-кеширование даёт **кратное** (не процентное) улучшение производительности при минимальных рисках. Инфраструктура уже на месте.
 
@@ -276,10 +276,10 @@ Control Tower запрашивает watermarks на каждый load. Watermar
 | # | Задача | Файлы | Изменения |
 |---|--------|-------|-----------|
 | 0.1 | Убрать default credentials `admin:admin` из docker-compose | `docker-compose.yml` | Удалить default values для `AUTH_CREDENTIALS`, `AUTH_PASSWORD` |
-| 0.2 | Добавить bcrypt hashing для паролей | `server/src/index.js`, `server/package.json` | Добавить `bcrypt`, хешировать при login verify |
-| 0.3 | Добавить `USER node` в оба Dockerfile | `server/Dockerfile`, `web/Dockerfile` | `RUN addgroup -g 1001 app && adduser ...` + `USER app` |
+| 0.2 | Добавить bcrypt hashing для паролей | `apps/api/src/index.js`, `apps/api/package.json` | Добавить `bcrypt`, хешировать при login verify |
+| 0.3 | Добавить `USER node` в оба Dockerfile | `apps/api/Dockerfile`, `apps/web/Dockerfile` | `RUN addgroup -g 1001 app && adduser ...` + `USER app` |
 | 0.4 | Убрать expose портов DB/Redis на хост | `docker-compose.yml` | Удалить `ports` для db и redis; оставить internal networking |
-| 0.5 | Добавить API rate limiting middleware | `server/src/index.js` | In-memory rate limiter: 100 req/min per session, 30 req/min per IP для auth |
+| 0.5 | Добавить API rate limiting middleware | `apps/api/src/index.js` | In-memory rate limiter: 100 req/min per session, 30 req/min per IP для auth |
 | 0.6 | Добавить resource limits в docker-compose | `docker-compose.yml` | `deploy.resources.limits.memory`, `cpus` для каждого сервиса |
 | 0.7 | Добавить healthcheck для server и worker | `docker-compose.yml` | `healthcheck: curl -f http://localhost:8080/health` |
 
@@ -293,13 +293,13 @@ Control Tower запрашивает watermarks на каждый load. Watermar
 
 | # | Задача | Файлы | Изменения |
 |---|--------|-------|-----------|
-| 1.1 | Создать `lib/cache.js` — единый cache-модуль | `server/src/lib/cache.js` (новый) | `get`, `set`, `del`, `invalidatePattern`, TTL management |
-| 1.2 | Session cache (Redis → fallback DB) | `server/src/index.js` | Кешировать session lookup, батч `last_seen_at` |
-| 1.3 | Portfolio overview cache | `server/src/services/portfolio.js` | Cache key: `portfolio:{accountScopeId}:{projectIds hash}`, TTL 90s |
-| 1.4 | LightRAG query cache | `server/src/services/lightrag.js` | Cache key: `lightrag:{projectId}:{queryHash}:{topK}`, TTL 300s |
-| 1.5 | Control Tower / watermarks cache | `server/src/services/intelligence.js` | Cache key: `ct:{projectId}`, TTL 120s |
-| 1.6 | Event-driven invalidation | `server/src/index.js`, `lib/cache.js` | При `job_completed` → invalidate related cache keys |
-| 1.7 | Cache metrics в `/metrics` | `server/src/index.js` | `cache_hits_total`, `cache_misses_total`, `cache_invalidations_total` |
+| 1.1 | Создать `infra/cache.ts` — единый cache-модуль | `apps/api/src/infra/cache.ts` (новый) | `get`, `set`, `del`, `invalidatePattern`, TTL management |
+| 1.2 | Session cache (Redis → fallback DB) | `apps/api/src/index.js` | Кешировать session lookup, батч `last_seen_at` |
+| 1.3 | Portfolio overview cache | `apps/api/src/domains/analytics/portfolio.js` | Cache key: `portfolio:{accountScopeId}:{projectIds hash}`, TTL 90s |
+| 1.4 | LightRAG query cache | `apps/api/src/domains/rag/lightrag.js` | Cache key: `lightrag:{projectId}:{queryHash}:{topK}`, TTL 300s |
+| 1.5 | Control Tower / watermarks cache | `apps/api/src/domains/analytics/intelligence.js` | Cache key: `ct:{projectId}`, TTL 120s |
+| 1.6 | Event-driven invalidation | `apps/api/src/index.js`, `apps/api/src/infra/cache.ts` | При `job_completed` → invalidate related cache keys |
+| 1.7 | Cache metrics в `/metrics` | `apps/api/src/index.js` | `cache_hits_total`, `cache_misses_total`, `cache_invalidations_total` |
 
 **Критерий завершения:** p95 latency `/portfolio/overview` < 50ms при cache hit. DB queries снижены на 70%+.
 
@@ -311,12 +311,12 @@ Control Tower запрашивает watermarks на каждый load. Watermar
 
 | # | Задача | Файлы | Изменения |
 |---|--------|-------|-----------|
-| 2.1 | Circuit breaker для внешних API | `server/src/lib/http.js` | Добавить state machine: closed → open → half-open. Threshold: 5 failures / 60s |
-| 2.2 | Graceful shutdown handler | `server/src/index.js`, `worker-loop.js` | SIGTERM → drain connections → close Redis → close DB pool |
-| 2.3 | Structured JSON logging | `server/src/index.js` | Fastify logger с pino: JSON формат, correlation IDs, log levels |
-| 2.4 | Input validation schemas | `server/src/index.js` | Zod schemas для POST endpoints (CRM, offers, outbound) |
+| 2.1 | Circuit breaker для внешних API | `apps/api/src/infra/http.ts` | Добавить state machine: closed → open → half-open. Threshold: 5 failures / 60s |
+| 2.2 | Graceful shutdown handler | `apps/api/src/index.js`, `apps/api/src/worker-loop.js` | SIGTERM → drain connections → close Redis → close DB pool |
+| 2.3 | Structured JSON logging | `apps/api/src/index.js` | Fastify logger с pino: JSON формат, correlation IDs, log levels |
+| 2.4 | Input validation schemas | `apps/api/src/index.js` | Zod schemas для POST endpoints (CRM, offers, outbound) |
 | 2.5 | PostgreSQL backup strategy | `docker-compose.yml`, `scripts/backup.sh` | pg_dump cron + retention policy |
-| 2.6 | Alerting на completeness_pct падение | `server/src/services/reconciliation.js` | При completeness < threshold → audit event + SSE alert |
+| 2.6 | Alerting на completeness_pct падение | `apps/api/src/domains/connectors/reconciliation.js` | При completeness < threshold → audit event + SSE alert |
 
 **Критерий завершения:** Внешние API падения не каскадируются. Graceful restart без потери запросов.
 
@@ -328,12 +328,12 @@ Control Tower запрашивает watermarks на каждый load. Watermar
 
 | # | Задача | Файлы | Изменения |
 |---|--------|-------|-----------|
-| 3.1 | useMemo для 11 chart transforms | `web/features/control-tower/section-page.jsx` | Обернуть все `.map()` в `useMemo` |
-| 3.2 | React.memo для chart card components | `web/features/control-tower/section-page.jsx` | Извлечь `<DashboardChartCard />`, обернуть в `memo` |
-| 3.3 | Поднять ticker interval с 1s до 5s | `web/hooks/use-auto-refresh.js` | `secondsAgo` update раз в 5 секунд |
-| 3.4 | Отключить polling при активном SSE | `web/hooks/use-auto-refresh.js` | `if (sseConnected) return` вместо `intervalMs * 3` |
-| 3.5 | Code splitting для dashboard sections | `web/app/control-tower/[section]/page.jsx` | `dynamic(() => import(...))` |
-| 3.6 | Рефактор use-project-portfolio.js | `web/hooks/use-project-portfolio.js` | Разделить на `useProjectSelection`, `useProjectRefresh`, `useProjectState` |
+| 3.1 | useMemo для 11 chart transforms | `apps/web/features/control-tower/section-page.jsx` | Обернуть все `.map()` в `useMemo` |
+| 3.2 | React.memo для chart card components | `apps/web/features/control-tower/section-page.jsx` | Извлечь `<DashboardChartCard />`, обернуть в `memo` |
+| 3.3 | Поднять ticker interval с 1s до 5s | `apps/web/hooks/use-auto-refresh.js` | `secondsAgo` update раз в 5 секунд |
+| 3.4 | Отключить polling при активном SSE | `apps/web/hooks/use-auto-refresh.js` | `if (sseConnected) return` вместо `intervalMs * 3` |
+| 3.5 | Code splitting для dashboard sections | `apps/web/app/control-tower/[section]/page.jsx` | `dynamic(() => import(...))` |
+| 3.6 | Рефактор use-project-portfolio.js | `apps/web/hooks/use-project-portfolio.js` | Разделить на `useProjectSelection`, `useProjectRefresh`, `useProjectState` |
 
 **Критерий завершения:** Lighthouse Performance score > 85. Нет jank при навигации.
 
@@ -347,7 +347,7 @@ Control Tower запрашивает watermarks на каждый load. Watermar
 |---|--------|-------|-----------|
 | 4.1 | Добавить strategic indexes | Новая миграция | `(project_id, account_id)` на crm_account_contacts; `(opportunity_id)` на stage_events; `(account_scope_id, created_at)` на ключевые таблицы |
 | 4.2 | Materialized view для portfolio dashboard | Новая миграция | `CREATE MATERIALIZED VIEW mv_portfolio_dashboard` с агрегатами |
-| 4.3 | Оптимизация LATERAL → batch query | `server/src/services/portfolio.js` | Заменить 11 LATERAL subqueries на отдельные batch-запросы с hash join |
+| 4.3 | Оптимизация LATERAL → batch query | `apps/api/src/domains/analytics/portfolio.js` | Заменить 11 LATERAL subqueries на отдельные batch-запросы с hash join |
 | 4.4 | Cleanup orphaned tables | Новая миграция | Drop `app_users`, `signup_requests`, `app_settings` (если не используются) |
 | 4.5 | GIN index для ILIKE patterns в lightrag | Новая миграция | `CREATE INDEX ... ON cw_messages USING gin(content gin_trgm_ops)` |
 | 4.6 | Partitioning для audit_events и job_runs | Новая миграция | Range partitioning по created_at (monthly) |
@@ -362,7 +362,7 @@ Control Tower запрашивает watermarks на каждый load. Watermar
 
 | # | Задача | Файлы | Изменения |
 |---|--------|-------|-----------|
-| 5.1 | Prometheus exporter с полным набором метрик | `server/src/index.js` | DB pool stats, cache stats, SSE stats, connector lag, error rates |
+| 5.1 | Prometheus exporter с полным набором метрик | `apps/api/src/index.js` | DB pool stats, cache stats, SSE stats, connector lag, error rates |
 | 5.2 | Alerting rules (файл или интеграция) | `infra/alerts/` | Connector lag > 30min, error rate > 5%, pool usage > 80% |
 | 5.3 | Backup verification job | `scripts/verify-backup.sh` | Еженедельная проверка восстановления из backup |
 | 5.4 | Log aggregation setup | `docker-compose.yml` | Loki/Grafana stack или managed solution |
@@ -379,11 +379,11 @@ Control Tower запрашивает watermarks на каждый load. Watermar
 
 | # | Задача | Файлы | Изменения |
 |---|--------|-------|-----------|
-| 6.1 | Quality score proxy для LightRAG | `server/src/services/lightrag.js` | precision/coverage метрики на основе evidence count и diversity |
-| 6.2 | Feedback loop endpoint | `server/src/index.js` | `POST /lightrag/feedback` — thumb up/down с persist |
-| 6.3 | Evidence фильтры по типу источника | `server/src/services/lightrag.js` | Параметр `sourceFilter: ["messages", "issues", "deals"]` |
-| 6.4 | Identity graph improvements | `server/src/services/identity-graph.js` | Авто-preview при sync completion |
-| 6.5 | Diff-report полноты данных | `server/src/services/reconciliation.js` | Сравнение completeness_pct между sync-циклами |
+| 6.1 | Quality score proxy для LightRAG | `apps/api/src/domains/rag/lightrag.js` | precision/coverage метрики на основе evidence count и diversity |
+| 6.2 | Feedback loop endpoint | `apps/api/src/index.js` | `POST /lightrag/feedback` — thumb up/down с persist |
+| 6.3 | Evidence фильтры по типу источника | `apps/api/src/domains/rag/lightrag.js` | Параметр `sourceFilter: ["messages", "issues", "deals"]` |
+| 6.4 | Identity graph improvements | `apps/api/src/domains/identity/identity-graph.js` | Авто-preview при sync completion |
+| 6.5 | Diff-report полноты данных | `apps/api/src/domains/connectors/reconciliation.js` | Сравнение completeness_pct между sync-циклами |
 
 **Критерий завершения:** LightRAG feedback собирается. Quality trend наблюдаем.
 
@@ -391,7 +391,7 @@ Control Tower запрашивает watermarks на каждый load. Watermar
 
 ## 5. Список модификаций Redis
 
-### 5.1 Новый модуль: `server/src/lib/cache.js`
+### 5.1 Новый модуль: `apps/api/src/infra/cache.ts`
 
 ```javascript
 // Архитектура:
@@ -412,7 +412,7 @@ function getStats()                      // → { hits, misses, sets, invalidati
 
 ### 5.2 Конкретные изменения по файлам
 
-#### `server/src/lib/redis.js`
+#### `apps/api/src/infra/redis.js`
 ```diff
 + // Третье соединение для cache (отдельное от pub/sub)
 + export function createRedisCacheClient(options) {
@@ -420,7 +420,7 @@ function getStats()                      // → { hits, misses, sets, invalidati
 + }
 ```
 
-#### `server/src/index.js`
+#### `apps/api/src/index.js`
 
 **Session caching (строки ~498-507):**
 ```diff
@@ -451,7 +451,7 @@ function getStats()                      // → { hits, misses, sets, invalidati
   });
 ```
 
-#### `server/src/services/portfolio.js`
+#### `apps/api/src/domains/analytics/portfolio.js`
 
 **Portfolio overview caching (строка ~67):**
 ```diff
@@ -468,7 +468,7 @@ function getStats()                      // → { hits, misses, sets, invalidati
   }
 ```
 
-#### `server/src/services/lightrag.js`
+#### `apps/api/src/domains/rag/lightrag.js`
 
 **LightRAG query caching (строка ~147):**
 ```diff
@@ -488,7 +488,7 @@ function getStats()                      // → { hits, misses, sets, invalidati
   }
 ```
 
-#### `server/src/services/intelligence.js`
+#### `apps/api/src/domains/analytics/intelligence.js`
 
 **Control Tower caching (строка ~573):**
 ```diff
@@ -544,7 +544,7 @@ session UPDATE (login/logout/project switch):
 |--------|-------|-------------|
 | Покрыты ли все 6 зон? | Да: Platform, Connectors, Intelligence, Dashboard, Frontend, Infrastructure | OK |
 | Проверен ли каждый critical finding в коде? | Да: строки указаны, код прочитан | OK |
-| Есть ли пропущенные bottlenecks? | Возможно: worker-loop.js при большом числе проектов. Проверено — OK, tick limit 25 | OK |
+| Есть ли пропущенные bottlenecks? | Возможно: apps/api/src/worker-loop.js при большом числе проектов. Проверено — OK, tick limit 25 | OK |
 | Учтён ли KAG code? | Да: полностью удалён в Iter 10 (2,770 LOC, routes, scheduler jobs, DB tables) | OK |
 
 ### Раунд 2: Проверка Redis-решения

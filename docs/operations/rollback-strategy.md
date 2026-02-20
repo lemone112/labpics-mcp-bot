@@ -40,11 +40,11 @@ docker compose exec db pg_dump -U app -Fc labpics > /backups/labpics_$(date +%Y%
 
 ### Откат миграции
 
-Миграции в `server/db/migrations/` идемпотентны (CREATE IF NOT EXISTS, ALTER IF NOT EXISTS).
+Миграции в `apps/api/db/migrations/` идемпотентны (CREATE IF NOT EXISTS, ALTER IF NOT EXISTS).
 Для отката деструктивных миграций:
 
-1. Создать reverse-миграцию в `server/db/migrations/` с следующим порядковым номером
-2. Применить: `docker compose exec server npm run migrate`
+1. Создать reverse-миграцию в `apps/api/db/migrations/` с следующим порядковым номером
+2. Применить: `docker compose exec server npm run migrate -w apps/api`
 
 ### Важно
 

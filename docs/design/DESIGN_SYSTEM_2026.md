@@ -94,8 +94,8 @@ Rules:
 
 Anime.js is the single motion engine.
 
-- Duration tokens live in `web/lib/motion.js`.
-- Easing tokens live in `web/lib/motion.js`.
+- Duration tokens live in `apps/web/lib/motion.js`.
+- Easing tokens live in `apps/web/lib/motion.js`.
 - Respect reduced motion (`prefers-reduced-motion`).
 - No random per-page animation curves/durations.
 

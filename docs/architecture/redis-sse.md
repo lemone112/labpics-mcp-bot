@@ -38,7 +38,7 @@ Worker Loop                  Redis                  Fastify API Server        Br
 
 ### Хук `useAutoRefresh`
 
-**Файл:** `web/hooks/use-auto-refresh.js`
+**Файл:** `apps/web/hooks/use-auto-refresh.js`
 
 Обёртка над любой функцией `reload()` с интервальным таймером:
 
@@ -59,7 +59,7 @@ Worker Loop                  Redis                  Fastify API Server        Br
 
 ### Индикатор `LastUpdatedIndicator`
 
-**Файл:** `web/components/ui/last-updated-indicator.jsx`
+**Файл:** `apps/web/components/ui/last-updated-indicator.jsx`
 
 Показывает "Обновлено: X сек/мин назад" + кнопка "Обновить".
 Интегрирован в Control Tower и страницу Jobs.
@@ -70,7 +70,7 @@ Worker Loop                  Redis                  Fastify API Server        Br
 
 ### Конфигурация цепочек
 
-**Файл:** `server/src/services/scheduler.js`
+**Файл:** `apps/api/src/domains/core/scheduler.js`
 
 ```js
 const CASCADE_CHAINS = {
@@ -123,9 +123,9 @@ connectors_sync_cycle
 
 | Файл | Назначение |
 |------|-----------|
-| `server/src/lib/redis.js` | Фабрика Redis-клиентов (ioredis) |
-| `server/src/lib/redis-pubsub.js` | Pub/Sub обёртка: publish + subscribe |
-| `server/src/lib/sse-broadcaster.js` | Менеджер SSE-клиентов по project_id |
+| `apps/api/src/infra/redis.ts` | Фабрика Redis-клиентов (ioredis) |
+| `apps/api/src/infra/redis-pubsub.ts` | Pub/Sub обёртка: publish + subscribe |
+| `apps/api/src/infra/sse-broadcaster.ts` | Менеджер SSE-клиентов по project_id |
 
 ### SSE Endpoint
 
@@ -162,8 +162,8 @@ GET /events/stream
 
 | Хук | Файл | Назначение |
 |-----|------|-----------|
-| `useEventStream` | `web/hooks/use-event-stream.js` | Подключение к SSE |
-| `useRealtimeRefresh` | `web/hooks/use-realtime-refresh.js` | Маппинг событий на reload |
+| `useEventStream` | `apps/web/hooks/use-event-stream.js` | Подключение к SSE |
+| `useRealtimeRefresh` | `apps/web/hooks/use-realtime-refresh.js` | Маппинг событий на reload |
 
 ### Маппинг job → данные
 

@@ -58,20 +58,20 @@ Frontend (Next.js) решает четыре задачи:
 
 Ключевые правила зафиксированы в:
 
-- `web/DESIGN_SYSTEM_2026.md`
-- `web/components/ui/*`
-- `web/components.json`
+- `docs/design/DESIGN_SYSTEM_2026.md`
+- `apps/web/components/ui/*`
+- `apps/web/components.json`
 
 Основные принципы:
 
-1. сначала использовать primitives из `components/ui`;
+1. сначала использовать primitives из `apps/web/components/ui`;
 2. использовать semantic-классы (`bg-background`, `text-foreground`, `border-input`);
 3. не вводить одноразовые цвета/типографику без причины;
 4. состояния hover/focus/disabled должны быть единообразны.
 
 ### Токены темы
 
-- определены в `web/app/globals.css` через CSS variables;
+- определены в `apps/web/app/globals.css` через CSS variables;
 - поддерживаются светлая/тёмная темы;
 - отдельно есть токены для sidebar и chart-палитры.
 
@@ -90,8 +90,8 @@ Frontend (Next.js) решает четыре задачи:
 
 Стандарты motion определены в:
 
-- `web/MOTION_GUIDELINES.md`
-- `web/lib/motion.js`
+- `docs/design/MOTION_GUIDELINES.md`
+- `apps/web/lib/motion.js`
 
 Токены:
 
@@ -117,8 +117,8 @@ Frontend (Next.js) решает четыре задачи:
 
 ## 5.1 Layout и провайдеры
 
-- `web/app/layout.jsx` — root layout, шрифты, глобальные стили.
-- `web/app/providers.jsx`:
+- `apps/web/app/layout.jsx` — root layout, шрифты, глобальные стили.
+- `apps/web/app/providers.jsx`:
   - `ThemeProvider`
   - `ProjectPortfolioProvider`
 
@@ -166,7 +166,7 @@ Frontend (Next.js) решает четыре задачи:
 
 ## 6.3 API-клиент
 
-- `apiFetch` (`web/lib/api.js`) добавляет:
+- `apiFetch` (`apps/web/lib/api.js`) добавляет:
   - `credentials: include`,
   - `x-request-id`,
   - CSRF header из cookie,
@@ -188,7 +188,7 @@ Frontend (Next.js) решает четыре задачи:
 
 ## 7.1 Control Tower
 
-`features/control-tower/section-page.jsx`:
+`apps/web/features/control-tower/section-page.jsx`:
 
 - выбирает источник данных по section;
 - рендерит charts/cards/messages feed;
@@ -223,8 +223,8 @@ Frontend (Next.js) решает четыре задачи:
 ## 9) Что важно не ломать при развитии UI
 
 - Нельзя обходить `apiFetch` ad-hoc fetch-запросами без CSRF/request-id.
-- Нельзя вводить новые визуальные паттерны в обход `components/ui/*`.
-- Нельзя добавлять page-specific motion curves/durations вне `web/lib/motion.js`.
+- Нельзя вводить новые визуальные паттерны в обход `apps/web/components/ui/*`.
+- Нельзя добавлять page-specific motion curves/durations вне `apps/web/lib/motion.js`.
 - Нельзя нарушать project scope UX (особенно rules для all-project mode).
 
 ---

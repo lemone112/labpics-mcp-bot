@@ -6,7 +6,7 @@
 
 ## 1) Архитектурный контекст
 
-Продукт использует **custom hybrid RAG** реализацию (`server/src/services/lightrag.js`):
+Продукт использует **custom hybrid RAG** реализацию (`apps/api/src/domains/rag/lightrag.js`):
 - **Vector search** через pgvector (OpenAI embeddings)
 - **Keyword search** через ILIKE + pg_trgm GIN indexes
 - **4 источника**: rag_chunks, cw_messages, linear_issues_raw, attio_opportunities_raw
@@ -104,7 +104,7 @@
 
 ## 8) Миграция на HKUDS LightRAG (Iter 11 — запланировано)
 
-**Статус:** НЕ НАЧАТА. Текущая система — custom hybrid RAG (`server/src/services/lightrag.js`).
+**Статус:** НЕ НАЧАТА. Текущая система — custom hybrid RAG (`apps/api/src/domains/rag/lightrag.js`).
 
 Решение принято: миграция на [HKUDS LightRAG](https://github.com/HKUDS/LightRAG) из форка [`lemone112/lightrag`](https://github.com/lemone112/lightrag).
 
