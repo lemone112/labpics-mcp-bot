@@ -24,38 +24,38 @@
 
 ### 1. Vector search uses wrong operator — full sequential scan on every query
 - **Agent:** DB/RAG
-- **Location:** `server/src/services/embeddings.js:248,254`
+- **Location:** `apps/api/src/domains/rag/embeddings.js:248,254`
 - **Issue:** `searchChunks` uses `<->` (L2 distance) but all indexes are `vector_cosine_ops`. pgvector won't use the index → sequential scan on all rag_chunks.
 - **Fix:** Change `<->` to `<=>` (cosine distance). One-line change, massive performance impact.
 - **Indexes:** `0002:14` (ivfflat), `0003:77` (hnsw), `0021:133` (hnsw) — all `vector_cosine_ops`.
 
 ### 2. Scheduler job claiming has no atomicity — duplicate job execution
 - **Agent:** Backend
-- **Location:** `server/src/services/scheduler.js:240-262`
-- **Issue:** `FOR UPDATE SKIP LOCKED` runs via `pool.query()` (auto-commit). Locks release immediately. Two ticks can claim the same job. `withTransaction` exists in `db.js:20` but is not used.
+- **Location:** `apps/api/src/domains/core/scheduler.js:240-262`
+- **Issue:** `FOR UPDATE SKIP LOCKED` runs via `pool.query()` (auto-commit). Locks release immediately. Two ticks can claim the same job. `withTransaction` exists in `infra/db.ts:20` but is not used.
 - **Fix:** Atomic `UPDATE ... SET next_run_at = now() + interval ... WHERE ... RETURNING *` to claim-by-update.
 
 ### 3. Outbound message processing has no row locking — double-send possible
 - **Agent:** Backend
-- **Location:** `server/src/services/outbox.js:551-566`
+- **Location:** `apps/api/src/domains/outbound/outbox.js:551-566`
 - **Issue:** `processDueOutbounds` SELECT has no `FOR UPDATE SKIP LOCKED`. Scheduler + API route can both call it, reading the same rows and sending duplicates.
 - **Fix:** Add `FOR UPDATE SKIP LOCKED` or claim-by-update pattern.
 
 ### 4. Logout endpoint bypasses CSRF protection
 - **Agent:** Security
-- **Location:** `server/src/index.js:679` + `server/src/routes/auth.js:114`
+- **Location:** `apps/api/src/index.js:679` + `apps/api/src/routes/auth.js:114`
 - **Issue:** All `/auth/` paths are `isPublic`, skipping CSRF validation. `POST /auth/logout` is a mutation without CSRF. Any future `/auth/` mutations inherit this gap.
 - **Fix:** Only mark login/signup as public; require CSRF for logout.
 
 ### 5. TG webhook secret validation is optional — full unauthenticated bot access
 - **Agent:** Security
-- **Location:** `telegram-bot/src/index.ts:33` + `telegram-bot/src/types.ts:12`
+- **Location:** `apps/telegram-bot/src/index.ts:33` + `apps/telegram-bot/src/types.ts:12`
 - **Issue:** `if (webhookSecret)` skips validation when env var unset. `TELEGRAM_WEBHOOK_SECRET` is optional in types. Anyone with the webhook URL can send arbitrary commands.
 - **Fix:** Reject all webhook requests when secret is missing. Add startup check.
 
 ### 6. Token budget truncation creates infinite retry loop
 - **Agent:** DB/RAG
-- **Location:** `server/src/services/openai.js:79-82` + `embeddings.js:171-188`
+- **Location:** `apps/api/src/domains/rag/openai.js:79-82` + `domains/rag/embeddings.js:171-188`
 - **Issue:** When token budget exceeded, fewer embeddings returned than inputs. Missing embeddings counted as "failed" but `markClaimedAsPending` decrements attempts, so they never reach max-attempts cap. Chunks cycle indefinitely.
 - **Fix:** Return explicit `budget_exhausted` flag; don't decrement attempts for budget-truncated chunks.
 
@@ -67,25 +67,25 @@
 
 ### 8. CSP allows `unsafe-eval` — negates XSS protection
 - **Agent:** Frontend
-- **Location:** `web/next.config.mjs:28-29`
+- **Location:** `apps/web/next.config.mjs:28-29`
 - **Issue:** `script-src 'self' 'unsafe-inline' 'unsafe-eval'` fully negates CSP for scripts.
 - **Fix:** Remove `unsafe-eval`, use nonce-based CSP with Next.js.
 
 ### 9. Services layer has 5.17% test coverage (1.31% function coverage)
 - **Agent:** QA
-- **Location:** All files under `server/src/services/`
+- **Location:** All files under `apps/api/src/domains/`
 - **Issue:** Every service file has 0% function coverage. The 13.07% total is inflated by import side-effects.
 - **Already planned:** Phase 9 (Iter 57-60), but too late.
 
 ### 10. Zero TG bot tests (24 source files)
 - **Agent:** QA
-- **Location:** `telegram-bot/src/` — no test files, no test framework
+- **Location:** `apps/telegram-bot/src/` — no test files, no test framework
 - **Issue:** Auth, draft ownership, idempotency, Composio MCP — all untested. TypeCheck only.
 - **Already planned:** Iter 60.1-60.3, but needs earlier start.
 
 ### 11. English-only signal detection for Russian-speaking clients
 - **Agent:** Business
-- **Location:** `server/src/services/signals.js:28-72`, `upsell.js:16`
+- **Location:** `apps/api/src/domains/analytics/signals.js:28-72`, `domains/analytics/upsell.js:16`
 - **Issue:** Regex patterns only match English keywords. Client communications are in Russian (templates confirm this). Signal extraction produces near-zero results → health scores, NBA, daily digests all empty/meaningless.
 - **Fix:** Add Russian keyword patterns immediately. Highest business impact per engineering effort.
 
@@ -94,32 +94,32 @@
 ## HIGH Findings (fix in next 2 iterations)
 
 ### Security
-- **CSRF cookie httpOnly:true defeats double-submit** — `index.js:507-513` — should be `false`
-- **Swagger exposed unauthenticated in production** — `index.js:395-397,679` — no `isProd` guard
-- **Webhook secret timing-unsafe (`!==`)** — `index.ts:35` — use `crypto.timingSafeEqual`
-- **x-request-id from client unsanitized** — `index.js:356` — log injection vector
-- **No rate limiting on auth endpoints except login** — `index.js:689` — `/auth/me`, `/auth/signup/*` unlimited
-- **Login attempts Map unbounded** — `index.js:515` — no MAX_SIZE cap
+- **CSRF cookie httpOnly:true defeats double-submit** — `apps/api/src/index.js:507-513` — should be `false`
+- **Swagger exposed unauthenticated in production** — `apps/api/src/index.js:395-397,679` — no `isProd` guard
+- **Webhook secret timing-unsafe (`!==`)** — `apps/telegram-bot/src/index.ts:35` — use `crypto.timingSafeEqual`
+- **x-request-id from client unsanitized** — `apps/api/src/index.js:356` — log injection vector
+- **No rate limiting on auth endpoints except login** — `apps/api/src/index.js:689` — `/auth/me`, `/auth/signup/*` unlimited
+- **Login attempts Map unbounded** — `apps/api/src/index.js:515` — no MAX_SIZE cap
 
 ### Backend
-- **Metrics `cb.failureCount` undefined** — `health.js:77` — correct property is `failures`
-- **Circuit breaker allows unlimited half-open probes** — `http.js:48-58`
-- **No SSE connection limit** — `sse-broadcaster.js` — unlimited connections per project
-- **/metrics unauthenticated** — `index.js:679,755` — exposes pool sizes, heap, routes
-- **ensureDefaultScheduledJobs on every tick** — `scheduler.js:238` — 13*N queries/minute wasted
+- **Metrics `cb.failureCount` undefined** — `apps/api/src/routes/health.js:77` — correct property is `failures`
+- **Circuit breaker allows unlimited half-open probes** — `apps/api/src/infra/http.ts:48-58`
+- **No SSE connection limit** — `apps/api/src/infra/sse-broadcaster.js` — unlimited connections per project
+- **/metrics unauthenticated** — `apps/api/src/index.js:679,755` — exposes pool sizes, heap, routes
+- **ensureDefaultScheduledJobs on every tick** — `apps/api/src/domains/core/scheduler.js:238` — 13*N queries/minute wasted
 
 ### DB & RAG
-- **COALESCE(updated_at, created_at) prevents index usage** — 4 event-candidate queries in `event-log.js`
+- **COALESCE(updated_at, created_at) prevents index usage** — 4 event-candidate queries in `apps/api/src/domains/connectors/event-log.js`
 - **Incomplete index rename after kag→connector** — `0022:15-16` — 3 of 5 indexes still named `kag_*`
-- **No transaction in connector-sync success path** — `connector-sync.js:74-170` — partial-write risk
+- **No transaction in connector-sync success path** — `apps/api/src/domains/connectors/connector-sync.js:74-170` — partial-write risk
 - **No rollback/down migrations** — all 27 migration files — no automated recovery
 
 ### Business
-- **avg_response_minutes always hardcoded 0** — `intelligence.js:89` — field exists, computation missing
+- **avg_response_minutes always hardcoded 0** — `apps/api/src/domains/analytics/intelligence.js:89` — field exists, computation missing
 - **outbound_messages always 0** — same line — outbox data not fed to analytics
-- **costs_amount always 0** — `intelligence.js:157` — margin chart shows 100% for all projects
-- **failedJobPressure in health score** — `intelligence.js:276` — technical metric mixed with business health
-- **Upsell thresholds too high** — `upsell.js:37-58` — $50K threshold for a studio with $5-20K avg deals
+- **costs_amount always 0** — `apps/api/src/domains/analytics/intelligence.js:157` — margin chart shows 100% for all projects
+- **failedJobPressure in health score** — `apps/api/src/domains/analytics/intelligence.js:276` — technical metric mixed with business health
+- **Upsell thresholds too high** — `apps/api/src/domains/analytics/upsell.js:37-58` — $50K threshold for a studio with $5-20K avg deals
 
 ### Frontend
 - **Feature pages don't use React Query** — 7 pages with manual useState/useEffect
@@ -181,7 +181,7 @@
 - Security tests are string-matching, not behavioral
 - Redis tests only cover null/disabled paths
 - Smoke test minimal (8 checks, status only)
-- db.js 0% real coverage despite 23.68% reported
+- apps/api/src/infra/db.ts 0% real coverage despite 23.68% reported
 - extended-schemas tests use readFileSync
 - SSE double-cleanup bug documented but not fixed
 - No frontend unit test framework installed

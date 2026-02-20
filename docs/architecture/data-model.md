@@ -1,6 +1,6 @@
 # Модель данных (PostgreSQL) — LightRAG-only
 
-Источник истины: миграции в `server/db/migrations/*.sql`.
+Источник истины: миграции в `apps/api/db/migrations/*.sql`.
 
 ## 1) Базовые принципы
 
@@ -101,6 +101,6 @@
 
 ## 5) Где смотреть детали
 
-- Миграции: `server/db/migrations/*.sql`
+- Миграции: `apps/api/db/migrations/*.sql`
 - Pipelines: [`docs/pipelines.md`](./pipelines.md)
 - API: [`docs/api.md`](./api.md)

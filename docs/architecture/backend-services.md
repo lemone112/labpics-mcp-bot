@@ -8,56 +8,62 @@
 ## 1) Архитектура бэкенда
 
 ```
-server/src/
-├── index.js                    # Fastify app, routes, middleware (main entry)
-├── worker.js                   # Single-run worker (one scheduler tick)
-├── worker-loop.js              # Continuous worker loop
-├── lib/
-│   ├── db.js                   # PostgreSQL pool + transactions
-│   ├── redis.js                # Redis client factory (ioredis)
-│   ├── redis-pubsub.js         # Redis Pub/Sub wrapper (publish + subscribe)
-│   ├── sse-broadcaster.js      # SSE client manager (per project_id)
-│   ├── http.js                 # fetchWithRetry
-│   ├── api-contract.js         # ApiError, sendOk, sendError
-│   ├── scope.js                # getRequestScope, requireProjectScope
-│   ├── chunking.js             # Text chunking for RAG
-│   └── utils.js                # toIsoTime, toPositiveInt, parseProjectIdsInput
-├── services/
-│   ├── chatwoot.js             # Chatwoot connector
-│   ├── linear.js               # Linear connector
-│   ├── attio.js                # Attio connector
-│   ├── connector-state.js      # Sync state & error tracking
-│   ├── connector-sync.js       # Orchestration layer
-│   ├── reconciliation.js       # Data consistency checks
-│   ├── sources.js              # Project source bindings
-│   ├── embeddings.js           # OpenAI embeddings
-│   ├── openai.js               # OpenAI API client
-│   ├── process-log.js           # Process run logging
-│   ├── event-log.js             # Event logging (connector_events)
-│   ├── forecasting.js          # Risk forecasting
-│   ├── recommendations-v2.js   # Enhanced recommendations
-│   ├── recommendation-actions.js # Action execution
-│   ├── similarity.js           # Case signature & search
-│   ├── snapshots.js            # Project snapshots
-│   ├── intelligence.js         # Risk, analytics, digests
-│   ├── signals.js              # Signal extraction
-│   ├── identity-graph.js       # Entity resolution
-│   ├── portfolio.js            # Portfolio overview
-│   ├── continuity.js           # Continuity actions
-│   ├── outbox.js               # Outbound messaging
-│   ├── upsell.js               # Upsell detection
-│   ├── loops.js                # Loops email sync
-│   ├── scheduler.js            # Job scheduling
-│   ├── jobs.js                 # Job status tracking
-│   ├── audit.js                # Audit trail
-│   └── ...
+apps/api/src/
+├── index.js                          # Fastify app, routes, middleware (main entry)
+├── worker.js                         # Single-run worker (one scheduler tick)
+├── worker-loop.js                    # Continuous worker loop
+├── infra/
+│   ├── db.ts                         # PostgreSQL pool + transactions
+│   ├── redis.ts                      # Redis client factory (ioredis)
+│   ├── redis-pubsub.ts              # Redis Pub/Sub wrapper (publish + subscribe)
+│   ├── sse-broadcaster.ts           # SSE client manager (per project_id)
+│   ├── http.ts                       # fetchWithRetry
+│   ├── api-contract.ts              # ApiError, sendOk, sendError
+│   ├── scope.ts                      # getRequestScope, requireProjectScope
+│   ├── chunking.ts                   # Text chunking for RAG
+│   ├── cache.ts                      # Caching layer
+│   └── utils.ts                      # toIsoTime, toPositiveInt, parseProjectIdsInput
+├── domains/
+│   ├── connectors/
+│   │   ├── chatwoot.js               # Chatwoot connector
+│   │   ├── linear.js                 # Linear connector
+│   │   ├── attio.js                  # Attio connector
+│   │   ├── connector-state.js        # Sync state & error tracking
+│   │   ├── connector-sync.js         # Orchestration layer
+│   │   ├── reconciliation.js         # Data consistency checks
+│   │   └── event-log.js              # Event logging (connector_events)
+│   ├── rag/
+│   │   ├── lightrag.js               # LightRAG intelligence
+│   │   ├── embeddings.js             # OpenAI embeddings
+│   │   └── openai.js                 # OpenAI API client
+│   ├── analytics/
+│   │   ├── intelligence.js           # Risk, analytics, digests
+│   │   ├── signals.js                # Signal extraction
+│   │   ├── portfolio.js              # Portfolio overview
+│   │   └── upsell.js                 # Upsell detection
+│   ├── identity/
+│   │   ├── identity-graph.js         # Entity resolution
+│   │   └── recommendation-actions.js # Action execution
+│   ├── outbound/
+│   │   ├── outbox.js                 # Outbound messaging
+│   │   ├── continuity.js             # Continuity actions
+│   │   └── loops.js                  # Loops email sync
+│   └── core/
+│       ├── scheduler.js              # Job scheduling
+│       ├── jobs.js                   # Job status tracking
+│       ├── audit.js                  # Audit trail
+│       ├── process-log.js            # Process run logging
+│       └── sources.js                # Project source bindings
+├── connectors/                       # External connector adapters
+├── routes/                           # HTTP route handlers
+└── types/                            # TypeScript type definitions
 ```
 
 ---
 
 ## 2) Main Entry Point
 
-**File:** `server/src/index.js`
+**File:** `apps/api/src/index.js`
 
 **Framework:** Fastify v5 (не Express)
 - Port: `PORT` (default 8080)
@@ -84,7 +90,7 @@ server/src/
 
 ### 3.1 Connectors
 
-#### chatwoot.js
+#### domains/connectors/chatwoot.js
 | | |
 |-|-|
 | **Назначение** | Синхронизация данных из Chatwoot |
@@ -93,7 +99,7 @@ server/src/
 | **External API** | Chatwoot REST API |
 | **Cadence** | ~15 min (connectors_sync_cycle) |
 
-#### linear.js
+#### domains/connectors/linear.js
 | | |
 |-|-|
 | **Назначение** | Синхронизация данных из Linear |
@@ -102,7 +108,7 @@ server/src/
 | **External API** | Linear GraphQL API |
 | **Cadence** | ~15 min (connectors_sync_cycle) |
 
-#### attio.js
+#### domains/connectors/attio.js
 | | |
 |-|-|
 | **Назначение** | Синхронизация данных из Attio + CRM mirror |
@@ -111,21 +117,21 @@ server/src/
 | **External API** | Attio REST API v2 |
 | **Cadence** | ~15 min (connectors_sync_cycle) |
 
-#### connector-state.js
+#### domains/connectors/connector-state.js
 | | |
 |-|-|
 | **Назначение** | Управление состоянием коннекторов и DLQ |
 | **Exported** | `getConnectorSyncState`, `markConnectorSyncRunning`, `markConnectorSyncSuccess`, `markConnectorSyncFailure`, `registerConnectorError`, `listDueConnectorErrors`, `resolveConnectorErrors`, `retryConnectorError` |
 | **Tables** | connector_sync_state, connector_errors |
 
-#### connector-sync.js
+#### domains/connectors/connector-sync.js
 | | |
 |-|-|
 | **Назначение** | Оркестрация всех коннекторов |
 | **Exported** | `runConnectorSync(pool, scope, connectorName)`, `runAllConnectorsSync(pool, scope)` |
-| **Зависимости** | chatwoot.js, linear.js, attio.js, connector-state.js, process-log.js |
+| **Зависимости** | domains/connectors/chatwoot.js, domains/connectors/linear.js, domains/connectors/attio.js, domains/connectors/connector-state.js, domains/core/process-log.js |
 
-#### sources.js
+#### domains/core/sources.js
 | | |
 |-|-|
 | **Назначение** | Привязка внешних источников к проектам |
@@ -144,7 +150,7 @@ server/src/
 
 Enhanced рекомендации с evidence gating. Файл удалён вместе с KAG pipeline.
 
-#### recommendation-actions.js (orphaned — не импортируется)
+#### domains/identity/recommendation-actions.js (orphaned — не импортируется)
 | | |
 |-|-|
 | **Назначение** | Исполнение действий по рекомендациям |
@@ -162,14 +168,14 @@ Case-based reasoning. Файл удалён вместе с KAG pipeline.
 
 ### 3.3 RAG & LightRAG
 
-#### lightrag.js
+#### domains/rag/lightrag.js
 | | |
 |-|-|
 | **Назначение** | Основной интеллект-контур продукта: запросы, evidence, observability |
 | **Exported** | `getLightRagStatus(pool, scope)`, `refreshLightRag(pool, scope, logger)`, `queryLightRag(pool, scope, options, logger)` |
 | **Tables read** | rag_chunks, cw_messages, linear_issues_raw, attio_opportunities_raw |
 | **Tables write** | lightrag_query_runs |
-| **Зависимости** | embeddings.js (runEmbeddings, searchChunks) |
+| **Зависимости** | domains/rag/embeddings.js (runEmbeddings, searchChunks) |
 
 **Внутренняя логика `queryLightRag`:**
 1. Токенизация: split по `[^a-zA-Zа-яА-Я0-9_]+`, фильтр длины ≥ 3, дедуп, max 6 токенов
@@ -178,7 +184,7 @@ Case-based reasoning. Файл удалён вместе с KAG pipeline.
 4. Persist: логирование запроса в `lightrag_query_runs`
 5. Limits: query max 4000 chars, answer max 10,000 chars, evidence max 50 items, topK 1-50, sourceLimit 1-25
 
-#### embeddings.js
+#### domains/rag/embeddings.js
 | | |
 |-|-|
 | **Назначение** | Генерация и управление embeddings |
@@ -187,7 +193,7 @@ Case-based reasoning. Файл удалён вместе с KAG pipeline.
 | **External API** | OpenAI Embeddings API |
 | **Cadence** | ~20 min (embeddings_run) |
 
-#### openai.js
+#### domains/rag/openai.js
 | | |
 |-|-|
 | **Назначение** | OpenAI API клиент |
@@ -196,14 +202,14 @@ Case-based reasoning. Файл удалён вместе с KAG pipeline.
 
 ### 3.4 Intelligence & Analytics
 
-#### intelligence.js
+#### domains/analytics/intelligence.js
 | | |
 |-|-|
 | **Назначение** | Risk, analytics, digests |
 | **Exported** | `refreshRiskAndHealth`, `refreshAnalytics`, `getRiskOverview`, `getAnalyticsOverview`, `getControlTower`, `generateDailyDigest`, `generateWeeklyDigest` |
 | **Tables** | analytics_revenue_snapshots, analytics_delivery_snapshots, analytics_comms_snapshots, daily_digests, weekly_digests, health_scores, risk_radar_items |
 
-#### signals.js
+#### domains/analytics/signals.js
 | | |
 |-|-|
 | **Назначение** | Детекция сигналов из переписок и CRM |
@@ -212,35 +218,35 @@ Case-based reasoning. Файл удалён вместе с KAG pipeline.
 
 ### 3.5 CRM & Operations
 
-#### identity-graph.js
+#### domains/identity/identity-graph.js
 | | |
 |-|-|
 | **Назначение** | Entity resolution между системами |
 | **Exported** | `previewIdentitySuggestions`, `listIdentitySuggestions`, `applyIdentitySuggestions`, `listIdentityLinks` |
 | **Tables** | identity_link_suggestions, identity_links |
 
-#### portfolio.js
+#### domains/analytics/portfolio.js
 | | |
 |-|-|
 | **Назначение** | Portfolio overview для менеджера |
 | **Exported** | `getPortfolioOverview(pool, scope)`, `getPortfolioMessages(pool, scope)` |
 | **Tables** | projects, cw_messages, cw_contacts, linear_issues_raw, crm_accounts, crm_opportunities, signals, health_scores |
 
-#### outbox.js
+#### domains/outbound/outbox.js
 | | |
 |-|-|
 | **Назначение** | Outbound messaging с compliance |
 | **Exported** | `createOutboundDraft`, `approveOutbound`, `sendOutbound`, `setOptOut`, `processDueOutbounds` |
 | **Tables** | outbound_messages, outbound_attempts, contact_channel_policies |
 
-#### upsell.js
+#### domains/analytics/upsell.js
 | | |
 |-|-|
 | **Назначение** | Детекция upsell возможностей |
 | **Exported** | `refreshUpsellRadar`, `listUpsellRadar`, `updateUpsellStatus` |
 | **Tables** | upsell_opportunities |
 
-#### continuity.js
+#### domains/outbound/continuity.js
 | | |
 |-|-|
 | **Назначение** | Continuity actions (Attio/Chatwoot) |
@@ -249,7 +255,7 @@ Case-based reasoning. Файл удалён вместе с KAG pipeline.
 
 ### 3.6 Infrastructure
 
-#### scheduler.js
+#### domains/core/scheduler.js
 | | |
 |-|-|
 | **Назначение** | Job scheduling engine |
@@ -257,28 +263,28 @@ Case-based reasoning. Файл удалён вместе с KAG pipeline.
 | **Tables** | scheduled_jobs, worker_runs |
 | **Default jobs** | 18 job types с cadences от 5 мин до 1 недели |
 
-#### jobs.js
+#### domains/core/jobs.js
 | | |
 |-|-|
 | **Назначение** | Job status tracking |
 | **Exported** | `startJob`, `finishJob`, `getJobsStatus` |
 | **Tables** | job_runs |
 
-#### audit.js
+#### domains/core/audit.js
 | | |
 |-|-|
 | **Назначение** | Audit trail |
 | **Exported** | `writeAuditEvent`, `listAuditEvents`, `indexEvidenceRefs`, `normalizeEvidenceRefs` |
 | **Tables** | audit_events, evidence_items |
 
-#### process-log.js
+#### domains/core/process-log.js
 | | |
 |-|-|
 | **Назначение** | Логирование pipeline процессов |
 | **Exported** | `startProcessRun`, `finishProcessRun`, `failProcessRun`, `warnProcess` |
 | **Tables** | connector_events |
 
-#### loops.js
+#### domains/outbound/loops.js
 | | |
 |-|-|
 | **Назначение** | Email marketing sync |
@@ -469,7 +475,7 @@ Case-based reasoning. Файл удалён вместе с KAG pipeline.
 
 ## 6) Shared Libraries
 
-### lib/http.js — fetchWithRetry
+### infra/http.ts — fetchWithRetry
 ```
 fetchWithRetry(url, { retries: 2, timeoutMs: 15000, backoffMs: 500 })
   → Retry on: 408, 425, 429, 5xx
@@ -477,13 +483,13 @@ fetchWithRetry(url, { retries: 2, timeoutMs: 15000, backoffMs: 500 })
   → AbortController timeout per request
 ```
 
-### lib/api-contract.js — API response format
+### infra/api-contract.ts — API response format
 ```json
 { "ok": true, "request_id": "...", "data": {...} }
 { "ok": false, "error": "code", "message": "...", "details": {...} }
 ```
 
-### lib/scope.js — Scope enforcement
+### infra/scope.ts — Scope enforcement
 ```
 getRequestScope(request)     → { projectId, accountScopeId }
 requireProjectScope(request) → throws 409 if missing
@@ -495,20 +501,20 @@ requireProjectScope(request) → throws 409 if missing
 
 ```
 index.js (routes)
-  └── services/*
-       ├── connector-sync.js
-       │    ├── chatwoot.js → Chatwoot API
-       │    ├── linear.js → Linear API
-       │    ├── attio.js → Attio API
-       │    └── connector-state.js → connector_sync_state, connector_errors
+  └── domains/*
+       ├── connectors/connector-sync.js
+       │    ├── connectors/chatwoot.js → Chatwoot API
+       │    ├── connectors/linear.js → Linear API
+       │    ├── connectors/attio.js → Attio API
+       │    └── connectors/connector-state.js → connector_sync_state, connector_errors
        │
-       ├── lightrag.js → embeddings.js → rag_chunks → openai.js → OpenAI API
+       ├── rag/lightrag.js → rag/embeddings.js → rag_chunks → rag/openai.js → OpenAI API
        │
-       ├── intelligence.js → analytics_*, health_scores, risk_radar_items
+       ├── analytics/intelligence.js → analytics_*, health_scores, risk_radar_items
        │
-       ├── outbox.js → outbound_messages, contact_channel_policies
+       ├── outbound/outbox.js → outbound_messages, contact_channel_policies
        │
-       └── scheduler.js → scheduled_jobs, worker_runs
+       └── core/scheduler.js → scheduled_jobs, worker_runs
             └── triggers all jobs above on cadence
 
        (удалены: forecasting.js, recommendations-v2.js, similarity.js, snapshots.js — #117)

@@ -12,14 +12,14 @@
 
 ## 2) Технологический стек
 
-- Backend: `Node.js + Fastify` (`server/`)
-- Frontend: `Next.js 16 + React 19` (`web/`)
+- Backend: `Node.js + Fastify` (`apps/api/`)
+- Frontend: `Next.js 16 + React 19` (`apps/web/`)
 - Хранилище: `PostgreSQL + pgvector`
 - Интеграции: `Chatwoot`, `Linear`, `Attio`
 - UI-система: `shadcn/ui + Radix + Tailwind tokens + anime.js`
 - Cache / Pub-Sub: `Redis 7` — Pub/Sub для real-time SSE, cascade events
 - Real-time: SSE (Server-Sent Events) — `GET /events/stream` — push обновлений в браузер
-- Telegram Bot: `TypeScript + Supabase + Composio MCP + Docker` (`telegram-bot/`)
+- Telegram Bot: `TypeScript + Supabase + Composio MCP + Docker` (`apps/telegram-bot/`)
 - LightRAG Server (planned): `Python, HKUDS LightRAG, PostgreSQL backend` (Iter 11)
 - MCP: `daniel-lightrag-mcp` (22 tools) + Composio MCP (Linear + Attio)
 
@@ -159,4 +159,4 @@
 - Pipelines: [`docs/pipelines.md`](./pipelines.md)
 - API: [`docs/api.md`](./api.md)
 - Единый план: [`docs/iteration-plan-wave3.md`](./iteration-plan-wave3.md)
-- Telegram Bot: [`telegram-bot/docs/`](../telegram-bot/docs/)
+- Telegram Bot: [`apps/telegram-bot/docs/`](../../apps/telegram-bot/docs/)

@@ -49,7 +49,7 @@
 
 ## 2) Общий HTTP-клиент — fetchWithRetry
 
-**Файл:** `server/src/lib/http.js`
+**Файл:** `apps/api/src/infra/http.ts`
 
 ```
 fetchWithRetry(url, {
@@ -84,7 +84,7 @@ fetchWithRetry(url, {
 
 ### 3.1 Connector Sync State
 
-**Файл:** `server/src/services/connector-state.js`
+**Файл:** `apps/api/src/domains/connectors/connector-state.js`
 **Таблица:** `connector_sync_state`
 
 ```
@@ -152,7 +152,7 @@ fetchWithRetry(url, {
 
 ## 4) Chatwoot — коммуникации
 
-**Файл:** `server/src/services/chatwoot.js`
+**Файл:** `apps/api/src/domains/connectors/chatwoot.js`
 **Протокол:** REST API
 **Auth:** Header `api_access_token: {token}`
 
@@ -323,7 +323,7 @@ WHERE old.data IS DISTINCT FROM EXCLUDED.data
 
 ## 5) Linear — управление задачами
 
-**Файл:** `server/src/services/linear.js`
+**Файл:** `apps/api/src/domains/connectors/linear.js`
 **Протокол:** GraphQL API
 **Auth:** Header `authorization: {token}`
 
@@ -456,7 +456,7 @@ query PullLinearIssues($limit: Int!, $after: String) {
 
 ## 6) Attio — CRM
 
-**Файл:** `server/src/services/attio.js`
+**Файл:** `apps/api/src/domains/connectors/attio.js`
 **Протокол:** REST API v2
 **Auth:** Header `authorization: Bearer {token}`
 
@@ -627,7 +627,7 @@ external_id, target_record_id
 
 ## 7) OpenAI — Embeddings
 
-**Файл:** `server/src/services/openai.js` (клиент), `server/src/services/embeddings.js` (pipeline)
+**Файл:** `apps/api/src/domains/rag/openai.js` (клиент), `apps/api/src/domains/rag/embeddings.js` (pipeline)
 **Протокол:** REST API
 **Auth:** Header `authorization: Bearer {api_key}`
 
@@ -713,7 +713,7 @@ COMMIT;
 
 ## 8) Loops — Email Marketing
 
-**Файл:** `server/src/services/loops.js`
+**Файл:** `apps/api/src/domains/outbound/loops.js`
 **Протокол:** REST API v1
 **Auth:** Header `authorization: Bearer {api_key}`
 **Base URL:** `https://app.loops.so/api/v1`
@@ -761,7 +761,7 @@ COMMIT;
 
 ## 9) Outbox — исходящие сообщения
 
-**Файл:** `server/src/services/outbox.js`
+**Файл:** `apps/api/src/domains/outbound/outbox.js`
 **Каналы:** `email`, `chatwoot`, `telegram`
 
 ### 9.1 Lifecycle
@@ -811,7 +811,7 @@ COMMIT;
 
 ## 10) Composio / MCP — AI Tool Bridge
 
-**Файл:** `server/src/connectors/index.js`
+**Файл:** `apps/api/src/connectors/index.ts`
 
 ### 10.1 Архитектура
 
@@ -870,7 +870,7 @@ createConnector({
 
 ## 11) Recommendation Actions — автоматизация
 
-**Файл:** `server/src/services/recommendation-actions.js`
+**Файл:** `apps/api/src/domains/identity/recommendation-actions.js`
 
 ### 11.1 Action Types
 
@@ -922,7 +922,7 @@ upsert ActionRun (dedupe)
 
 ## 12) Connector Orchestration
 
-**Файл:** `server/src/services/connector-sync.js`
+**Файл:** `apps/api/src/domains/connectors/connector-sync.js`
 
 ### 12.1 Полный цикл sync
 
@@ -985,7 +985,7 @@ retryConnectorErrors()
 
 ## 13) Reconciliation — сверка данных
 
-**Файл:** `server/src/services/reconciliation.js`
+**Файл:** `apps/api/src/domains/connectors/reconciliation.js`
 
 ### Что проверяется
 

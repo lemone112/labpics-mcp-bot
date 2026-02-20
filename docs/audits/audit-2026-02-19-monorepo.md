@@ -3,7 +3,7 @@
 ## Summary
 
 Full-stack audit after migrating `telegram-assistant-bot` into `labpics-dashboard` monorepo.
-280+ open issues across 30 milestones reviewed. 4 codebases audited: server, web, telegram-bot, docs.
+280+ open issues across 30 milestones reviewed. 4 codebases audited: apps/api, apps/web, apps/telegram-bot, docs.
 
 ---
 
@@ -11,27 +11,27 @@ Full-stack audit after migrating `telegram-assistant-bot` into `labpics-dashboar
 
 | Area | Language | Files | LoC | TypeScript | Tests |
 |------|----------|-------|-----|------------|-------|
-| server/ | JavaScript | 46 | ~17K | None (pure JS) | node:test |
-| web/ | JSX | ~99 | ~12K | None (pure JSX) | Playwright e2e |
-| telegram-bot/ | TypeScript | 18 | ~1.2K | strict mode | typecheck only |
+| apps/api/ | JavaScript | 46 | ~17K | None (pure JS) | node:test |
+| apps/web/ | JSX | ~99 | ~12K | None (pure JSX) | Playwright e2e |
+| apps/telegram-bot/ | TypeScript | 18 | ~1.2K | strict mode | typecheck only |
 
 ### Key findings
 
-**server/** — solid architecture, significant code duplication:
+**apps/api/** — solid architecture, significant code duplication:
 - 11 utility functions duplicated 2–11 times across files (asText, clampInt, clamp, toIso, toDate, requiredEnv, toBoolean)
 - 2,656-line monolithic `index.js` with 60+ routes
 - Zero static typing (no tsconfig.json)
-- SQL injection risk in `lib/idempotency.js:34` (string-interpolated interval)
+- SQL injection risk in `infra/idempotency.ts:34` (string-interpolated interval)
 - 245 parameterized SQL queries (good)
 
-**web/** — strong design system discipline, needs TypeScript:
+**apps/web/** — strong design system discipline, needs TypeScript:
 - 33 shadcn/ui components + 8 custom
 - 5 normative design docs + 2 automated linters
 - `section-page.jsx` monolith: ~2000 lines (needs splitting — Issue #103)
 - SSE + React Query + offline detection implemented
 - Zero TypeScript files
 
-**telegram-bot/** (post-refactor) — clean modular structure:
+**apps/telegram-bot/** (post-refactor) — clean modular structure:
 - Monolithic `index.ts` (757 → 63 lines) broken into 18 modules
 - Types extracted to `types.ts` with callback enum validation
 - Handlers, services, UI, DB layers separated
@@ -86,7 +86,7 @@ No code exists for most of them.
 Action: close milestones 27–43, move valid ideas to a `backlog` label.
 
 **4. Missing issues for discovered bugs:**
-- SQL injection in `server/lib/idempotency.js:34` — no issue
+- SQL injection in `apps/api/src/infra/idempotency.ts:34` — no issue
 - Duplicate utilities (11 categories) — no issue
 - `section-page.jsx` split — exists (#103, #158) but blocked
 
@@ -121,13 +121,13 @@ Action: close milestones 27–43, move valid ideas to a `backlog` label.
 
 ## 4) Refactoring Done in This PR
 
-### telegram-bot/ modular refactoring
+### apps/telegram-bot/ modular refactoring
 
 **Before:** 1 file (index.ts, 757 lines) + 4 small support files = 5 files
 **After:** 18 files, clean separation:
 
 ```
-telegram-bot/src/
+apps/telegram-bot/src/
 ├── index.ts              # Entry point (63 lines)
 ├── types.ts              # All types + callback enum
 ├── telegram.ts           # Telegram API client
@@ -169,9 +169,9 @@ telegram-bot/src/
 
 ## 5) Recommended Next Steps (priority order)
 
-1. **Fix SQL injection** in `server/lib/idempotency.js:34` (30 min, critical)
+1. **Fix SQL injection** in `apps/api/src/infra/idempotency.ts:34` (30 min, critical)
 2. **Extract server utilities** — deduplicate 11 function categories (2–3 hours)
-3. **TypeScript foundation** — Issue #86, start with server/ tsconfig.json (depends on Iter 15)
+3. **TypeScript foundation** — Issue #86, start with apps/api/ tsconfig.json (depends on Iter 15)
 4. **Create bot milestone + issues** in GitHub
 5. **Close duplicate Iter 37 issues** (#293–#297)
 6. **Close/archive premature milestones** (Iter 27–43)

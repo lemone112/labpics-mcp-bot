@@ -1,6 +1,6 @@
 # Motion Guidelines
 
-Use Anime.js with tokenized durations/easing from `web/lib/motion.js`.
+Use Anime.js with tokenized durations/easing from `apps/web/lib/motion.js`.
 
 ## Principles
 
@@ -9,7 +9,7 @@ Use Anime.js with tokenized durations/easing from `web/lib/motion.js`.
 3. Reduced-motion users must get non-animated equivalents.
 4. Every animation must have a clear purpose (entrance, feedback, state change).
 
-## Token reference (`lib/motion.js`)
+## Token reference (`apps/web/lib/motion.js`)
 
 | Token                  | Value  | Usage                              |
 | ---------------------- | ------ | ---------------------------------- |
@@ -100,7 +100,7 @@ Radix primitives (Sheet, Dialog) use Tailwind's `animate-in`/`animate-out` with 
 
 | Layer          | File                              | Role                              |
 | -------------- | --------------------------------- | --------------------------------- |
-| Tokens         | `lib/motion.js`                   | Duration/easing/stagger constants |
+| Tokens         | `apps/web/lib/motion.js`          | Duration/easing/stagger constants |
 | Utility        | `motionEnabled()`                 | Runtime prefers-reduced-motion check |
 | React hook     | `useReducedMotion()`              | Reactive reduced-motion tracking  |
 | Wrapper        | `components/ui/motion-group.jsx`  | Staggered card/list reveal        |
