@@ -1,5 +1,6 @@
 import { sendOk } from "../infra/api-contract.js";
 import { getCircuitBreakerStates } from "../infra/http.js";
+import { getSchedulerMetrics, getSchedulerState } from "../domains/core/scheduler.js";
 
 /**
  * @param {object} ctx
@@ -71,6 +72,16 @@ export function registerHealthRoutes(ctx) {
       lines.push(`app_route_response_max_ms{route="${route}"} ${t.max_ms.toFixed(1)}`);
       lines.push(`app_route_requests_total{route="${route}"} ${t.count}`);
     }
+    // --- Scheduler job duration metrics (44.2) ---
+    const jobMetrics = getSchedulerMetrics();
+    for (const [jobType, m] of Object.entries(jobMetrics)) {
+      lines.push(`app_job_duration_avg_ms{job_type="${jobType}"} ${m.avg_ms}`);
+      lines.push(`app_job_duration_max_ms{job_type="${jobType}"} ${m.max_ms}`);
+      lines.push(`app_job_duration_min_ms{job_type="${jobType}"} ${m.min_ms}`);
+      lines.push(`app_job_runs_total{job_type="${jobType}"} ${m.count}`);
+      lines.push(`app_job_runs_ok{job_type="${jobType}"} ${m.ok}`);
+      lines.push(`app_job_runs_failed{job_type="${jobType}"} ${m.failed}`);
+    }
     // --- Circuit breakers ---
     for (const cb of cbStates) {
       lines.push(`app_circuit_breaker_state{host="${cb.name}",state="${cb.state}"} ${cb.state === "open" ? 1 : 0}`);
@@ -78,6 +89,36 @@ export function registerHealthRoutes(ctx) {
     }
     reply.type("text/plain; version=0.0.4");
     return lines.join("\n");
+  });
+
+  // 44.7: Scheduler health endpoint
+  registerGet("/health/scheduler", async (request, reply) => {
+    const schedulerState = getSchedulerState();
+    const jobMetrics = getSchedulerMetrics();
+
+    // Determine overall scheduler health status
+    let status = "healthy";
+    if (!schedulerState.lastTickAt) {
+      status = "not_started";
+    } else {
+      const lastTickAge = Date.now() - new Date(schedulerState.lastTickAt).getTime();
+      // If no tick in the last 5 minutes, consider it degraded
+      if (lastTickAge > 5 * 60 * 1000) {
+        status = "degraded";
+      }
+    }
+
+    return sendOk(reply, request.requestId, {
+      scheduler: {
+        status,
+        last_tick_at: schedulerState.lastTickAt,
+        total_ticks: schedulerState.totalTicks,
+        active_jobs: schedulerState.activeJobs,
+        total_errors: schedulerState.totalErrors,
+        uptime_seconds: Math.floor(process.uptime()),
+      },
+      jobs: jobMetrics,
+    });
   });
 
   // SSE endpoint for real-time job completion events

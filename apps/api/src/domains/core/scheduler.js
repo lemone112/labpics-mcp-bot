@@ -8,6 +8,69 @@ import { retryConnectorErrors, runAllConnectorsSync, runConnectorSync } from "..
 import { runSyncReconciliation } from "../connectors/reconciliation.js";
 import { toPositiveInt } from '../../infra/utils.js';
 
+// ── Job duration metrics (44.2) ─────────────────────────────────
+// Lightweight in-memory histograms per job type. No external dependency needed.
+// Exposed via getSchedulerMetrics() for the /metrics and /health/scheduler endpoints.
+
+const _jobMetrics = new Map();
+
+function recordJobDuration(jobType, durationMs, status) {
+  if (!_jobMetrics.has(jobType)) {
+    _jobMetrics.set(jobType, {
+      count: 0,
+      ok: 0,
+      failed: 0,
+      total_ms: 0,
+      max_ms: 0,
+      min_ms: Infinity,
+      last_duration_ms: 0,
+      last_status: null,
+      last_at: null,
+    });
+  }
+  const m = _jobMetrics.get(jobType);
+  m.count += 1;
+  if (status === "ok") m.ok += 1;
+  else m.failed += 1;
+  m.total_ms += durationMs;
+  if (durationMs > m.max_ms) m.max_ms = durationMs;
+  if (durationMs < m.min_ms) m.min_ms = durationMs;
+  m.last_duration_ms = durationMs;
+  m.last_status = status;
+  m.last_at = new Date().toISOString();
+}
+
+/** Returns a snapshot of all job duration metrics (read-only copy). */
+export function getSchedulerMetrics() {
+  const snapshot = {};
+  for (const [jobType, m] of _jobMetrics) {
+    snapshot[jobType] = {
+      count: m.count,
+      ok: m.ok,
+      failed: m.failed,
+      avg_ms: m.count > 0 ? Math.round(m.total_ms / m.count) : 0,
+      max_ms: m.max_ms,
+      min_ms: m.min_ms === Infinity ? 0 : m.min_ms,
+      last_duration_ms: m.last_duration_ms,
+      last_status: m.last_status,
+      last_at: m.last_at,
+    };
+  }
+  return snapshot;
+}
+
+// ── Dead job / concurrency state (44.3, 44.6) ──────────────────
+const _schedulerState = {
+  activeJobs: 0,
+  lastTickAt: null,
+  totalTicks: 0,
+  totalErrors: 0,
+};
+
+export function getSchedulerState() {
+  return { ..._schedulerState };
+}
+
 /**
  * After a job completes successfully, downstream jobs are triggered immediately
  * by setting their next_run_at to now(). This eliminates the 15-30 min delay
@@ -111,10 +174,83 @@ function withTimeout(promise, ms) {
   return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
 }
 
+// ── Dead job detection & cleanup (44.3) ─────────────────────────
+// Jobs stuck in "running" status longer than DEAD_JOB_THRESHOLD_MINUTES are
+// presumed dead (process crash, OOM, etc.) and auto-marked as failed.
+
+const DEFAULT_DEAD_JOB_THRESHOLD_MINUTES = 30;
+
+/**
+ * Detect and clean up jobs stuck in "running" state beyond the threshold.
+ * Returns the number of dead jobs cleaned up.
+ */
+export async function cleanupDeadJobs(pool, scope, logger = console) {
+  const thresholdMinutes = toPositiveInt(
+    process.env.DEAD_JOB_THRESHOLD_MINUTES,
+    DEFAULT_DEAD_JOB_THRESHOLD_MINUTES,
+    5,
+    1440
+  );
+
+  const { rows, rowCount } = await pool.query(
+    `
+      UPDATE scheduled_jobs
+      SET
+        status = 'active',
+        last_run_at = started_at,
+        last_status = 'failed',
+        last_error = 'dead_job_auto_cleanup: stuck in running state for over ' || $3 || ' minutes',
+        next_run_at = now() + interval '30 seconds',
+        payload = jsonb_set(
+          COALESCE(payload, '{}'::jsonb),
+          '{dead_job_cleaned_at}',
+          to_jsonb(now()::text)
+        ),
+        updated_at = now()
+      WHERE project_id = $1
+        AND account_scope_id = $2
+        AND status = 'running'
+        AND started_at < now() - (($3::int)::text || ' minutes')::interval
+      RETURNING id, job_type, started_at
+    `,
+    [scope.projectId, scope.accountScopeId, thresholdMinutes]
+  );
+
+  if (rowCount > 0) {
+    for (const row of rows) {
+      logger.warn(
+        { job_id: row.id, job_type: row.job_type, started_at: row.started_at, threshold_minutes: thresholdMinutes },
+        "dead job detected and auto-cleaned"
+      );
+    }
+    // Also mark corresponding worker_runs as failed
+    await pool.query(
+      `
+        UPDATE worker_runs
+        SET status = 'failed',
+            finished_at = now(),
+            error = 'dead_job_auto_cleanup'
+        WHERE scheduled_job_id = ANY($1::int[])
+          AND status = 'running'
+      `,
+      [rows.map((r) => r.id)]
+    );
+  }
+
+  return rowCount;
+}
+
+// ── Job retry with configurable backoff (44.4) ─────────────────
+// The existing schedulerBackoffSeconds already provides exponential backoff.
+// Here we add env-configurable base and cap values.
+
 /** Base delay for exponential backoff (seconds). */
-const BACKOFF_BASE_SECONDS = 30;
-/** Maximum backoff cap (seconds). */
-const BACKOFF_CAP_SECONDS = 60 * 60; // 1 hour
+const BACKOFF_BASE_SECONDS = toPositiveInt(process.env.JOB_RETRY_BACKOFF_BASE_SECONDS, 30, 5, 600);
+/** Maximum backoff cap (seconds). Override via JOB_RETRY_BACKOFF_CAP_SECONDS. */
+const BACKOFF_CAP_SECONDS = toPositiveInt(process.env.JOB_RETRY_BACKOFF_CAP_SECONDS, 3600, 60, 86400);
+
+/** Maximum consecutive failures before a job is marked as dead-lettered. Override via JOB_MAX_RETRIES. */
+const JOB_MAX_RETRIES = toPositiveInt(process.env.JOB_MAX_RETRIES, 10, 1, 100);
 
 /** Exponential backoff for failed scheduler jobs (capped at 1 hour). */
 function schedulerBackoffSeconds(consecutiveFailures, retryAfterMs) {
@@ -129,12 +265,13 @@ function schedulerBackoffSeconds(consecutiveFailures, retryAfterMs) {
   return Math.min(BACKOFF_CAP_SECONDS, Math.round(seconds * jitter));
 }
 
-function createHandlers(customHandlers = {}) {
+function createHandlers(customHandlers = {}, options = {}) {
   const handlers = {
     chatwoot_sync: async ({ pool, scope, logger }) => runConnectorSync(pool, scope, "chatwoot", logger),
     attio_sync: async ({ pool, scope, logger }) => runConnectorSync(pool, scope, "attio", logger),
     linear_sync: async ({ pool, scope, logger }) => runConnectorSync(pool, scope, "linear", logger),
-    connectors_sync_cycle: async ({ pool, scope, logger }) => runAllConnectorsSync(pool, scope, logger),
+    connectors_sync_cycle: async ({ pool, scope, logger }) =>
+      runAllConnectorsSync(pool, scope, logger, { publishFn: options.publishFn }),
     connectors_reconciliation_daily: async ({ pool, scope }) =>
       runSyncReconciliation(pool, scope, { source: "daily_job" }),
     connector_errors_retry: async ({ pool, scope, logger }) => retryConnectorErrors(pool, scope, { logger }),
@@ -243,12 +380,41 @@ export async function listScheduledJobs(pool, scope) {
   return rows;
 }
 
+/** Max concurrent jobs across all scheduler ticks. Override via SCHEDULER_MAX_CONCURRENT_JOBS. */
+const DEFAULT_MAX_CONCURRENT_JOBS = 10;
+
+function maxConcurrentJobs() {
+  return toPositiveInt(process.env.SCHEDULER_MAX_CONCURRENT_JOBS, DEFAULT_MAX_CONCURRENT_JOBS, 1, 100);
+}
+
 export async function runSchedulerTick(pool, scope, options = {}) {
   const limit = toPositiveInt(options.limit, 10, 1, 100);
-  const handlers = createHandlers(options.handlers || {});
+  const handlers = createHandlers(options.handlers || {}, { publishFn: options.publishFn });
   const logger = options.logger || console;
 
+  _schedulerState.lastTickAt = new Date().toISOString();
+  _schedulerState.totalTicks += 1;
+
   await ensureDefaultScheduledJobs(pool, scope);
+
+  // 44.3: Clean up dead jobs (stuck in "running" state) before picking new ones
+  const deadJobsCleaned = await cleanupDeadJobs(pool, scope, logger);
+  if (deadJobsCleaned > 0) {
+    logger.warn({ dead_jobs_cleaned: deadJobsCleaned }, "scheduler: dead jobs auto-cleaned before tick");
+  }
+
+  // 44.6: Enforce concurrency limit — reduce pick-up limit if already near cap
+  const concurrencyLimit = maxConcurrentJobs();
+  const availableSlots = Math.max(0, concurrencyLimit - _schedulerState.activeJobs);
+  const effectiveLimit = Math.min(limit, availableSlots);
+
+  if (effectiveLimit <= 0) {
+    logger.info(
+      { active: _schedulerState.activeJobs, limit: concurrencyLimit },
+      "scheduler: concurrency limit reached, skipping tick"
+    );
+    return { processed: 0, ok: 0, failed: 0, details: [], skipped_reason: "concurrency_limit" };
+  }
 
   const dueRows = await pool.query(
     `
@@ -269,7 +435,7 @@ export async function runSchedulerTick(pool, scope, options = {}) {
       )
       RETURNING id, job_type, cadence_seconds, payload
     `,
-    [scope.projectId, scope.accountScopeId, limit]
+    [scope.projectId, scope.accountScopeId, effectiveLimit]
   );
 
   const stats = {
@@ -281,6 +447,8 @@ export async function runSchedulerTick(pool, scope, options = {}) {
 
   for (const job of dueRows.rows) {
     stats.processed++;
+    _schedulerState.activeJobs += 1;
+    const jobStartMs = Date.now();
     const handler = handlers[job.job_type];
     const { rows: runRows } = await pool.query(
       `
@@ -304,6 +472,13 @@ export async function runSchedulerTick(pool, scope, options = {}) {
       const details = handler
         ? await withTimeout(handler({ pool, scope, payload: job.payload || {}, logger }), timeoutMs)
         : { status: "ok", skipped: true, reason: "no_handler" };
+
+      const durationMs = Date.now() - jobStartMs;
+      recordJobDuration(job.job_type, durationMs, "ok");
+      logger.info(
+        { job_type: job.job_type, duration_ms: durationMs, run_id: runId },
+        "job completed"
+      );
 
       await pool.query(
         `
@@ -331,11 +506,19 @@ export async function runSchedulerTick(pool, scope, options = {}) {
         [job.id, toPositiveInt(job.cadence_seconds, 900, 1, 2_592_000)]
       );
       stats.ok++;
-      stats.details.push({ job_type: job.job_type, status: "ok", details: details || {} });
+      stats.details.push({ job_type: job.job_type, status: "ok", duration_ms: durationMs, details: details || {} });
       await triggerCascade(pool, scope, job.job_type, logger);
       await notifyJobCompleted(pool, scope, job.job_type, "ok", logger, options.publishFn);
     } catch (error) {
+      const durationMs = Date.now() - jobStartMs;
       const err = truncateError(error);
+      recordJobDuration(job.job_type, durationMs, "failed");
+      _schedulerState.totalErrors += 1;
+      logger.error(
+        { job_type: job.job_type, duration_ms: durationMs, run_id: runId, error: err },
+        "job failed"
+      );
+
       await pool.query(
         `
           UPDATE worker_runs
@@ -348,14 +531,25 @@ export async function runSchedulerTick(pool, scope, options = {}) {
       );
       const prevFailures = parseInt(job.payload?.consecutive_failures || 0, 10) || 0;
       const failures = prevFailures + 1;
+
+      // 44.4: If max retries exceeded, mark job as suspended (dead-lettered)
+      const isDeadLettered = failures >= JOB_MAX_RETRIES;
+      if (isDeadLettered) {
+        logger.error(
+          { job_type: job.job_type, failures, max: JOB_MAX_RETRIES },
+          "job exceeded max retries, suspending (dead-lettered)"
+        );
+      }
+
       // Use Retry-After from the error if available (e.g. 429 responses)
       const retryAfterMs = typeof error?.retryAfterMs === 'number' ? error.retryAfterMs : undefined;
       const backoffSec = schedulerBackoffSeconds(failures, retryAfterMs);
+      const nextStatus = isDeadLettered ? "suspended" : "active";
       await pool.query(
         `
           UPDATE scheduled_jobs
           SET
-            status = 'active',
+            status = $5,
             last_run_at = now(),
             last_status = 'failed',
             last_error = $2,
@@ -364,11 +558,16 @@ export async function runSchedulerTick(pool, scope, options = {}) {
             updated_at = now()
           WHERE id = $1
         `,
-        [job.id, err, backoffSec, JSON.stringify(failures)]
+        [job.id, err, backoffSec, JSON.stringify(failures), nextStatus]
       );
       stats.failed++;
-      stats.details.push({ job_type: job.job_type, status: "failed", error: err });
+      stats.details.push({
+        job_type: job.job_type, status: "failed", duration_ms: durationMs,
+        error: err, dead_lettered: isDeadLettered,
+      });
       await notifyJobCompleted(pool, scope, job.job_type, "failed", logger, options.publishFn);
+    } finally {
+      _schedulerState.activeJobs = Math.max(0, _schedulerState.activeJobs - 1);
     }
   }
 

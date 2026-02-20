@@ -180,7 +180,7 @@ export async function runAllConnectorsSync(pool, scope, logger = console, option
     payload: { connectors: CONNECTORS },
   });
 
-  // Emit SSE progress event if publishFn is provided
+  // Emit SSE progress event if publishFn is provided (44.5)
   const publishFn = options.publishFn || null;
   async function emitProgress(phase, detail = {}) {
     if (typeof publishFn !== "function") return;
@@ -192,7 +192,9 @@ export async function runAllConnectorsSync(pool, scope, logger = console, option
         ...detail,
         at: new Date().toISOString(),
       }));
-    } catch { /* non-critical */ }
+    } catch {
+      // non-critical
+    }
   }
 
   await emitProgress("started", { connectors: CONNECTORS });
@@ -218,6 +220,10 @@ export async function runAllConnectorsSync(pool, scope, logger = console, option
     ok: results.filter((r) => r.status === "ok").length,
     failed: results.filter((r) => r.status === "failed").length,
   });
+<<<<<<< Updated upstream
+=======
+
+>>>>>>> Stashed changes
   const summary = {
     total: CONNECTORS.length,
     ok: results.filter((row) => row.status === "ok").length,
@@ -229,6 +235,10 @@ export async function runAllConnectorsSync(pool, scope, logger = console, option
       payload: summary,
     });
   }
+<<<<<<< Updated upstream
+=======
+
+>>>>>>> Stashed changes
   await emitProgress("matview_refresh");
   try {
     await pool.query('REFRESH MATERIALIZED VIEW CONCURRENTLY mv_portfolio_dashboard');
