@@ -65,6 +65,23 @@ const TONE = {
   info: "border-border bg-card text-foreground",
 };
 
+/** Inline toast banner (non-stacked). Used by feature pages for local feedback. */
+export function Toast({ type = "info", message, className }) {
+  if (!message) return null;
+  return (
+    <div
+      role="status"
+      className={cn(
+        "flex w-full items-center gap-3 rounded-lg border px-4 py-3 text-sm",
+        TONE[type] || TONE.info,
+        className,
+      )}
+    >
+      <span className="flex-1">{message}</span>
+    </div>
+  );
+}
+
 function ToastItem({ toast, onDismiss }) {
   const timerRef = useRef(null);
 
