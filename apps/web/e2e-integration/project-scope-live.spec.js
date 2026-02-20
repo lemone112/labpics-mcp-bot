@@ -10,7 +10,7 @@ async function signIn(page, username = "admin", password = "admin") {
   await page.getByTestId("login-username").fill(username);
   await page.getByTestId("login-password").fill(password);
   await page.getByTestId("login-submit").click();
-  await expect(page).toHaveURL(/\/projects$/);
+  await expect(page).toHaveURL(/\/control-tower\/dashboard$/);
 }
 
 async function createProject(page, name) {
