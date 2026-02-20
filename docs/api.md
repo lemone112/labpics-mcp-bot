@@ -1,6 +1,6 @@
-# API reference (LightRAG-only)
+# API reference
 
-Базовый backend URL: `http://localhost:8080`  
+Базовый backend URL: `http://localhost:8080`
 UI обычно ходит через `NEXT_PUBLIC_API_BASE_URL` (например `/api`).
 
 Каждый ответ содержит:
@@ -8,7 +8,7 @@ UI обычно ходит через `NEXT_PUBLIC_API_BASE_URL` (наприме
 - `request_id` в теле
 - `x-request-id` в заголовке
 
-## 1) Auth/session
+## 1) Auth / session
 
 Public:
 
@@ -18,8 +18,12 @@ Public:
   - `app_status_2xx`, `app_status_4xx`, `app_status_5xx`
   - `app_sse_connections_total`, `app_sse_projects_subscribed`
 - `POST /auth/login` — вход (rate-limited: макс. попытки по IP + username с окном сброса)
-- `POST /auth/logout`
-- `GET /auth/me`
+- `POST /auth/logout` — очистка сессии и cookies
+- `GET /auth/me` — текущий пользователь + CSRF токен
+- `GET /auth/signup/status` — статус регистрации (disabled, возвращает 410)
+- `POST /auth/signup/start` — начало регистрации (disabled, возвращает 410)
+- `POST /auth/signup/confirm` — подтверждение регистрации (disabled, возвращает 410)
+- `POST /auth/telegram/webhook` — Telegram webhook (disabled, возвращает 410)
 
 Protected routes требуют:
 
@@ -30,9 +34,9 @@ Protected routes требуют:
 
 ## 2) Projects [PROTECTED]
 
-- `GET /projects` [PROTECTED]
-- `POST /projects` [PROTECTED]
-- `POST /projects/:id/select` [PROTECTED]
+- `GET /projects` [PROTECTED] — список проектов
+- `POST /projects` [PROTECTED] — создание проекта
+- `POST /projects/:id/select` [PROTECTED] — переключение активного проекта сессии
 
 ## 3) LightRAG [PROTECTED]
 
@@ -40,29 +44,31 @@ Protected routes требуют:
   - body: `{ query: string, topK?: number, sourceLimit?: number }`
   - response: `answer`, `chunks`, `evidence`, `entities`, `stats`
   - Внутренняя логика:
-    - Токенизация запроса: split по не-alphanumeric символам (включая кириллицу), фильтр по длине ≥ 3, дедуп, max 6 токенов
+    - Токенизация запроса: split по не-alphanumeric символам (включая кириллицу), фильтр по длине >= 3, дедуп, max 6 токенов
     - Параллельный поиск: vector similarity по `rag_chunks` + ILIKE по `cw_messages`, `linear_issues_raw`, `attio_opportunities_raw`
     - Evidence: до 50 элементов из всех источников, объединённых с metadata
     - Limits: query max 4000 chars, topK 1-50 (default 10), sourceLimit 1-25 (default 8)
     - Каждый запрос логируется в `lightrag_query_runs` (observability)
-- `POST /lightrag/refresh` [PROTECTED]
-  - запускает embeddings refresh + возвращает статус
-- `GET /lightrag/status` [PROTECTED]
-  - показывает состояния embeddings (`pending/processing/ready/failed` counts) и объёмы source-данных
+- `POST /lightrag/refresh` [PROTECTED] — запуск embeddings refresh
+- `GET /lightrag/status` [PROTECTED] — состояния embeddings (`pending/processing/ready/failed` counts) и объёмы source-данных
+- `POST /lightrag/feedback` [PROTECTED] — обратная связь по результатам RAG-запроса
 
 Legacy compatibility:
 
-- `POST /search` [PROTECTED] работает как alias к LightRAG query (`mode: "lightrag"` в ответе).
+- `POST /search` [PROTECTED] — alias к LightRAG query (`mode: "lightrag"` в ответе).
 
 ## 4) Connectors / reliability [PROTECTED]
 
-- `GET /connectors/state` [PROTECTED]
-- `GET /connectors/errors` [PROTECTED]
-- `GET /connectors/reconciliation` [PROTECTED]
-- `POST /connectors/reconciliation/run` [PROTECTED]
-- `POST /connectors/sync` [PROTECTED]
-- `POST /connectors/:name/sync` [PROTECTED]
-- `POST /connectors/errors/retry` [PROTECTED]
+- `GET /connectors/state` [PROTECTED] — состояние sync по коннекторам
+- `GET /connectors/errors` [PROTECTED] — список ошибок с фильтрацией
+- `GET /connectors/reconciliation` [PROTECTED] — записи reconciliation
+- `GET /connectors/reconciliation/diff` [PROTECTED] — diff полноты данных между источниками
+- `POST /connectors/reconciliation/run` [PROTECTED] — запуск ручного reconciliation
+- `POST /connectors/sync` [PROTECTED] — синхронизация всех коннекторов
+- `POST /connectors/:name/sync` [PROTECTED] — синхронизация конкретного коннектора
+- `POST /connectors/errors/retry` [PROTECTED] — повтор ошибок
+- `GET /connectors/errors/dead-letter` [PROTECTED] — список dead-letter ошибок
+- `POST /connectors/errors/dead-letter/:id/retry` [PROTECTED] — повтор конкретной dead-letter ошибки
 
 ## 5) Jobs / scheduler [PROTECTED]
 
@@ -88,19 +94,105 @@ Legacy compatibility:
   - Scope: project_id из активной сессии
   - Не требует CSRF (GET запрос)
 
-## 6) Control Tower / product surfaces [PROTECTED]
+## 6) Signals / Identity / NBA [PROTECTED]
 
-- Portfolio: `/portfolio/overview` [PROTECTED], `/portfolio/messages` [PROTECTED]
-- CRM: `/crm/accounts` [PROTECTED], `/crm/opportunities` [PROTECTED], `/crm/overview` [PROTECTED]
-- Offers: `/offers` [PROTECTED], `/offers/:id/approve-*` [PROTECTED]
-- Digests: `/digests/daily*` [PROTECTED], `/digests/weekly*` [PROTECTED]
-- Analytics: `/analytics/*` [PROTECTED], `/risk/*` [PROTECTED]
+### Identity Graph
 
-## 7) Удалённые legacy маршруты
+- `POST /identity/suggestions/preview` [PROTECTED] — предпросмотр предложений по связыванию
+- `GET /identity/suggestions` [PROTECTED] — список предложений identity links
+- `POST /identity/suggestions/apply` [PROTECTED] — применение принятых связей
+- `GET /identity/links` [PROTECTED] — установленные identity links
+
+### Signals
+
+- `POST /signals/extract` [PROTECTED] — извлечение сигналов и NBA из данных
+- `GET /signals` [PROTECTED] — список сигналов (фильтр по status/severity)
+- `POST /signals/:id/status` [PROTECTED] — обновление статуса сигнала
+
+### Next Best Actions (NBA)
+
+- `GET /nba` [PROTECTED] — список NBA
+- `POST /nba/:id/status` [PROTECTED] — обновление статуса NBA
+
+### Upsell Radar
+
+- `POST /upsell/radar/refresh` [PROTECTED] — обновление детекции возможностей допродажи
+- `GET /upsell/radar` [PROTECTED] — список upsell-возможностей
+- `POST /upsell/:id/status` [PROTECTED] — обновление статуса upsell
+
+### Continuity
+
+- `POST /continuity/preview` [PROTECTED] — предпросмотр continuity-действий
+- `GET /continuity/actions` [PROTECTED] — список continuity-действий
+- `POST /continuity/apply` [PROTECTED] — применение continuity-действий
+
+## 7) CRM [PROTECTED]
+
+- `GET /crm/accounts` [PROTECTED] — список аккаунтов с пагинацией
+- `POST /crm/accounts` [PROTECTED] — создание аккаунта
+- `GET /crm/opportunities` [PROTECTED] — список возможностей (фильтр по stage)
+- `POST /crm/opportunities` [PROTECTED] — создание возможности
+- `POST /crm/opportunities/:id/stage` [PROTECTED] — обновление стадии + событие
+- `GET /crm/overview` [PROTECTED] — обзор CRM (account count, opportunities by stage)
+
+## 8) Offers [PROTECTED]
+
+- `GET /offers` [PROTECTED] — список офферов с пагинацией
+- `POST /offers` [PROTECTED] — создание оффера (auto-status по discount)
+- `POST /offers/:id/approve-discount` [PROTECTED] — утверждение скидки
+- `POST /offers/:id/approve-send` [PROTECTED] — утверждение отправки
+
+## 9) Outbound [PROTECTED]
+
+- `GET /outbound` [PROTECTED] — список исходящих сообщений (фильтр по status)
+- `POST /outbound/draft` [PROTECTED] — создание черновика
+- `POST /outbound/:id/approve` [PROTECTED] — утверждение сообщения
+- `POST /outbound/:id/send` [PROTECTED] — отправка утверждённого сообщения
+- `POST /outbound/opt-out` [PROTECTED] — создание/обновление opt-out политики
+- `POST /outbound/process` [PROTECTED] — обработка due-сообщений
+- `POST /loops/sync` [PROTECTED] — синхронизация контактов в Loops
+
+## 10) Intelligence / Control Tower [PROTECTED]
+
+- `GET /control-tower` [PROTECTED] — данные control tower (cached)
+- `GET /portfolio/overview` [PROTECTED] — мульти-проектный портфельный обзор (cached)
+- `GET /portfolio/messages` [PROTECTED] — сообщения портфеля по проекту/контакту
+- `POST /digests/daily/generate` [PROTECTED] — генерация ежедневного дайджеста
+- `GET /digests/daily` [PROTECTED] — список ежедневных дайджестов
+- `POST /digests/weekly/generate` [PROTECTED] — генерация еженедельного дайджеста
+- `GET /digests/weekly` [PROTECTED] — список еженедельных дайджестов
+- `POST /risk/refresh` [PROTECTED] — обновление рисков и паттернов здоровья
+- `GET /risk/overview` [PROTECTED] — обзор рисков
+- `POST /analytics/refresh` [PROTECTED] — обновление аналитики за период
+- `GET /analytics/overview` [PROTECTED] — обзор аналитики
+- `GET /analytics/drilldown` [PROTECTED] — drill-down к evidence по источнику
+
+## 11) Data [PROTECTED]
+
+- `GET /contacts` [PROTECTED] — список контактов (поиск по name/email/phone)
+- `GET /conversations` [PROTECTED] — список диалогов
+- `GET /messages` [PROTECTED] — список сообщений (фильтр по conversation)
+
+## 12) Audit / Evidence [PROTECTED]
+
+- `GET /audit` [PROTECTED] — аудит-лог событий проекта
+- `GET /evidence/search` [PROTECTED] — полнотекстовый поиск по evidence
+
+## 13) API Keys [PROTECTED]
+
+- `GET /api-keys` [PROTECTED] — список API-ключей проекта
+- `POST /api-keys` [PROTECTED] — создание ключа (scopes, expires_at)
+- `POST /api-keys/revoke` [PROTECTED] — отзыв ключа
+
+## 14) Удалённые legacy маршруты
 
 Маршруты `/kag/*` были полностью удалены из кодовой базы (Iter 10).
 Код, роуты и связанные scheduler jobs удалены. Любые новые интеграции
 используют только LightRAG и operational endpoints.
+
+---
+
+Всего: **87 эндпоинтов** (80 protected, 7 public).
 
 См. также:
 

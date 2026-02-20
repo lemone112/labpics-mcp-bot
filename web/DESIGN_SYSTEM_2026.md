@@ -73,17 +73,22 @@ All product surfaces must use this shared set before creating new visual primiti
 - `InboxList` (message/evidence streams)
 - `Drawer` / modal patterns
 - `Filters` (query + trailing controls)
-- `StatTile` (topline metrics)
+- `StatTile` (topline metrics — supports `loading`, `trend`, `delta`, `actionLabel`)
 - `StatusChip` (semantic status language)
-- `EmptyState`
-- `Toast`
+- `EmptyState` (wizard pattern: title + reason + steps + CTA)
+- `Toast` (inline banner via `<Toast>` or stacked notifications via `useToast()`)
 - `SkeletonBlock`
+- `PageLoadingSkeleton` (full-page skeleton entrance with motion)
+- `LastUpdatedIndicator` (relative timestamp + refresh button)
+- `MotionGroup` (staggered reveal for `[data-motion-item]` children)
+- `Button` (supports `loading` prop with spinner + `aria-busy`)
 
 Rules:
 
 1. Prefer variant props over one-off classes.
 2. New component APIs must preserve compact/comfortable density compatibility.
 3. New components must define loading/empty/error state behavior.
+4. Touch targets must be ≥44px (use `after:absolute after:-inset-2` pattern for small controls).
 
 ## 7) Motion system (Anime.js standard)
 
@@ -113,7 +118,7 @@ Anime.js is the single motion engine.
 - Aggressive entrance motion that delays reading
 - Rapid repetitive animation that distracts from evidence workflows
 
-## 7) Z-index hierarchy
+## 8) Z-index hierarchy
 
 Strict layering to prevent stacking conflicts. Never use arbitrary z-index values outside this scale.
 

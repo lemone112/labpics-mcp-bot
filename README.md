@@ -7,7 +7,7 @@
 - `docs/` — каноническая документация
 - `docker-compose.yml` — локальный и серверный запуск стека (Postgres, Redis, server, worker, web)
 
-Текущий релиз работает в режиме **LightRAG-only** (`LIGHTRAG_ONLY=1`).
+Текущий релиз работает в режиме **LightRAG-only** (KAG pipeline полностью удалён в Iter 10).
 
 Worker-контур введен как единый scheduler/worker слой (`server/src/worker-loop.js`).
 Real-time обновления: Redis Pub/Sub → SSE endpoint → auto-refresh в браузере. См. [`docs/redis-sse.md`](./docs/redis-sse.md).
@@ -62,6 +62,7 @@ Protected routes требуют session cookie + CSRF header (`x-csrf-token`) д
 - `POST /lightrag/query` — основной endpoint (vector search + source ILIKE + evidence)
 - `POST /lightrag/refresh` — запускает embeddings refresh + возвращает статус
 - `GET /lightrag/status` — состояние embeddings и объёмы source-данных
+- `POST /lightrag/feedback` — обратная связь по результатам запроса
 - `POST /search` — alias на LightRAG для совместимости
 
 ### Jobs / Scheduler
@@ -82,7 +83,10 @@ Protected routes требуют session cookie + CSRF header (`x-csrf-token`) д
 - `POST /connectors/:name/sync`
 - `POST /connectors/errors/retry`
 - `GET /connectors/reconciliation`
+- `GET /connectors/reconciliation/diff`
 - `POST /connectors/reconciliation/run`
+- `GET /connectors/errors/dead-letter`
+- `POST /connectors/errors/dead-letter/:id/retry`
 
 ### Real-time (SSE)
 

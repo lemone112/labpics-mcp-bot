@@ -7,7 +7,7 @@
 - Границы MVP vs Roadmap: [`docs/mvp-vs-roadmap.md`](../mvp-vs-roadmap.md)
 - Нормативный контракт: [`docs/lightrag-contract.md`](../lightrag-contract.md)
 
-## Индекс (MVP — сейчас, LightRAG-only)
+## Индекс (MVP)
 
 - [0001 — Мультипроектная изоляция памяти (RAG)](./0001-multiproject-rag-scope.md)
 - [0006 — Проекты, клиенты и связывание идентичностей](./0006-projects-clients-and-links.md)
@@ -36,5 +36,5 @@ UI shell для MVP фиксирован: **shadcn/ui sidebar-04** (`npx shadcn@
 
 ## Важное правило релиза
 
-Текущий целевой режим: `LIGHTRAG_ONLY=1`.  
-Любые изменения с зависимостью от `/kag/*` запрещены в рамках текущего dev-contract и не входят в базовый MVP.
+KAG pipeline полностью удалён (Iter 10). Система работает исключительно на LightRAG.
+Маршруты `/kag/*` и связанные scheduler jobs удалены из кодовой базы.
