@@ -130,6 +130,22 @@ export function createSseBroadcaster(logger: Logger | Console = console): SseBro
   const reaperInterval = setInterval(reapDeadClients, 30_000);
   reaperInterval.unref();
 
+  // Send SSE comment heartbeats to keep connections alive and detect dead clients early
+  const heartbeatInterval = setInterval(() => {
+    for (const [, projectClients] of clients) {
+      for (const entry of projectClients) {
+        try {
+          if (!entry.reply.raw.destroyed && entry.reply.raw.writable) {
+            entry.reply.raw.write(": heartbeat\n\n");
+          }
+        } catch {
+          // will be cleaned up by reaper
+        }
+      }
+    }
+  }, 25_000);
+  heartbeatInterval.unref();
+
   function getStats() {
     return {
       total_connections: totalConnections,
@@ -139,6 +155,7 @@ export function createSseBroadcaster(logger: Logger | Console = console): SseBro
 
   function shutdown(): void {
     clearInterval(reaperInterval);
+    clearInterval(heartbeatInterval);
   }
 
   return { addClient, broadcast, broadcastAll, getStats, reapDeadClients, shutdown };
