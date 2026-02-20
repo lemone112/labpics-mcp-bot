@@ -42,11 +42,12 @@ export function ProjectSidebarPanel({ onRequestClose = null }) {
     if (!normalized || !projectIdSet.has(normalized)) return;
     try {
       await activateProject(normalized);
+    } catch {
+      // Activation errors are exposed from project context.
+    } finally {
       if (typeof onRequestClose === "function") {
         onRequestClose();
       }
-    } catch {
-      // Activation errors are exposed from project context.
     }
   }
 
