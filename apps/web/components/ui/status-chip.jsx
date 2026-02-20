@@ -28,6 +28,10 @@ const statusMap = {
     label: "Выполняется",
     className: "border-primary/30 bg-primary/10 text-primary",
   },
+  generating: {
+    label: "Генерация",
+    className: "border-primary/30 bg-primary/10 text-primary",
+  },
   proposed: {
     label: "Предложено",
     className: "border-primary/30 bg-primary/10 text-primary",
