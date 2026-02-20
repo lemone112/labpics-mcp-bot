@@ -18,6 +18,8 @@ export interface RequestScope {
 
 export interface AuthPayload {
   username: string;
+  user_id?: string | null;
+  user_role?: string | null;
   active_project_id: string | null;
   account_scope_id: string | null;
   session_id?: string;

@@ -5,6 +5,8 @@ interface RequestWithAuth {
   auth?: {
     active_project_id?: string | null;
     account_scope_id?: string | null;
+    user_id?: string | null;
+    user_role?: string | null;
   };
 }
 

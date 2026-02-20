@@ -47,6 +47,7 @@ import { createSseBroadcaster } from "./infra/sse-broadcaster.js";
 import { createCacheLayer } from "./infra/cache.js";
 import { requiredEnv } from "./infra/utils.js";
 import { createApiKeyAuth } from "./infra/api-keys.js";
+import { requireProjectAccess, requireRole, getEffectiveRole, canAccessProject, getAccessibleProjectIds } from "./infra/rbac.js";
 import {
   registerHealthRoutes,
   registerAuthRoutes,
@@ -61,6 +62,7 @@ import {
   registerSignalRoutes,
   registerOutboundRoutes,
   registerApiKeyRoutes,
+  registerUserRoutes,
 } from "./routes/index.js";
 
 function isBcryptHash(value) {
@@ -497,6 +499,20 @@ async function main() {
           cache.invalidateByPrefix(`lightrag:${projectId}`);
         }
       });
+      // 44.5: Subscribe to connector sync progress events for SSE
+      await redisPubSub.subscribe("connector_sync_progress", (payload) => {
+        const projectId = payload?.project_id;
+        if (!projectId) return;
+        sseBroadcaster.broadcast(projectId, "connector_sync_progress", {
+          phase: payload.phase,
+          connectors: payload.connectors,
+          ok: payload.ok,
+          failed: payload.failed,
+          total: payload.total,
+          at: payload.at,
+        });
+      });
+
       app.log.info("redis pub/sub → sse bridge active (with cache invalidation)");
     } catch (err) {
       app.log.warn({ error: String(err?.message || err) }, "redis subscribe failed — degrading to polling-only mode");
@@ -608,15 +624,15 @@ async function main() {
     }
   }, 120_000).unref();
 
-  async function createSession(username) {
+  async function createSession(username, userId = null) {
     const sid = crypto.randomBytes(32).toString("hex");
     const csrfToken = crypto.randomBytes(24).toString("hex");
     await pool.query(
       `
-        INSERT INTO sessions(session_id, username, active_project_id, csrf_token, created_at, last_seen_at)
-        VALUES($1, $2, NULL, $3, now(), now())
+        INSERT INTO sessions(session_id, username, user_id, active_project_id, csrf_token, created_at, last_seen_at)
+        VALUES($1, $2, $3, NULL, $4, now(), now())
       `,
-      [sid, username, csrfToken]
+      [sid, username, userId, csrfToken]
     );
     return { sid, csrfToken };
   }
@@ -627,13 +643,16 @@ async function main() {
         SELECT
           s.session_id,
           s.username,
+          s.user_id,
           s.active_project_id,
           s.csrf_token,
           s.created_at,
           s.last_seen_at,
-          p.account_scope_id
+          p.account_scope_id,
+          u.role AS user_role
         FROM sessions AS s
         LEFT JOIN projects AS p ON p.id = s.active_project_id
+        LEFT JOIN app_users AS u ON u.id = s.user_id
         WHERE s.session_id = $1
         LIMIT 1
       `,
@@ -782,6 +801,23 @@ async function main() {
     request._resolvedProjectIds = preferredProjectIds;
   });
 
+  // --- RBAC: enforce project-level access for PM users ---
+  const projectAccessCheck = requireProjectAccess(pool);
+  app.addHook("preHandler", async (request, reply) => {
+    const rawPath = request.url.split("?")[0];
+    const pathName = routePathForAuthCheck(rawPath);
+    const isPublicAuth = pathName === "/auth/login" || pathName === "/auth/me" || pathName.startsWith("/auth/signup") || pathName === "/auth/telegram/webhook";
+    const isPublic = pathName === "/health" || isPublicAuth || pathName.startsWith("/api-docs");
+    if (isPublic) return;
+    if (!request.auth?.session_id) return;
+
+    try {
+      await projectAccessCheck(request);
+    } catch (err) {
+      return sendError(reply, request.requestId, err);
+    }
+  });
+
   app.addHook("onResponse", async (request, reply) => {
     metrics.responses_total += 1;
     const code = Number(reply.statusCode || 0);
@@ -820,6 +856,8 @@ async function main() {
     cookieName, csrfCookieName, cookieOptions, csrfCookieOptions, bcrypt,
     // Parsing helpers
     parseProjectIdsInput, resolvePortfolioAccountScopeId,
+    // RBAC helpers
+    requireRole, getEffectiveRole, canAccessProject, getAccessibleProjectIds,
   };
   registerHealthRoutes(routeCtx);
   registerAuthRoutes(routeCtx);
@@ -834,6 +872,7 @@ async function main() {
   registerSignalRoutes(routeCtx);
   registerOutboundRoutes(routeCtx);
   registerApiKeyRoutes(routeCtx);
+  registerUserRoutes(routeCtx);
 
 
   app.setErrorHandler((error, request, reply) => {

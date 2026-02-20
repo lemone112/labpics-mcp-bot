@@ -45,16 +45,43 @@ export function registerAuthRoutes(ctx) {
     assertLoginRateLimit(request.ip, username);
 
     const DUMMY_BCRYPT_HASH = "$2b$10$abcdefghijklmnopqrstuuABCDEFGHIJKLMNOPQRSTUVWXYZ012345";
-    const authUsername = normalizeAccountUsername(auth.username);
+
+    // Phase 1: Try multi-user auth against app_users table
     let sessionUsername = null;
-    const usernameMatches = timingSafeStringEqual(username, authUsername);
-    if (auth.hashed) {
-      const hashToCompare = usernameMatches ? auth.password : DUMMY_BCRYPT_HASH;
-      const passwordMatch = await bcrypt.compare(password, hashToCompare);
-      if (usernameMatches && passwordMatch) sessionUsername = auth.username;
+    let sessionUserId = null;
+    let sessionUserRole = null;
+
+    const { rows: dbUsers } = await pool.query(
+      "SELECT id, username, password_hash, role FROM app_users WHERE lower(username) = $1 LIMIT 1",
+      [username]
+    );
+    const dbUser = dbUsers[0] || null;
+
+    if (dbUser) {
+      // User found in database — authenticate against stored hash
+      const passwordMatch = await bcrypt.compare(password, dbUser.password_hash);
+      if (passwordMatch) {
+        sessionUsername = dbUser.username;
+        sessionUserId = dbUser.id;
+        sessionUserRole = dbUser.role;
+      }
     } else {
-      if (usernameMatches && timingSafeStringEqual(password, auth.password)) {
-        sessionUsername = auth.username;
+      // Phase 2: Fallback to env var auth (backward compatibility)
+      // Only used when the username matches the env var credentials
+      const authUsername = normalizeAccountUsername(auth.username);
+      const usernameMatches = timingSafeStringEqual(username, authUsername);
+      if (auth.hashed) {
+        const hashToCompare = usernameMatches ? auth.password : DUMMY_BCRYPT_HASH;
+        const passwordMatch = await bcrypt.compare(password, hashToCompare);
+        if (usernameMatches && passwordMatch) {
+          sessionUsername = auth.username;
+          sessionUserRole = "owner"; // env var user is always owner
+        }
+      } else {
+        if (usernameMatches && timingSafeStringEqual(password, auth.password)) {
+          sessionUsername = auth.username;
+          sessionUserRole = "owner";
+        }
       }
     }
 
@@ -62,7 +89,8 @@ export function registerAuthRoutes(ctx) {
       recordLoginFailure(request.ip, username);
       writeAuditEvent(pool, {
         projectId: null, accountScopeId: null,
-        actorUsername: username, action: "auth.login_failed",
+        actorUsername: username, actorUserId: null,
+        action: "auth.login_failed",
         entityType: "session", entityId: null, status: "failed",
         requestId: request.requestId,
         payload: { ip: request.ip }, evidenceRefs: [],
@@ -71,19 +99,22 @@ export function registerAuthRoutes(ctx) {
     }
 
     clearLoginFailures(request.ip, username);
-    const { sid, csrfToken } = await createSession(sessionUsername);
+    const { sid, csrfToken } = await createSession(sessionUsername, sessionUserId);
     writeAuditEvent(pool, {
       projectId: null, accountScopeId: null,
-      actorUsername: sessionUsername, action: "auth.login",
+      actorUsername: sessionUsername, actorUserId: sessionUserId,
+      action: "auth.login",
       entityType: "session", entityId: sid, status: "ok",
       requestId: request.requestId,
-      payload: { ip: request.ip }, evidenceRefs: [],
+      payload: { ip: request.ip, role: sessionUserRole }, evidenceRefs: [],
     }).catch((err) => console.error({ action: "audit_write_failed", error: String(err?.message || err) }, "auth audit event failed"));
 
     reply.setCookie(cookieName, sid, cookieOptions);
     reply.setCookie(csrfCookieName, csrfToken, csrfCookieOptions);
     return sendOk(reply, request.requestId, {
       username: sessionUsername,
+      user_id: sessionUserId,
+      role: sessionUserRole,
       active_project_id: null,
       csrf_cookie_name: csrfCookieName,
       csrf_token: csrfToken,
@@ -118,7 +149,9 @@ export function registerAuthRoutes(ctx) {
       await cache.del(`session:${sid}`);
       writeAuditEvent(pool, {
         projectId: null, accountScopeId: null,
-        actorUsername: request.auth?.username || null, action: "auth.logout",
+        actorUsername: request.auth?.username || null,
+        actorUserId: request.auth?.user_id || null,
+        action: "auth.logout",
         entityType: "session", entityId: sid, status: "ok",
         requestId: request.requestId,
         payload: { ip: request.ip }, evidenceRefs: [],
@@ -146,6 +179,8 @@ export function registerAuthRoutes(ctx) {
     return sendOk(reply, request.requestId, {
       authenticated: true,
       username: hydrated.username,
+      user_id: hydrated.user_id || null,
+      role: hydrated.user_role || "owner",
       active_project_id: hydrated.active_project_id,
       account_scope_id: hydrated.account_scope_id,
       csrf_cookie_name: csrfCookieName,

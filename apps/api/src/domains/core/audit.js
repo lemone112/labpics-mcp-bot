@@ -128,6 +128,7 @@ export async function writeAuditEvent(pool, event) {
         project_id,
         account_scope_id,
         actor_username,
+        actor_user_id,
         action,
         entity_type,
         entity_id,
@@ -137,13 +138,14 @@ export async function writeAuditEvent(pool, event) {
         payload,
         evidence_refs
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb, $11::jsonb)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::jsonb, $12::jsonb)
       RETURNING id, created_at
     `,
     [
       event.projectId,
       event.accountScopeId,
       event.actorUsername || null,
+      event.actorUserId || null,
       String(event.action || "unknown_action").slice(0, 200),
       event.entityType || null,
       event.entityId || null,
@@ -172,7 +174,7 @@ export async function listAuditEvents(pool, scope, options = {}) {
 
   const query = action
     ? `
-      SELECT id, actor_username, action, entity_type, entity_id, status, request_id, payload, evidence_refs, created_at
+      SELECT id, actor_username, actor_user_id, action, entity_type, entity_id, status, request_id, payload, evidence_refs, created_at
       FROM audit_events
       WHERE project_id = $1
         AND account_scope_id = $2
@@ -182,7 +184,7 @@ export async function listAuditEvents(pool, scope, options = {}) {
       OFFSET $5
     `
     : `
-      SELECT id, actor_username, action, entity_type, entity_id, status, request_id, payload, evidence_refs, created_at
+      SELECT id, actor_username, actor_user_id, action, entity_type, entity_id, status, request_id, payload, evidence_refs, created_at
       FROM audit_events
       WHERE project_id = $1
         AND account_scope_id = $2

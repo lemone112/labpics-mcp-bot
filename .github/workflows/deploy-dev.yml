@@ -27,11 +27,13 @@ jobs:
         with:
           node-version: 22
 
+      - name: Install all dependencies
+        run: npm ci
+
       - name: Validate server
         working-directory: apps/api
         run: |
           set -euo pipefail
-          npm ci
           while IFS= read -r file; do
             node --check "$file"
           done < <(find src -name "*.js" -type f | sort)
@@ -40,7 +42,6 @@ jobs:
         working-directory: apps/web
         run: |
           set -euo pipefail
-          npm ci
           npm run lint
           npm run build
 

@@ -1,6 +1,7 @@
 import { ApiError, parseBody, sendError, sendOk } from "../infra/api-contract.js";
 import { requireProjectScope } from "../infra/scope.js";
 import { writeAuditEvent } from "../domains/core/audit.js";
+import { getEffectiveRole, getAccessibleProjectIds, canAccessProject } from "../infra/rbac.js";
 
 const LEGACY_SCOPE_PROJECT_NAME = "__legacy_scope__";
 
@@ -16,15 +17,38 @@ export function registerProjectRoutes(ctx) {
   const { registerGet, registerPost, pool, cache, CreateProjectSchema } = ctx;
 
   registerGet("/projects", async (request, reply) => {
-    const { rows } = await pool.query(
-      `
-        SELECT id, name, account_scope_id, created_at
-        FROM projects
-        WHERE lower(btrim(name)) <> $1
-        ORDER BY created_at DESC
-      `,
-      [LEGACY_SCOPE_PROJECT_NAME]
-    );
+    const userId = request.auth?.user_id || null;
+    const userRole = getEffectiveRole(request);
+    const accessibleIds = await getAccessibleProjectIds(pool, userId, userRole);
+
+    let rows;
+    if (accessibleIds === null) {
+      // Owner or legacy env var user — return all projects
+      const result = await pool.query(
+        `
+          SELECT id, name, account_scope_id, created_at
+          FROM projects
+          WHERE lower(btrim(name)) <> $1
+          ORDER BY created_at DESC
+        `,
+        [LEGACY_SCOPE_PROJECT_NAME]
+      );
+      rows = result.rows;
+    } else {
+      // PM user — return only assigned projects
+      const result = await pool.query(
+        `
+          SELECT id, name, account_scope_id, created_at
+          FROM projects
+          WHERE lower(btrim(name)) <> $1
+            AND id = ANY($2::uuid[])
+          ORDER BY created_at DESC
+        `,
+        [LEGACY_SCOPE_PROJECT_NAME, accessibleIds]
+      );
+      rows = result.rows;
+    }
+
     return sendOk(reply, request.requestId, {
       projects: rows,
       active_project_id: request.auth?.active_project_id || null,
@@ -33,6 +57,12 @@ export function registerProjectRoutes(ctx) {
   });
 
   registerPost("/projects", async (request, reply) => {
+    // Only owners can create projects
+    const userRole = getEffectiveRole(request);
+    if (userRole !== "owner") {
+      return sendError(reply, request.requestId, new ApiError(403, "forbidden", "Only owners can create projects"));
+    }
+
     const body = parseBody(CreateProjectSchema, request.body);
     const name = body.name;
     if (name.toLowerCase() === LEGACY_SCOPE_PROJECT_NAME) {
@@ -82,6 +112,7 @@ export function registerProjectRoutes(ctx) {
       projectId: rows[0].id,
       accountScopeId: rows[0].account_scope_id,
       actorUsername: request.auth?.username || null,
+      actorUserId: request.auth?.user_id || null,
       action: "project.create",
       entityType: "project",
       entityId: rows[0].id,
@@ -112,12 +143,21 @@ export function registerProjectRoutes(ctx) {
       return sendError(reply, request.requestId, new ApiError(404, "project_not_found", "Project not found"));
     }
 
+    // RBAC: PM users can only select projects they are assigned to
+    const userId = request.auth?.user_id || null;
+    const userRole = getEffectiveRole(request);
+    const hasAccess = await canAccessProject(pool, userId, userRole, projectId);
+    if (!hasAccess) {
+      return sendError(reply, request.requestId, new ApiError(403, "project_access_denied", "You do not have access to this project"));
+    }
+
     await pool.query("UPDATE sessions SET active_project_id = $2, last_seen_at = now() WHERE session_id = $1", [sid, projectId]);
     await cache.del(`session:${sid}`);
     await writeAuditEvent(pool, {
       projectId,
       accountScopeId: project.rows[0].account_scope_id,
       actorUsername: request.auth?.username || null,
+      actorUserId: request.auth?.user_id || null,
       action: "project.select",
       entityType: "project",
       entityId: projectId,
