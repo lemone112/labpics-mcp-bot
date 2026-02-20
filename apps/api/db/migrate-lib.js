@@ -28,13 +28,22 @@ export async function applyMigrations(pool, migrationsDir, logger = console) {
     const fullPath = path.join(migrationsDir, filename);
     const sql = await readFile(fullPath, "utf8");
 
-    const needsNoTx = /\bCONCURRENTLY\b/i.test(sql);
+    // Detect CONCURRENTLY in actual SQL (not comments)
+    const sqlNoComments = sql.replace(/--.*$/gm, "");
+    const needsNoTx = /\bCONCURRENTLY\b/i.test(sqlNoComments);
 
     const client = await pool.connect();
     try {
       if (needsNoTx) {
-        // CREATE INDEX CONCURRENTLY cannot run inside a transaction block
-        await client.query(sql);
+        // CREATE INDEX CONCURRENTLY cannot run inside a transaction block.
+        // Multi-statement queries use implicit transactions, so split and run each statement separately.
+        const statements = sqlNoComments
+          .split(";")
+          .map((s) => s.trim())
+          .filter((s) => s.length > 0);
+        for (const stmt of statements) {
+          await client.query(stmt);
+        }
         await client.query("INSERT INTO schema_migrations(filename) VALUES ($1)", [filename]);
       } else {
         await client.query("BEGIN");
