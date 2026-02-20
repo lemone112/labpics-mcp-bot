@@ -145,7 +145,7 @@ jobs:
           done
 
       - name: Run smoke tests
-        run: ./scripts/smoke-test.sh http://localhost:8080
+        run: ./infra/scripts/smoke-test.sh http://localhost:8080
 
       - name: Collect logs on failure
         if: failure()
