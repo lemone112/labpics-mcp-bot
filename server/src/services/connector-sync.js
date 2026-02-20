@@ -16,6 +16,7 @@ import { syncConnectorEventLog } from "./event-log.js";
 import { failProcessRun, finishProcessRun, startProcessRun, warnProcess } from "./process-log.js";
 import { previewIdentitySuggestions } from "./identity-graph.js";
 import { runSyncReconciliation } from "./reconciliation.js";
+import { withTransaction } from "../lib/db.js";
 
 const CONNECTORS = ["chatwoot", "linear", "attio"];
 
@@ -118,16 +119,18 @@ export async function runConnectorSync(pool, scope, connector, logger = console)
         payload: { connector: normalizedConnector, error: eventLogMsg },
       });
     }
-    await markConnectorSyncSuccess(pool, scope, normalizedConnector, mode, {
-      cursor_ts: result?.cursor_ts || null,
-      cursor_id: result?.cursor_id || null,
-      page_cursor: null,
-      meta: {
-        ...result,
-        event_log: eventSync,
-      },
+    const resolvedErrors = await withTransaction(pool, async (client) => {
+      await markConnectorSyncSuccess(client, scope, normalizedConnector, mode, {
+        cursor_ts: result?.cursor_ts || null,
+        cursor_id: result?.cursor_id || null,
+        page_cursor: null,
+        meta: {
+          ...result,
+          event_log: eventSync,
+        },
+      });
+      return resolveConnectorErrors(client, scope, normalizedConnector);
     });
-    const resolvedErrors = await resolveConnectorErrors(pool, scope, normalizedConnector);
     await finishProcessRun(pool, scope, run, {
       counters: {
         resolved_errors: resolvedErrors,

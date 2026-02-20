@@ -9,7 +9,7 @@ export type Env = {
   SUPABASE_SCHEMA?: string;
   BOT_ALLOWED_TELEGRAM_USER_IDS?: string;
   PAUSE_REMINDER_DAYS?: string;
-  TELEGRAM_WEBHOOK_SECRET?: string;
+  TELEGRAM_WEBHOOK_SECRET: string;
 };
 
 // ── Telegram API ─────────────────────────────────────────────

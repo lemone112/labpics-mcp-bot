@@ -25,7 +25,7 @@ function detectMessageSignals(messageRow) {
   const signals = [];
   if (!content) return signals;
 
-  if (/\b(delay|blocked|blocker|stuck|slipped|late)\b/i.test(content)) {
+  if (/\b(delay|blocked|blocker|stuck|slipped|late)\b|задержк|блокер|застрял|сорвал|опоздан|срыв|проблема с дедлайн/i.test(content)) {
     signals.push({
       signal_type: "delivery_risk",
       severity: 4,
@@ -36,7 +36,7 @@ function detectMessageSignals(messageRow) {
       evidence_refs: [messageRow.id, messageRow.conversation_global_id].filter(Boolean),
     });
   }
-  if (/\b(budget|pricing|discount|cost|expensive)\b/i.test(content)) {
+  if (/\b(budget|pricing|discount|cost|expensive)\b|бюджет|стоимост|цен[аыу]|дорого|скидк|расход|цену снизить/i.test(content)) {
     signals.push({
       signal_type: "commercial_pressure",
       severity: 3,
@@ -47,7 +47,7 @@ function detectMessageSignals(messageRow) {
       evidence_refs: [messageRow.id, messageRow.conversation_global_id].filter(Boolean),
     });
   }
-  if (/\b(upgrade|add-on|addon|expand|cross[- ]?sell|upsell)\b/i.test(content)) {
+  if (/\b(upgrade|add-on|addon|expand|cross[- ]?sell|upsell)\b|расширить|дополнительно|апгрейд|кросс-?продаж|допродаж|новый модуль|доработк/i.test(content)) {
     signals.push({
       signal_type: "upsell_intent",
       severity: 2,
@@ -58,7 +58,7 @@ function detectMessageSignals(messageRow) {
       evidence_refs: [messageRow.id, messageRow.conversation_global_id].filter(Boolean),
     });
   }
-  if (/\b(urgent|asap|critical|priority)\b/i.test(content)) {
+  if (/\b(urgent|asap|critical|priority)\b|срочно|критично|приоритет|горит|немедленно|дедлайн горит/i.test(content)) {
     signals.push({
       signal_type: "urgency_increase",
       severity: 4,
@@ -70,6 +70,41 @@ function detectMessageSignals(messageRow) {
     });
   }
   return signals;
+}
+
+export async function detectCommunicationGaps(pool, scope, gapDays = 7) {
+  const { rows } = await pool.query(
+    `
+      SELECT
+        c.id AS contact_id,
+        c.name AS contact_name,
+        max(m.created_at) AS last_message_at,
+        EXTRACT(DAY FROM (now() - max(m.created_at)))::int AS days_silent
+      FROM cw_contacts c
+      LEFT JOIN cw_messages m
+        ON m.contact_global_id = c.id
+        AND m.project_id = c.project_id
+        AND m.account_scope_id = c.account_scope_id
+      WHERE c.project_id = $1
+        AND c.account_scope_id = $2
+      GROUP BY c.id, c.name
+      HAVING max(m.created_at) < now() - ($3 || ' days')::interval
+         OR max(m.created_at) IS NULL
+      ORDER BY days_silent DESC NULLS FIRST
+      LIMIT 50
+    `,
+    [scope.projectId, scope.accountScopeId, gapDays]
+  );
+
+  return rows.map((row) => ({
+    signal_type: "communication_gap",
+    severity: row.days_silent > 14 ? 5 : row.days_silent > 7 ? 4 : 3,
+    confidence: 0.9,
+    summary: `No communication with ${row.contact_name || "contact"} for ${row.days_silent || "?"} days`,
+    source_kind: "system",
+    source_ref: row.contact_id || "unknown",
+    evidence_refs: [row.contact_id].filter(Boolean),
+  }));
 }
 
 function buildLinearSignals(rows) {

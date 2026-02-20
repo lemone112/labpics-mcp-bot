@@ -13,7 +13,7 @@ function toScore(value, fallback = 0.5) {
 function detectFromMessage(row) {
   const text = String(row.content || "").toLowerCase();
   if (!text) return null;
-  if (!/(upgrade|add-on|addon|expand|cross[- ]?sell|upsell|bundle|new module)/i.test(text)) {
+  if (!/(upgrade|add-on|addon|expand|cross[- ]?sell|upsell|bundle|new module)|расширить|дополнительно|апгрейд|допродаж|новый модуль|пакет|доработк|масштабировать/i.test(text)) {
     return null;
   }
   return {
@@ -29,7 +29,7 @@ function detectFromMessage(row) {
     },
     suggested_outbound_payload: {
       channel: "chatwoot",
-      message: "We can extend scope with an add-on package. Want a short options breakdown?",
+      message: "Мы можем расширить объём работ дополнительным пакетом. Подготовить краткий обзор вариантов? / We can extend scope with an add-on package. Want a short options breakdown?",
     },
   };
 }
@@ -39,7 +39,7 @@ function detectFromOpportunity(row) {
   const stage = String(row.stage || "").toLowerCase();
   if (!["qualified", "proposal", "negotiation"].includes(stage)) return null;
   const amount = Number(row.amount || 0);
-  const score = amount > 50000 ? 0.8 : amount > 20000 ? 0.7 : 0.62;
+  const score = amount > 20000 ? 0.85 : amount > 10000 ? 0.78 : amount > 5000 ? 0.7 : 0.6;
   return {
     source_ref: row.id,
     account_external_id: row.account_external_id || null,

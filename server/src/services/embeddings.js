@@ -177,11 +177,16 @@ export async function runEmbeddings(pool, scope, logger = console) {
 
     const readyRows = [];
     const retryIds = [];
+    const budgetSkippedIds = [];
     for (let index = 0; index < claimedRows.length; index++) {
       const claimed = claimedRows[index];
       const embedding = result.embeddings[index];
       if (!Array.isArray(embedding) || !embedding.length) {
-        retryIds.push(claimed.id);
+        if (result.budgetExhausted && index >= result.embeddings.length) {
+          budgetSkippedIds.push(claimed.id);
+        } else {
+          retryIds.push(claimed.id);
+        }
         continue;
       }
       readyRows.push({ id: claimed.id, embedding });
@@ -195,6 +200,16 @@ export async function runEmbeddings(pool, scope, logger = console) {
       // Return chunks without embeddings to pending for retry instead
       // of permanently failing them — the provider may succeed next time.
       await markClaimedAsPending(client, scope, retryIds, "embedding_missing_from_provider_will_retry");
+      // Budget-skipped chunks: return to pending without penalizing attempts.
+      // markClaimedAsPending decrements embedding_attempts, which would cause
+      // an infinite retry loop for chunks that were simply not sent to the API.
+      if (budgetSkippedIds.length) {
+        await client.query(
+          `UPDATE rag_chunks SET embedding_status = 'pending', updated_at = now()
+           WHERE id = ANY($1::uuid[]) AND project_id = $2 AND account_scope_id = $3`,
+          [budgetSkippedIds, scope.projectId, scope.accountScopeId]
+        );
+      }
       await client.query("COMMIT");
     } catch (txErr) {
       await client.query("ROLLBACK");
@@ -245,13 +260,13 @@ export async function searchChunks(pool, scope, query, topK, logger = console) {
           chunk_index,
           left(text, 500) AS text,
           created_at,
-          (embedding <-> $1::vector) AS distance
+          (embedding <=> $1::vector) AS distance
         FROM rag_chunks
         WHERE embedding_status = 'ready'
           AND embedding IS NOT NULL
           AND project_id = $2
           AND account_scope_id = $3
-        ORDER BY embedding <-> $1::vector
+        ORDER BY embedding <=> $1::vector
         LIMIT $4
       `,
       [vectorText, scope.projectId, scope.accountScopeId, safeTopK]

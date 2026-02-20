@@ -14,7 +14,21 @@ export function createDbPool(databaseUrl, logger = console) {
   pool.on("error", (err) => {
     logger.error({ err: String(err?.message || err) }, "pg_pool_background_error");
   });
+  pool.on("connect", () => {
+    const { totalCount, idleCount, waitingCount } = pool;
+    if (waitingCount > 5) {
+      logger.warn({ totalCount, idleCount, waitingCount }, "pg_pool_saturation_warning");
+    }
+  });
   return pool;
+}
+
+export function getPoolStats(pool) {
+  return {
+    totalCount: pool.totalCount,
+    idleCount: pool.idleCount,
+    waitingCount: pool.waitingCount,
+  };
 }
 
 export async function withTransaction(pool, fn) {

@@ -89,14 +89,14 @@ export async function createEmbeddings(inputs, logger = console) {
       baseUrl,
       logger,
     });
+    // Validate dimensions immediately after each batch to fail fast
+    const batchWrongDim = batchResult.embeddings.find((v) => v.length !== expectedDim);
+    if (batchWrongDim) {
+      throw new Error(`OpenAI embeddings dimension mismatch. Expected ${expectedDim}, got ${batchWrongDim.length}`);
+    }
     embeddings.push(...batchResult.embeddings);
     totalTokens += batchResult.totalTokens;
   }
 
-  const wrongDim = embeddings.find((vector) => vector.length !== expectedDim);
-  if (wrongDim) {
-    throw new Error(`OpenAI embeddings dimension mismatch. Expected ${expectedDim}, got ${wrongDim.length}`);
-  }
-
-  return { model, embeddings, totalTokens };
+  return { model, embeddings, totalTokens, budgetExhausted: embeddings.length < input.length };
 }

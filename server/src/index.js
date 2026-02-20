@@ -148,6 +148,12 @@ function parseProjectIdsInput(value, max = 50) {
   return deduped;
 }
 
+function sanitizeRequestId(raw) {
+  if (typeof raw !== 'string') return null;
+  const clean = raw.slice(0, 64).replace(/[^a-zA-Z0-9\-_\.]/g, '');
+  return clean.length > 0 ? clean : null;
+}
+
 const LEGACY_SCOPE_PROJECT_NAME = "__legacy_scope__";
 
 function parseProjectIdsFromUrl(rawUrl) {
@@ -342,7 +348,7 @@ async function main() {
       level: process.env.LOG_LEVEL || "info",
       serializers: {
         req(req) {
-          return { method: req.method, url: req.url, request_id: req.headers?.["x-request-id"] || req.id };
+          return { method: req.method, url: req.url, request_id: req.id };
         },
         res(res) {
           return { statusCode: res.statusCode };
@@ -353,7 +359,7 @@ async function main() {
     bodyLimit: 64 * 1024,
     disableRequestLogging: false,
     requestIdHeader: "x-request-id",
-    genReqId: (req) => req.headers["x-request-id"] || crypto.randomUUID(),
+    genReqId: (req) => sanitizeRequestId(req.headers["x-request-id"]) || crypto.randomUUID(),
   });
 
   await app.register(cookie);
@@ -362,39 +368,41 @@ async function main() {
     credentials: true,
   });
 
-  await app.register(swagger, {
-    openapi: {
-      info: {
-        title: "Labpics Dashboard API",
-        version: "1.0.0",
-        description: "Operations console API for project management, CRM, signals, and analytics",
-      },
-      tags: [
-        { name: "health", description: "Health and metrics" },
-        { name: "auth", description: "Authentication" },
-        { name: "projects", description: "Project management" },
-        { name: "crm", description: "CRM accounts and opportunities" },
-        { name: "signals", description: "Signals and risk patterns" },
-        { name: "offers", description: "Offers and upsell" },
-        { name: "jobs", description: "Scheduled jobs and sync" },
-        { name: "lightrag", description: "LightRAG search and query" },
-        { name: "connectors", description: "Data source connectors" },
-        { name: "intelligence", description: "Analytics and intelligence" },
-        { name: "outbound", description: "Outbound campaigns" },
-        { name: "data", description: "Portfolio data" },
-      ],
-      components: {
-        securitySchemes: {
-          cookieAuth: { type: "apiKey", in: "cookie", name: "sid" },
-          apiKeyAuth: { type: "apiKey", in: "header", name: "X-API-Key" },
+  if (!isProd) {
+    await app.register(swagger, {
+      openapi: {
+        info: {
+          title: "Labpics Dashboard API",
+          version: "1.0.0",
+          description: "Operations console API for project management, CRM, signals, and analytics",
         },
+        tags: [
+          { name: "health", description: "Health and metrics" },
+          { name: "auth", description: "Authentication" },
+          { name: "projects", description: "Project management" },
+          { name: "crm", description: "CRM accounts and opportunities" },
+          { name: "signals", description: "Signals and risk patterns" },
+          { name: "offers", description: "Offers and upsell" },
+          { name: "jobs", description: "Scheduled jobs and sync" },
+          { name: "lightrag", description: "LightRAG search and query" },
+          { name: "connectors", description: "Data source connectors" },
+          { name: "intelligence", description: "Analytics and intelligence" },
+          { name: "outbound", description: "Outbound campaigns" },
+          { name: "data", description: "Portfolio data" },
+        ],
+        components: {
+          securitySchemes: {
+            cookieAuth: { type: "apiKey", in: "cookie", name: "sid" },
+            apiKeyAuth: { type: "apiKey", in: "header", name: "X-API-Key" },
+          },
+        },
+        security: [{ cookieAuth: [] }],
       },
-      security: [{ cookieAuth: [] }],
-    },
-  });
-  await app.register(swaggerUi, {
-    routePrefix: "/api-docs",
-  });
+    });
+    await app.register(swaggerUi, {
+      routePrefix: "/api-docs",
+    });
+  }
 
   // Security headers
   app.addHook("onSend", async (request, reply) => {
@@ -506,7 +514,7 @@ async function main() {
   };
   const csrfCookieOptions = {
     path: "/",
-    httpOnly: true,
+    httpOnly: false,
     sameSite: "lax",
     secure: isProd,
     maxAge: 60 * 60 * 24 * 14,
@@ -670,18 +678,27 @@ async function main() {
 
   app.addHook("onRequest", async (request, reply) => {
     metrics.requests_total += 1;
-    const requestId = String(request.headers["x-request-id"] || request.id);
+    const requestId = String(request.id);
     request.requestId = requestId;
     reply.header("x-request-id", requestId);
 
     const rawPath = request.url.split("?")[0];
     const pathName = routePathForAuthCheck(rawPath);
-    const isPublic = pathName === "/health" || pathName === "/metrics" || pathName.startsWith("/auth/") || pathName.startsWith("/api-docs");
+    const isPublicAuth = pathName === "/auth/login" || pathName === "/auth/me" || pathName.startsWith("/auth/signup") || pathName === "/auth/telegram/webhook";
+    const isPublic = pathName === "/health" || isPublicAuth || pathName.startsWith("/api-docs");
 
     // Rate limit unauthenticated requests by IP (except health/metrics)
     if (!isPublic) {
       const ipKey = `ip:${request.ip}`;
       if (!checkApiRateLimit(ipKey, API_RATE_LIMIT_IP)) {
+        return sendError(reply, requestId, new ApiError(429, "rate_limited", "Too many requests"));
+      }
+    }
+
+    // Rate limit auth endpoints by IP (stricter than general rate limit)
+    if (pathName.startsWith("/auth/")) {
+      const authKey = `auth:${request.ip}`;
+      if (!checkApiRateLimit(authKey, 30)) { // 30 req/min for auth
         return sendError(reply, requestId, new ApiError(429, "rate_limited", "Too many requests"));
       }
     }
@@ -752,7 +769,8 @@ async function main() {
   app.addHook("preValidation", async (request, reply) => {
     const rawPath = request.url.split("?")[0];
     const pathName = routePathForAuthCheck(rawPath);
-    const isPublic = pathName === "/health" || pathName === "/metrics" || pathName.startsWith("/auth/") || pathName.startsWith("/api-docs");
+    const isPublicAuth = pathName === "/auth/login" || pathName === "/auth/me" || pathName.startsWith("/auth/signup") || pathName === "/auth/telegram/webhook";
+    const isPublic = pathName === "/health" || isPublicAuth || pathName.startsWith("/api-docs");
     if (isPublic) return;
     if (!request.auth?.session_id) return;
     if (request.auth?.active_project_id && request.auth?.account_scope_id) return;
