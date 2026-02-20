@@ -24,7 +24,7 @@ module.exports = defineConfig({
   webServer: [
     {
       command: "npm run start",
-      cwd: "../server",
+      cwd: "../api",
       env: {
         ...process.env,
         DATABASE_URL: databaseUrl,
