@@ -1,0 +1,17 @@
+node_modules
+.git
+.env
+.env.*
+!.env.example
+npm-debug.log*
+apps/web/.next
+apps/web/playwright-report
+apps/web/test-results
+apps/web/coverage
+apps/web/e2e-integration
+apps/api/test
+apps/api/coverage
+*.md
+.github
+docs
+infra
