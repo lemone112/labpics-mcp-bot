@@ -19,9 +19,12 @@ async function signIn(page, username = "admin", password = "admin") {
   await page.waitForTimeout(5_000);
 
   const currentUrl = page.url();
+  const pageContent = await page.content();
+  const bodySnippet = pageContent.replace(/<script[\s\S]*?<\/script>/g, "").slice(0, 2000);
   console.log(`[signIn] URL after click: ${currentUrl}`);
-  console.log(`[signIn] Console:\n${consoleLogs.join("\n")}`);
-  console.log(`[signIn] Network (non-_next):\n${networkRequests.filter((r) => !r.includes("_next")).join("\n")}`);
+  console.log(`[signIn] Console (${consoleLogs.length}):\n${consoleLogs.slice(0, 20).join("\n")}`);
+  console.log(`[signIn] ALL network (${networkRequests.length}):\n${networkRequests.slice(0, 30).join("\n")}`);
+  console.log(`[signIn] Page body snippet:\n${bodySnippet.slice(0, 500)}`);
 
   await expect(page).toHaveURL(/\/control-tower\/dashboard$/);
 }
