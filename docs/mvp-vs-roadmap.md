@@ -1,6 +1,6 @@
 # Статус продукта и roadmap (Production-Ready Plan)
 
-> Обновлено: 2026-02-19 (post Iter 0-12 + Design Audit. Source of truth: [GitHub Issues](https://github.com/lemone112/labpics-dashboard/milestones))
+> Обновлено: 2026-02-20 (post Wave 2 + Business Audit + Wave 3 plan. Source of truth: [GitHub Issues](https://github.com/lemone112/labpics-dashboard/milestones))
 > Детальный анализ: [`docs/product-structure-analysis.md`](./product-structure-analysis.md)
 
 ---
@@ -193,9 +193,18 @@
 ⬜ Iter 14 (design system) ──── 16 tasks — MEDIUM
 ⬜ Iter 15 (TS, CI/CD) ──────── 14 tasks — MEDIUM
 ⬜ Iter 16 (QA & release) ───── 15 tasks — HIGH
+--- Wave 3 (Iter 44–51) ---
+⬜ Iter 44 (scheduler) ──────── 7 tasks — P0
+⬜ Iter 45 (search UX) ──────── 8 tasks — P0
+⬜ Iter 46 (monitoring UI) ──── 7 tasks — P1
+⬜ Iter 47 (infrastructure) ─── 6 tasks — P1
+⬜ Iter 48 (reporting) ──────── 6 tasks — P1
+⬜ Iter 49 (multi-user) ─────── 8 tasks — P0
+⬜ Iter 50 (TG bot MVP) ─────── 8 tasks — P0
+⬜ Iter 51 (TG bot advanced) ── 7 tasks — P1
 ```
 
-**Итого:** 12 итераций завершены (77/79 задач). 5 итераций открыто (68 задач, из них 5 уже закрыты). Iter 11 — ключевая: HKUDS LightRAG + MCP.
+**Итого:** 12 итераций завершены (77/79 задач). Wave 2: 5 итераций (68 задач). Wave 3: 8 итераций (57 задач). Iter 11 — ключевая: HKUDS LightRAG + MCP.
 
 ---
 
@@ -246,22 +255,63 @@ Telegram Bot (LLM) → daniel-lightrag-mcp (22 tools) → LightRAG Server → Po
 
 ---
 
-## 7) Явно вне scope
+## 7) Wave 3 — Product Growth (Iter 44–51)
 
-- KAG pipeline (удалён в Iter 10).
-- Black-box рекомендационные агенты без evidence.
-- RBAC / multi-user auth (single-user auth + scope достаточен для MVP).
-- Дорогие LLM-решения в критических операционных циклах.
-- Полная TypeScript миграция (только инкрементальный подход).
+> Детальный план: [`docs/iteration-plan-wave3.md`](./iteration-plan-wave3.md)
+> Основа: инфраструктурный аудит (Feb 2026) + бизнес Q&A сессия
+
+**Контекст:** Design studio lab.pics, 2–5 PM + Owner, 5–10 активных проектов, $5–20K avg.
+
+| Iter | Название | Issues | Приоритет | Фокус |
+|------|----------|--------|-----------|-------|
+| 44 | Scheduler & Connector Reliability | [#349–#355](https://github.com/lemone112/labpics-dashboard/milestone/34) | **P0** | Параллельный sync, метрики, dead jobs |
+| 45 | Search UX & Intelligence | [#356–#363](https://github.com/lemone112/labpics-dashboard/milestone/35) | **P0** | Debounce, пагинация, фильтры, аналитика |
+| 46 | System Monitoring UI | [#364–#370](https://github.com/lemone112/labpics-dashboard/milestone/36) | P1 | Мониторинг в дашборде (без Grafana) |
+| 47 | Infrastructure Hardening | [#371–#376](https://github.com/lemone112/labpics-dashboard/milestone/37) | P1 | Бэкапы, HTTP/2, fail2ban, deploy |
+| 48 | Automated Reporting | [#377–#382](https://github.com/lemone112/labpics-dashboard/milestone/38) | P1 | Автоотчёты: проект, финансы, KPI |
+| 49 | Multi-User & Access Control | [#383–#390](https://github.com/lemone112/labpics-dashboard/milestone/39) | **P0** | Owner/PM роли, доступ к проектам |
+| 50 | Telegram Bot MVP | [#391–#398](https://github.com/lemone112/labpics-dashboard/milestone/40) | **P0** | CryptoBot кнопки, статус, поиск, push |
+| 51 | Telegram Bot Advanced | [#399–#405](https://github.com/lemone112/labpics-dashboard/milestone/41) | P1 | Composio MCP, Whisper голос, дайджесты |
+
+**Итого Wave 3:** 57 задач в 8 итерациях.
+
+### Ключевые решения из аудита
+
+1. **Elasticsearch НЕ нужен** — PostgreSQL (pgvector + pg_trgm) достаточен для 5–10 проектов.
+2. **RabbitMQ/Celery НЕ нужны** — PostgreSQL scheduler с `FOR UPDATE SKIP LOCKED` достаточен. BullMQ — опция масштабирования.
+3. **Мониторинг: embed в UI** — стек (Prometheus + Grafana + Loki) уже развёрнут, нужно встроить метрики в дашборд.
+4. **Параллельный connector sync** — исправление 3x bottleneck (Promise.all вместо sequential loop).
+5. **Multi-user** — критично для команды из 2–5 PM. Owner видит всё, PM — свои проекты.
+6. **Telegram bot** — CryptoBot-style кнопки, Composio MCP для Linear+Attio, Whisper голос, push-уведомления.
+
+### Backlog (post Wave 3)
+
+| Область | Элемент |
+|---------|---------|
+| Integrations | Email connector (Gmail/Outlook), File attachments (S3/R2), Google Calendar, GitHub |
+| Finance | Invoicing (Stripe), Budget tracking per project |
+| Platform | Client portal (read-only), SaaS multi-tenancy, PDF/XLSX export |
+| AI | Sentiment analysis, Predictive churn, Cross-sell/upsell engine |
 
 ---
 
-## 8) Связанные документы
+## 8) Явно вне scope
+
+- KAG pipeline (удалён в Iter 10).
+- Black-box рекомендационные агенты без evidence.
+- Дорогие LLM-решения в критических операционных циклах.
+- Полная TypeScript миграция (только инкрементальный подход).
+- Elasticsearch, RabbitMQ (overkill для текущего масштаба).
+
+---
+
+## 9) Связанные документы
 
 - Детальный анализ: [`docs/product-structure-analysis.md`](./product-structure-analysis.md)
 - Iteration log: [`docs/iteration-log.md`](./iteration-log.md)
+- Wave 2 план: [`docs/iteration-plan-wave2.md`](./iteration-plan-wave2.md)
+- Wave 3 план: [`docs/iteration-plan-wave3.md`](./iteration-plan-wave3.md)
 - Платформенные инварианты: [`docs/platform-architecture.md`](./platform-architecture.md)
 - Redis/SSE архитектура: [`docs/redis-sse.md`](./redis-sse.md)
 - LightRAG контракт: [`docs/lightrag-contract.md`](./lightrag-contract.md)
-- LightRAG-only spec: [`docs/specs/0018-lightrag-only-mode.md`](./specs/0018-lightrag-only-mode.md)
 - Бэклог: [`docs/backlog.md`](./backlog.md)
