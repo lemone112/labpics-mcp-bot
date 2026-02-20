@@ -220,10 +220,7 @@ export async function runAllConnectorsSync(pool, scope, logger = console, option
     ok: results.filter((r) => r.status === "ok").length,
     failed: results.filter((r) => r.status === "failed").length,
   });
-<<<<<<< Updated upstream
-=======
 
->>>>>>> Stashed changes
   const summary = {
     total: CONNECTORS.length,
     ok: results.filter((row) => row.status === "ok").length,
@@ -235,10 +232,7 @@ export async function runAllConnectorsSync(pool, scope, logger = console, option
       payload: summary,
     });
   }
-<<<<<<< Updated upstream
-=======
 
->>>>>>> Stashed changes
   await emitProgress("matview_refresh");
   try {
     await pool.query('REFRESH MATERIALIZED VIEW CONCURRENTLY mv_portfolio_dashboard');

@@ -10,8 +10,18 @@
 -- ---------------------------------------------------------------------------
 
 ALTER TABLE app_users
-  ADD COLUMN IF NOT EXISTS role text NOT NULL DEFAULT 'pm'
-    CHECK (role IN ('owner', 'pm'));
+  ADD COLUMN IF NOT EXISTS role text NOT NULL DEFAULT 'pm';
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'app_users_role_check'
+  ) THEN
+    ALTER TABLE app_users
+      ADD CONSTRAINT app_users_role_check
+      CHECK (role IN ('owner', 'pm'));
+  END IF;
+END $$;
 
 ALTER TABLE app_users
   ADD COLUMN IF NOT EXISTS email text;
