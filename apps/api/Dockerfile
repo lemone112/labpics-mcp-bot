@@ -6,7 +6,7 @@ COPY apps/api/package.json ./apps/api/
 COPY apps/web/package.json ./apps/web/
 COPY apps/telegram-bot/package.json ./apps/telegram-bot/
 COPY packages/shared-types/package.json ./packages/shared-types/
-RUN npm ci -w apps/api --omit=dev
+RUN npm ci --omit=dev
 
 # --- runner stage: minimal production image ---
 FROM node:22-alpine AS runner
