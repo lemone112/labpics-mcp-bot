@@ -8,7 +8,7 @@ const currentDir = path.dirname(currentFile);
 const nextConfig = {
   reactStrictMode: true,
   turbopack: {
-    root: currentDir,
+    root: path.resolve(currentDir, "../.."),
   },
   async headers() {
     const sseOrigin = process.env.NEXT_PUBLIC_SSE_URL || "";

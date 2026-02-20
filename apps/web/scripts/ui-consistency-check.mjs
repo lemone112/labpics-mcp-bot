@@ -30,9 +30,9 @@ const requiredPaths = [
   "components/ui/toast.jsx",
   "components/ui/skeleton-block.jsx",
   "lib/motion.js",
-  "DESIGN_SYSTEM_2026.md",
-  "COMPONENT_SELECTION.md",
-  "QUALITY_GATES_UI.md",
+  "../../docs/design/DESIGN_SYSTEM_2026.md",
+  "../../docs/design/COMPONENT_SELECTION.md",
+  "../../docs/design/QUALITY_GATES_UI.md",
 ];
 
 const missing = requiredPaths.filter((relPath) => !fs.existsSync(path.join(ROOT, relPath)));
