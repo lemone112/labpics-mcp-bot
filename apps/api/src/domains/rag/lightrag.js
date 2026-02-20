@@ -43,6 +43,12 @@ function buildLikePatterns(query) {
   return tokens.map((token) => `%${sanitizeLike(token)}%`);
 }
 
+function toDateOrNull(value) {
+  if (!value) return null;
+  const date = value instanceof Date ? value : new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
 function lightragAnswer(query, chunkCount, messageCount, issueCount, opportunityCount) {
   const parts = [];
   parts.push(`Запрос: "${asText(query, 500)}".`);
@@ -195,6 +201,9 @@ export async function queryLightRag(pool, scope, options = {}, logger = console)
   const sourceFilter = Array.isArray(options.sourceFilter)
     ? new Set(options.sourceFilter.map((s) => String(s).toLowerCase().trim()).filter(Boolean))
     : null;
+  const dateFrom = toDateOrNull(options.dateFrom);
+  const dateTo = toDateOrNull(options.dateTo);
+  const dateToExclusive = dateTo ? new Date(dateTo.getTime() + (24 * 60 * 60 * 1000)) : null;
   const includeMessages = !sourceFilter || sourceFilter.has("messages");
   const includeIssues = !sourceFilter || sourceFilter.has("issues");
   const includeOpportunities = !sourceFilter || sourceFilter.has("deals") || sourceFilter.has("opportunities");
@@ -220,10 +229,12 @@ export async function queryLightRag(pool, scope, options = {}, logger = console)
           AND account_scope_id = $2
           AND btrim(COALESCE(content, '')) <> ''
           AND COALESCE(content, '') ILIKE ANY($3::text[])
+        AND ($4::timestamptz IS NULL OR created_at >= $4::timestamptz)
+          AND ($5::timestamptz IS NULL OR created_at < $5::timestamptz)
         ORDER BY created_at DESC NULLS LAST
-        LIMIT $4
+        LIMIT $6
       `,
-      [scope.projectId, scope.accountScopeId, safePatterns, sourceLimit]
+      [scope.projectId, scope.accountScopeId, safePatterns, dateFrom, dateToExclusive, sourceLimit]
     ) : emptyResult,
     includeIssues ? pool.query(
       `
@@ -246,10 +257,12 @@ export async function queryLightRag(pool, scope, options = {}, logger = console)
             COALESCE(title, '') ILIKE ANY($3::text[])
             OR COALESCE(next_step, '') ILIKE ANY($3::text[])
           )
+        AND ($4::timestamptz IS NULL OR updated_at >= $4::timestamptz)
+          AND ($5::timestamptz IS NULL OR updated_at < $5::timestamptz)
         ORDER BY updated_at DESC NULLS LAST
-        LIMIT $4
+        LIMIT $6
       `,
-      [scope.projectId, scope.accountScopeId, safePatterns, sourceLimit]
+      [scope.projectId, scope.accountScopeId, safePatterns, dateFrom, dateToExclusive, sourceLimit]
     ) : emptyResult,
     includeOpportunities ? pool.query(
       `
@@ -273,10 +286,12 @@ export async function queryLightRag(pool, scope, options = {}, logger = console)
             OR COALESCE(next_step, '') ILIKE ANY($3::text[])
             OR COALESCE(stage, '') ILIKE ANY($3::text[])
           )
+        AND ($4::timestamptz IS NULL OR updated_at >= $4::timestamptz)
+          AND ($5::timestamptz IS NULL OR updated_at < $5::timestamptz)
         ORDER BY updated_at DESC NULLS LAST
-        LIMIT $4
+        LIMIT $6
       `,
-      [scope.projectId, scope.accountScopeId, safePatterns, sourceLimit]
+      [scope.projectId, scope.accountScopeId, safePatterns, dateFrom, dateToExclusive, sourceLimit]
     ) : emptyResult,
   ]);
 

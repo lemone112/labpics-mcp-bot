@@ -18,7 +18,7 @@ export function registerLightragRoutes(ctx) {
     const result = await queryLightRag(
       pool,
       scope,
-      { query: body.query, topK: body.topK, sourceLimit: body.sourceLimit, createdBy: request.auth?.username || null },
+      { query: body.query, topK: body.topK, sourceLimit: body.sourceLimit, dateFrom: body.date_from, dateTo: body.date_to, createdBy: request.auth?.username || null },
       request.log
     );
     return sendOk(reply, request.requestId, {
@@ -38,7 +38,7 @@ export function registerLightragRoutes(ctx) {
     const scope = requireProjectScope(request);
     const body = parseBody(LightRagQuerySchema, request.body);
 
-    const ragCacheKey = `lightrag:${scope.projectId}:${cacheKeyHash(body.query, String(body.topK), JSON.stringify(body.sourceFilter || []))}`;
+    const ragCacheKey = `lightrag:${scope.projectId}:${cacheKeyHash(body.query, String(body.topK), JSON.stringify(body.sourceFilter || []), String(body.date_from || ''), String(body.date_to || ''))}`;
     const cached = await cache.get(ragCacheKey);
     if (cached) return sendOk(reply, request.requestId, { ...cached, cached: true });
 
@@ -46,7 +46,7 @@ export function registerLightragRoutes(ctx) {
     const result = await queryLightRag(
       pool,
       scope,
-      { query: body.query, topK: body.topK, sourceLimit: body.sourceLimit, sourceFilter: body.sourceFilter, createdBy: request.auth?.username || null },
+      { query: body.query, topK: body.topK, sourceLimit: body.sourceLimit, sourceFilter: body.sourceFilter, dateFrom: body.date_from, dateTo: body.date_to, createdBy: request.auth?.username || null },
       request.log
     );
     const durationMs = Date.now() - startTime;
@@ -68,7 +68,7 @@ export function registerLightragRoutes(ctx) {
     trackSearchEvent(pool, scope, {
       query: body.query,
       resultCount: rankedEvidence.length,
-      filters: { sourceFilter: body.sourceFilter, topK: body.topK },
+      filters: { sourceFilter: body.sourceFilter, topK: body.topK, dateFrom: body.date_from, dateTo: body.date_to },
       userId: request.auth?.user_id || null,
       eventType: "search",
       durationMs,
