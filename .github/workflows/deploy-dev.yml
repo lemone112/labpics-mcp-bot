@@ -4,8 +4,8 @@ on:
   push:
     branches: [cursor/labpics_dashboard]
     paths:
-      - "server/**"
-      - "web/**"
+      - "apps/api/**"
+      - "apps/web/**"
       - "docker-compose.yml"
       - "infra/caddy/**"
       - ".github/workflows/deploy-dev.yml"
@@ -28,7 +28,7 @@ jobs:
           node-version: 22
 
       - name: Validate server
-        working-directory: server
+        working-directory: apps/api
         run: |
           set -euo pipefail
           npm ci
@@ -37,7 +37,7 @@ jobs:
           done < <(find src -name "*.js" -type f | sort)
 
       - name: Validate web
-        working-directory: web
+        working-directory: apps/web
         run: |
           set -euo pipefail
           npm ci
