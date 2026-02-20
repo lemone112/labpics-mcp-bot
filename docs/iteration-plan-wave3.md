@@ -1,4 +1,4 @@
-# Unified Iteration Plan — All Open Work (196 issues)
+# Unified Iteration Plan — All Open Work (228 issues)
 
 > Обновлено: 2026-02-20
 > Source of truth: [GitHub Milestones](https://github.com/lemone112/labpics-dashboard/milestones)
@@ -54,9 +54,15 @@ Phase 8 — Code Audit Fixes ★ (2026-02-20 audit)
   Iter 54  Frontend Resilience ──────────── 8 tasks  P1  ← Promise.allSettled, hooks
   Iter 55  Observability & Audit Trail ──── 8 tasks  P1  ← logging, retention, rate limit
   Iter 56  Config & Infra Hardening ─────── 6 tasks  P2  ← env vars, Docker, validation
+
+Phase 9 — Comprehensive Testing ★★★ (финальная валидация)
+  Iter 57  Backend Unit Test Expansion ──── 8 tasks  P0  ← identity-graph, connectors, scheduler
+  Iter 58  E2E Test Suite ─────────────── 8 tasks  P0  ← все страницы, mobile, empty states
+  Iter 59  Integration & Contract Testing ── 8 tasks  P1  ← sync cycle, RBAC, cascade, API contracts
+  Iter 60  TG Bot & Performance Testing ── 8 tasks  P1  ← bot tests, load, Lighthouse, visual
 ```
 
-**Total: 196 issues across 25 iterations in 8 phases.**
+**Total: 228 issues across 29 iterations in 9 phases.**
 
 ---
 
@@ -94,6 +100,12 @@ Phase 8: Iter 52-56 — independent, can start immediately (audit fixes)
   Iter 54 (Frontend) — no dependencies, P1
   Iter 55 (Observability) — no dependencies, P1
   Iter 56 (Config) — no dependencies, P2
+
+Phase 9: Iter 57-60 — testing gate (requires Phase 1-8 features to exist)
+  Iter 57 (Backend Unit Tests) ← requires Phase 1 + Phase 8 code to exist
+  Iter 58 (E2E Tests) ← requires Phase 2-3 UI pages to exist
+  Iter 59 (Integration Tests) ← requires Iter 44, 49, 11 (scheduler, auth, LightRAG)
+  Iter 60 (TG Bot + Perf) ← requires Iter 50-51 (TG Bot), Phase 7 (perf infra)
 ```
 
 ---
@@ -550,6 +562,82 @@ Fix 3x connector bottleneck (sequential → parallel). Quick wins.
 
 ---
 
+## Phase 9 — Comprehensive Testing (32 tasks)
+
+> Финальная фаза: валидация всего продукта перед production release.
+> Зависит от завершения Phase 1-8 (код должен существовать для тестирования).
+> Все итерации Phase 9 можно начинать инкрементально по мере готовности фич.
+
+### Iter 57 — Backend Unit Test Expansion (P0, 8 tasks)
+
+> Issues: [#475–#482](https://github.com/lemone112/labpics-dashboard/milestone/47)
+
+Покрытие всех критических сервисов unit-тестами. Цель: 80% line coverage.
+
+| # | Task | Priority |
+|---|------|----------|
+| 57.1 | Unit tests: identity-graph.js (similarityScore, Unicode, dedupeKey) | P0 |
+| 57.2 | Unit tests: sources.js (resolveProjectSourceBinding, 23505 handling) | P0 |
+| 57.3 | Unit tests: connector-state.js (scope protection, mark* functions) | P0 |
+| 57.4 | Unit tests: connector-sync.js (full sync flow, error handling) | P0 |
+| 57.5 | Unit tests: embeddings.js (batch processing, partial failure) | P1 |
+| 57.6 | Unit tests: scheduler.js (cascade triggers, timeout logic) | P1 |
+| 57.7 | Unit tests: event-log.js (dedup, sync logic) | P1 |
+| 57.8 | Enforce 80% line coverage gate in CI (c8 --check-coverage) | P0 |
+
+### Iter 58 — E2E Test Suite (P0, 8 tasks)
+
+> Issues: [#483–#490](https://github.com/lemone112/labpics-dashboard/milestone/48)
+
+Полный Playwright E2E для всех страниц: desktop + mobile, данные + empty states.
+
+| # | Task | Priority |
+|---|------|----------|
+| 58.1 | E2E: login flow (valid/invalid, session persistence, logout) | P0 |
+| 58.2 | E2E: project creation, selection, scope isolation | P0 |
+| 58.3 | E2E: Control Tower — все 6 секций + empty states (wizard) | P0 |
+| 58.4 | E2E: Search/LightRAG (query, results, evidence, empty) | P0 |
+| 58.5 | E2E: Jobs & Connectors pages (status, errors, retry) | P1 |
+| 58.6 | E2E: CRM page (accounts, opportunities kanban) | P1 |
+| 58.7 | E2E: Signals, Analytics, Digests, Offers pages | P1 |
+| 58.8 | E2E: mobile responsive (375/768/1440, touch targets, charts) | P1 |
+
+### Iter 59 — Integration & Contract Testing (P1, 8 tasks)
+
+> Issues: [#491–#498](https://github.com/lemone112/labpics-dashboard/milestone/49)
+
+Full-stack интеграционные тесты с реальной PostgreSQL + Redis.
+
+| # | Task | Priority |
+|---|------|----------|
+| 59.1 | Integration: full connector sync cycle (Chatwoot/Linear/Attio → DB) | P0 |
+| 59.2 | Integration: Identity Graph end-to-end (generate → review → apply) | P0 |
+| 59.3 | Integration: scheduler cascade chain execution | P1 |
+| 59.4 | Integration: SSE event delivery (Redis → browser, scoping) | P1 |
+| 59.5 | Integration: Auth + RBAC enforcement (Owner vs PM) | P1 |
+| 59.6 | API contract tests: all endpoints against Zod schemas | P1 |
+| 59.7 | Database migration idempotency test | P2 |
+| 59.8 | Integration: reconciliation pipeline with synthetic data | P2 |
+
+### Iter 60 — TG Bot & Performance Testing (P1, 8 tasks)
+
+> Issues: [#499–#506](https://github.com/lemone112/labpics-dashboard/milestone/50)
+
+Тестирование Telegram-бота + нагрузочное + визуальная регрессия.
+
+| # | Task | Priority |
+|---|------|----------|
+| 60.1 | TG bot: unit tests for intent detection and routing | P0 |
+| 60.2 | TG bot: unit tests for draft management and ownership | P0 |
+| 60.3 | TG bot: integration test with mock Supabase | P1 |
+| 60.4 | API load testing with autocannon (5 key endpoints) | P1 |
+| 60.5 | Lighthouse CI gate (>90 performance, >90 a11y) | P1 |
+| 60.6 | Database query performance benchmarks (EXPLAIN ANALYZE) | P2 |
+| 60.7 | Visual regression baseline for all pages + mobile | P2 |
+| 60.8 | TG bot: TypeScript strict mode + Biome lint rules | P2 |
+
+---
+
 ## UX/UI Quality Standards (обязательно для Phase 3+)
 
 Все UI-изменения обязаны проходить:
@@ -583,6 +671,11 @@ Fix 3x connector bottleneck (sequential → parallel). Quick wins.
 
 ## Changelog
 
+- **v4** (2026-02-20): Comprehensive testing — added Phase 9 (Iter 57–60) with 32 testing tasks.
+  228 total issues across 29 iterations in 9 phases. Coverage: backend unit tests (identity-graph,
+  connectors, scheduler, embeddings), full E2E suite (all pages + mobile), integration tests
+  (sync cycle, RBAC, cascade, API contracts), TG bot tests, load testing, Lighthouse CI, visual regression.
+  Coverage gate: 80% line coverage enforced in CI.
 - **v3** (2026-02-20): Code audit — added Phase 8 (Iter 52–56) with 37 audit findings.
   196 total issues across 25 iterations in 8 phases. Critical: watermark data loss, TG bot auth,
   scheduler timeouts, frontend resilience, observability gaps.
