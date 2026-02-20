@@ -6,8 +6,17 @@
 -- =============================================================================
 
 -- ---------------------------------------------------------------------------
--- 49.1: Extend app_users with role and email
+-- 49.1: Re-create app_users (dropped in 0018) and extend with role and email
 -- ---------------------------------------------------------------------------
+-- Migration 0018 dropped app_users as "orphaned". RBAC re-introduces it.
+
+CREATE TABLE IF NOT EXISTS app_users (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  username text NOT NULL UNIQUE,
+  password_hash text NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
 
 ALTER TABLE app_users
   ADD COLUMN IF NOT EXISTS role text NOT NULL DEFAULT 'pm';
