@@ -9,8 +9,17 @@ async function signIn(page, username = "admin", password = "admin") {
   await expect(page.getByTestId("login-username")).toBeVisible();
   await page.getByTestId("login-username").fill(username);
   await page.getByTestId("login-password").fill(password);
-  await page.getByTestId("login-submit").click();
-  await expect(page).toHaveURL(/\/control-tower\/dashboard$/);
+
+  // Capture the login API response for debugging
+  const [response] = await Promise.all([
+    page.waitForResponse((res) => res.url().includes("/auth/login"), { timeout: 15_000 }),
+    page.getByTestId("login-submit").click(),
+  ]);
+  const status = response.status();
+  const body = await response.text().catch(() => "");
+  console.log(`[signIn] POST /auth/login → ${status} | ${body.slice(0, 500)}`);
+
+  await expect(page).toHaveURL(/\/control-tower\/dashboard$/, { timeout: 10_000 });
 }
 
 async function createProject(page, name) {
