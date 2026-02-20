@@ -15,9 +15,9 @@ async function signIn(page, username = "admin", password = "admin") {
 
 async function createProject(page, name) {
   await page.goto("/projects");
-  await expect(page.getByPlaceholder("Project name")).toBeVisible();
-  await page.getByPlaceholder("Project name").fill(name);
-  await page.getByRole("button", { name: "Create" }).click();
+  await expect(page.getByPlaceholder("Название проекта")).toBeVisible();
+  await page.getByPlaceholder("Название проекта").fill(name);
+  await page.getByRole("button", { name: "Создать" }).click();
   await expect(page.getByRole("cell", { name })).toBeVisible();
 }
 
@@ -51,7 +51,7 @@ test("real stack: new session auto-resolves active project and jobs page works w
 
   await signIn(page);
   await page.goto("/jobs");
-  await expect(page.getByRole("button", { name: "Run Chatwoot Sync" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Синхронизация Chatwoot" })).toBeVisible();
   await expect(page.getByText("Сначала выберите активный проект")).toHaveCount(0);
   await expect(page.getByText(/active_project_required/i)).toHaveCount(0);
 });
@@ -65,11 +65,11 @@ test.describe("mobile real stack", () => {
     await signIn(page);
     await createProject(page, projectName);
     await page.goto("/jobs");
-    await expect(page.getByRole("button", { name: "Run Chatwoot Sync" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Синхронизация Chatwoot" })).toBeVisible();
 
     await switchProjectFromSidebar(page, projectName, { mobile: true });
 
-    await page.getByRole("button", { name: "Refresh status" }).click();
+    await page.getByRole("button", { name: "Обновить" }).click();
     await expect(page.getByText(/active_project_required/i)).toHaveCount(0);
     await expect(page.getByText("Сначала выберите активный проект")).toHaveCount(0);
   });
