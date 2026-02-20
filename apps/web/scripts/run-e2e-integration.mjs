@@ -28,6 +28,7 @@ const composeEnv = {
   POSTGRES_DB: dbName,
   POSTGRES_USER: dbUser,
   POSTGRES_PASSWORD: dbPassword,
+  AUTH_CREDENTIALS: authCredentials,
 };
 
 function runCommand(command, args, { cwd, env = {}, allowFailure = false } = {}) {
