@@ -1,5 +1,7 @@
 # Платформенная архитектура и инварианты
 
+Обновлено: 2026-02-20
+
 Этот документ фиксирует правила, которые нельзя нарушать при разработке.
 
 ## 1) Scope — обязательный контракт
@@ -9,11 +11,17 @@
 - API требует активный проект в сессии.
 - На уровне БД действует `enforce_project_scope_match`.
 
+**Multi-user ACL (Iter 49):**
+- Owner-роль: полный доступ ко всем проектам и данным (portfolio scope).
+- PM-роль: доступ только к назначенным проектам.
+- ACL enforcement: middleware `rbac` на уровне API, НЕ frontend-only.
+- `user_id` обязателен в `audit_events` после Iter 49.
+
 ## 2) LightRAG-only режим
 
 - Продуктовый интеллект-контур = custom hybrid RAG (`/lightrag/*` endpoints).
 - KAG pipeline полностью удалён (Iter 10): код, routes, scheduler jobs, DB-таблицы.
-- Миграция на HKUDS LightRAG запланирована в Iter 11.
+- Миграция на HKUDS LightRAG запланирована в Iter 11. Контракт миграции: [`docs/lightrag-contract.md`](./lightrag-contract.md).
 
 ## 3) Evidence-first
 
@@ -69,6 +77,21 @@ health_scoring → analytics_aggregates
 Механизм: `UPDATE scheduled_jobs SET next_run_at = now()` для downstream.
 Устраняет задержку в 15-30 минут между синхронизацией и обновлением аналитики.
 
+## 10) Multi-user инварианты (Iter 49)
+
+- Авторизация: role-based (Owner / PM).
+- Каждый API-запрос проходит через `rbac` middleware.
+- Owner: CRUD всех проектов + team management + system settings.
+- PM: CRUD только назначенных проектов, read-only для portfolio.
+- Session: `user_id` + `role` + `project_ids[]` в session data.
+
+## 11) Monitoring инварианты (Iter 46)
+
+- Мониторинг встроен в UI (System page), НЕ выносится в Grafana.
+- Источники данных: `GET /metrics`, `GET /jobs/status`, `GET /connectors/state`.
+- Alert history хранится в БД, не в external service.
+- Доступ к System page: только Owner (или PM с расширенными правами).
+
 ---
 
 Ссылки:
@@ -76,3 +99,5 @@ health_scoring → analytics_aggregates
 - Data model: [`docs/data-model.md`](./data-model.md)
 - Pipelines: [`docs/pipelines.md`](./pipelines.md)
 - Real-time архитектура: [`docs/redis-sse.md`](./redis-sse.md)
+- Единый план: [`docs/iteration-plan-wave3.md`](./iteration-plan-wave3.md)
+- LightRAG контракт: [`docs/lightrag-contract.md`](./lightrag-contract.md)

@@ -1,5 +1,7 @@
 # Бэклог (Product Backlog)
 
+> **SUPERSEDED:** Этот документ заменён [`docs/iteration-plan-wave3.md`](./iteration-plan-wave3.md) — единый план выполнения для всех 159 открытых issue. Содержимое ниже сохранено как исторический справочник.
+
 > Обновлено: 2026-02-19
 > Roadmap: [`docs/mvp-vs-roadmap.md`](./mvp-vs-roadmap.md)
 > Iteration plan (Wave 2): [`docs/iteration-plan-wave2.md`](./iteration-plan-wave2.md)

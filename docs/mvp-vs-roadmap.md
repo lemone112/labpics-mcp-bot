@@ -148,28 +148,89 @@
 | 15 | TypeScript, CI/CD & Infrastructure | [#77–#90](https://github.com/lemone112/labpics-dashboard/milestone/4) | MEDIUM | TS migration, Pino logging, Biome |
 | 16 | QA & Release Readiness | [#91–#102, #117–#119](https://github.com/lemone112/labpics-dashboard/milestone/5) | HIGH | E2E tests, dead-code cleanup, polish |
 
+### Целевая архитектура (после Iter 11 + 49–51)
+
+```
+┌──────────────────────────────────────────────────────────┐
+│              Telegram Bot (Iter 50–51)                    │
+│  ┌──────────────┐  ┌───────────────┐  ┌───────────────┐ │
+│  │ Composio MCP │  │ LightRAG MCP  │  │ Whisper API   │ │
+│  │ Linear +     │  │ daniel-       │  │ (OpenAI)      │ │
+│  │ Attio actions│  │ lightrag-mcp  │  │ voice → text  │ │
+│  └──────┬───────┘  └──────┬────────┘  └───────────────┘ │
+│         │                 │     CryptoBot-style кнопки   │
+│         │                 │     Push-уведомления          │
+└─────────┼─────────────────┼──────────────────────────────┘
+          │                 │
+          ▼                 ▼
+┌─────────────────────────────────────────────────────────┐
+│  Fastify API (Iter 11 + 44 + 49)                        │
+│  ├─ /lightrag/query → LightRAG Server (proxy)           │
+│  ├─ /auth/* → multi-user (Owner / PM roles)             │
+│  ├─ ACL filtering (project-scoped access)               │
+│  ├─ Structured citations + evidence                     │
+│  └─ Parallel connector sync (Promise.all)               │
+└──────────────────────┬──────────────────────────────────┘
+                       │
+┌──────────────────────▼──────────────────────────────────┐
+│  Labpics Web — Next.js (Iter 20–24 + 45–46 + 48)       │
+│  ├─ Control Tower (6 sections, hero + trust bar)        │
+│  ├─ Search UX (debounce, filters, autocomplete)         │
+│  ├─ Charts & Visualization (deep rework)                │
+│  ├─ System Monitoring (embedded, не Grafana)            │
+│  ├─ Reports (auto-generated, viewer UI)                 │
+│  ├─ Team management (Owner-only)                        │
+│  └─ Mobile responsive + a11y                            │
+└─────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────┐
+│  LightRAG Server — Python (Iter 11)                     │
+│  ├─ Knowledge graph (entity extraction, LLM-based)      │
+│  ├─ Dual-level retrieval (entities + themes)            │
+│  ├─ REST API: /query, /documents, /graph                │
+│  └─ Из форка lemone112/lightrag                         │
+└──────────────────────┬──────────────────────────────────┘
+                       │
+┌──────────────────────▼──────────────────────────────────┐
+│  PostgreSQL (shared DB)                                  │
+│  ├─ pgvector (embeddings 1536-dim)                      │
+│  ├─ PGGraph (entity relationships)                      │
+│  ├─ source_documents, entities, entity_links            │
+│  ├─ Connector data: Chatwoot, Linear, Attio             │
+│  ├─ users, project_users, sessions (Iter 49)            │
+│  ├─ report_templates, report_runs (Iter 48)             │
+│  └─ search_queries (Iter 45)                            │
+├─────────────────────────────────────────────────────────┤
+│  Redis: SSE Pub/Sub + cache + session store             │
+└──────────────────────▲──────────────────────────────────┘
+                       │
+          ┌────────────┴────────────┐
+          │                         │
+┌─────────┴──────────┐  ┌──────────┴─────────┐
+│  Connector Sync    │  │  Ingestion Pipeline │
+│  (worker, 5min)    │  │  (Iter 11.2)        │
+│  Chatwoot + Linear │  │  raw → source_docs  │
+│  + Attio (parallel)│  │  → entities → graph │
+└────────────────────┘  └────────────────────┘
+
+Инфраструктура:
+┌─────────────────────────────────────────────────────────┐
+│  Caddy 2.9.1 (reverse proxy, auto-TLS, HTTP/2)         │
+│  Prometheus + Loki + Grafana (мониторинг)               │
+│  Docker Compose (7+ сервисов, resource limits)          │
+│  VPS deploy (backup pg_dump + fail2ban)                 │
+└─────────────────────────────────────────────────────────┘
+```
+
+**Отличия от текущего состояния:**
+- Сейчас: custom hybrid RAG (pgvector + ILIKE), single-user, Composio MCP только
+- Целевое: HKUDS LightRAG + knowledge graph, multi-user, Composio + LightRAG MCP + Whisper
+
 ### Iter 11 — HKUDS LightRAG Integration (CRITICAL)
 
-Миграция с custom hybrid RAG на [HKUDS LightRAG](https://github.com/HKUDS/LightRAG) из форка [`lemone112/lightrag`](https://github.com/lemone112/lightrag). Knowledge graph + dual-level retrieval + PostgreSQL backend + MCP для Telegram бота.
+Миграция с custom hybrid RAG на [HKUDS LightRAG](https://github.com/HKUDS/LightRAG) из форка [`lemone112/lightrag`](https://github.com/lemone112/lightrag). Knowledge graph + dual-level retrieval + PostgreSQL backend.
 
-```
-┌─────────────────┐     ┌─────────────────────┐     ┌──────────────┐
-│  Telegram Bot   │────▶│ daniel-lightrag-mcp  │────▶│  LightRAG    │
-│  (LLM + MCP)   │     │ (22 tools, MCP)      │     │  Server      │
-└─────────────────┘     └─────────────────────┘     │  (Python)    │
-                                                     └──────┬───────┘
-┌─────────────────┐     ┌─────────────────────┐            │
-│  Labpics Web    │────▶│  Fastify API         │────▶ LightRAG REST API
-│  (Next.js)      │     │  (proxy endpoints)   │            │
-└─────────────────┘     └─────────────────────┘     ┌──────▼───────┐
-                                                     │  PostgreSQL  │
-                        ┌─────────────────────┐     │  pgvector    │
-                        │  Connector Sync      │────▶│  PGGraph     │
-                        │  (worker)            │     │  (shared DB) │
-                        └─────────────────────┘     └──────────────┘
-```
-
-**Критерии завершения:** LightRAG Server запущен, connector data в knowledge graph, `/lightrag/query` возвращает graph entities, Telegram бот работает через MCP, frontend без изменений (proxy)
+**Критерии завершения:** LightRAG Server запущен, connector data в knowledge graph, `/lightrag/query` возвращает graph entities, daniel-lightrag-mcp доступен для Telegram бота, frontend без изменений (proxy)
 
 ---
 
@@ -241,13 +302,23 @@
 
 KAG (custom Knowledge Augmented Graph) — удалён в Iter 10. 2,770 LOC кода, routes, scheduler jobs, DB-таблицы. `kag_event_log` переименован в `connector_events`.
 
-### Telegram Bot Architecture
+### Telegram Bot Architecture (Iter 50–51)
 
 ```
-Telegram Bot (LLM) → daniel-lightrag-mcp (22 tools) → LightRAG Server → PostgreSQL
+Telegram Bot (TypeScript, Docker)
+├── Composio MCP ──→ Linear API (create/update tasks)
+│                ──→ Attio API  (update deals, add notes)
+├── LightRAG MCP ──→ LightRAG Server ──→ PostgreSQL (knowledge graph)
+├── Whisper API  ──→ OpenAI (voice → text)
+├── Fastify API  ──→ /portfolio/overview, /lightrag/query, /jobs/status
+└── Push: risks, deadlines, new messages, digests
 ```
 
-Бот получает доступ к knowledge graph через MCP: query, document management, graph operations. Данные из connectors (Chatwoot, Linear, Attio) автоматически попадают в LightRAG через ingestion pipeline.
+**3 канала ввода:** CryptoBot-style кнопки, свободный текст (NLU), голосовые сообщения (Whisper).
+**2 MCP провайдера:** Composio (действия в Linear + Attio), daniel-lightrag-mcp (поиск по knowledge graph).
+**Push-уведомления:** риски, дедлайны, новые сообщения клиентов, утренние/недельные дайджесты.
+
+> Composio MCP уже реализован (`telegram-bot/src/composio.ts`). LightRAG MCP — после Iter 11.
 
 ### JS → TS — инкрементальный подход
 

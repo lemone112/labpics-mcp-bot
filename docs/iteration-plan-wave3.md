@@ -1,244 +1,487 @@
-# Wave 3 — Full Iteration Plan (Iter 44–51)
+# Unified Iteration Plan — All Open Work (159 issues)
 
-> Status: **Wave 2 complete** (Iter 10–19, design system + component library done)
-> Open from Wave 2: Iter 11 (LightRAG), 15–16 (TS/QA), 17 (Analytics), 20–26 (UX/Charts/Mobile/A11y/Perf/API)
-> Closed aspirational: Iter 27–43 (roadmap placeholders — superseded by this plan)
+> Обновлено: 2026-02-20
+> Source of truth: [GitHub Milestones](https://github.com/lemone112/labpics-dashboard/milestones)
 >
-> **Source:** Infrastructure audit (Feb 2026), business Q&A session, 5 research reports:
-> - Web server / Caddy analysis
-> - Search system (pgvector + pg_trgm) architecture review
-> - Logging / Monitoring stack audit (Prometheus + Grafana + Loki)
-> - Task queue / Scheduler analysis
-> - Full business readiness audit
+> **Контекст:** Design studio lab.pics, 2–5 PM + Owner, 5–10 активных проектов,
+> $5–20K avg, 1–3 месяца, стартапы/IT. Deploy: VPS + Docker Compose.
 >
-> **Context:** Design studio lab.pics, 2–5 PMs + Owner, 5–10 active projects,
-> $5–20K avg project, 1–3 month duration, startups/IT clients.
-> Deploy: VPS with Docker Compose. Target: possibly SaaS later.
+> **Источники:** 5 research reports (infra audit Feb 2026) + 6-round Q&A session.
+> Closed Iter 27–43 — superseded (roadmap placeholders).
 
 ---
 
-## Business priorities (from Q&A session)
+## Execution Phases
 
-1. **Multi-user access** — Owner sees all, PM sees assigned projects. Critical for team.
-2. **Telegram bot** — whole PM team uses it, CryptoBot-style buttons, voice input.
-3. **Monitoring in dashboard** — no separate Grafana, embed key metrics in UI.
-4. **Automated reports** — project status + financial overview + team KPI.
-5. **Search improvements** — core product feature, needs better UX.
-6. **Parallel connector sync** — 3x performance bottleneck, easy fix.
+```
+Phase 1 — Foundation ★ (unblocks everything)
+  Iter 11  LightRAG Integration ──────── 10 tasks  CRITICAL
+  Iter 44  Scheduler & Connectors ─────── 7 tasks  P0
+
+Phase 2 — Core Business Features
+  Iter 49  Multi-User & Access Control ── 8 tasks  P0
+  Iter 45  Search UX & Intelligence ───── 8 tasks  P0
+  Iter 20  UX Logic & IA ────────────── 11 tasks  P0
+
+Phase 3 — UX/UI Deep Work ★★ (пристальное внимание)
+  Iter 21    Page-Level Redesign ──────── 12 tasks  P0
+  Iter 20.5  Charts & Visualization ──── 12 tasks  P0  ← deep chart work
+  Iter 23    Accessibility & Polish ──── 10 tasks  P1
+
+Phase 4 — Platform & Monitoring
+  Iter 46  System Monitoring UI ────────── 7 tasks  P1
+  Iter 47  Infrastructure Hardening ────── 6 tasks  P1
+  Iter 48  Automated Reporting ────────── 6 tasks  P1
+
+Phase 5 — Telegram Bot
+  Iter 50  Telegram Bot MVP ───────────── 8 tasks  P0
+  Iter 51  Telegram Bot Advanced ──────── 7 tasks  P1
+
+Phase 6 — Mobile & Responsive
+  Iter 22  Mobile & Responsive ─────────── 8 tasks  P1
+
+Phase 7 — Quality & Tech Debt
+  Iter 16  QA & Release Readiness ──────── 3 tasks  HIGH
+  Iter 24  Design Validation & QA ──────── 9 tasks  P1
+  Iter 17  Analytics Instrumentation ───── 8 tasks  P2
+  Iter 25  Performance & Caching ────────── 9 tasks  P2
+  Iter 26  API Architecture & DX ────────── 8 tasks  P2
+  Iter 15  TypeScript Migration ──────────── 2 tasks  P2
+```
+
+**Total: 159 issues across 20 iterations in 7 phases.**
 
 ---
 
 ## Dependency Graph
 
 ```
-Iter 44 (Scheduler) ──────────────────┐
-Iter 45 (Search UX) ───────────────────┼──→ Iter 48 (Reporting)
-Iter 46 (Monitoring UI) ───────────────┤
-Iter 47 (Infrastructure) ─────────────┘
-                                       │
-Iter 49 (Multi-user) ─ requires 44,46 ─┘
-                                       │
-Iter 50 (TG Bot MVP) ─ requires 11 ───┤
-Iter 51 (TG Bot Advanced) ─ req 50 ───┘
+Phase 1:
+  Iter 11 (LightRAG) ─────────────────────────────────────┐
+  Iter 44 (Scheduler) ──┐                                  │
+                        │                                  │
+Phase 2:                ▼                                  │
+  Iter 49 (Multi-user) ←┘                                  │
+  Iter 45 (Search UX)                                      │
+  Iter 20 (UX Logic) ───────────┐                          │
+                                │                          │
+Phase 3:                        ▼                          │
+  Iter 21 (Page Redesign) ← requires 20                    │
+  Iter 20.5 (Charts) ← requires 20                        │
+  Iter 23 (A11y/Polish) ← requires 21                     │
+                                                           │
+Phase 4:                                                   │
+  Iter 46 (Monitoring) ← enhanced by 44                    │
+  Iter 47 (Infrastructure)                                 │
+  Iter 48 (Reporting) ← requires 44, 46                   │
+                                                           │
+Phase 5:                                                   ▼
+  Iter 50 (TG Bot MVP) ← requires Iter 11 (LightRAG) ────┘
+  Iter 51 (TG Bot Advanced) ← requires 50
+
+Phase 6: Iter 22 (Mobile) ← requires 21
+Phase 7: Iter 16, 24, 17, 25, 26, 15 — parallel, independent
 ```
 
-**Critical path:** Iter 44 (quick wins) → 49 (multi-user) → 50 (TG bot)
-**Parallel:** Iter 45, 46, 47 can run independently
-**Blocked:** Iter 50 depends on Iter 11 (LightRAG) for search integration
+---
+
+## Phase 1 — Foundation (17 tasks)
+
+### Iter 11 — HKUDS LightRAG Integration (CRITICAL, 10 tasks)
+
+> Issues: [#46–#55](https://github.com/lemone112/labpics-dashboard/milestone/1)
+
+Миграция с custom hybrid RAG на HKUDS LightRAG. Knowledge graph + dual-level retrieval.
+**Блокирует:** Iter 50 (TG Bot search через LightRAG MCP).
+
+| # | Task | Priority |
+|---|------|----------|
+| 11.1 | Apply migration 0021 (LightRAG full schema) | CRITICAL |
+| 11.2 | Build ingestion pipeline: raw → source_documents | CRITICAL |
+| 11.3 | Build entity extraction: source_documents → entities | CRITICAL |
+| 11.4 | Deploy HKUDS LightRAG Server | CRITICAL |
+| 11.5 | Data ingestion → LightRAG /documents API | HIGH |
+| 11.6 | Proxy LightRAG query endpoints | HIGH |
+| 11.7 | Implement ACL filtering | HIGH |
+| 11.8 | Implement structured citations | HIGH |
+| 11.9 | MCP Server for Telegram bot (daniel-lightrag-mcp) | HIGH |
+| 11.10 | LightRAG integration tests | MEDIUM |
+
+### Iter 44 — Scheduler & Connector Reliability (P0, 7 tasks)
+
+> Issues: [#349–#355](https://github.com/lemone112/labpics-dashboard/milestone/34)
+
+Fix 3x connector bottleneck (sequential → parallel). Quick wins.
+
+| # | Task | Priority |
+|---|------|----------|
+| 44.1 | Parallel connector sync (Promise.all) | P0 |
+| 44.2 | Job duration metrics (prom-client histogram) | P0 |
+| 44.3 | Dead job detection and auto-cleanup | P1 |
+| 44.4 | Job retry with configurable backoff | P1 |
+| 44.5 | Connector sync progress events via SSE | P1 |
+| 44.6 | Job execution concurrency limit | P2 |
+| 44.7 | Scheduler health endpoint | P2 |
 
 ---
 
-## Summary
+## Phase 2 — Core Business Features (27 tasks)
 
-| Iter | Name | Priority | Tasks | Depends on | Est. effort |
-|------|------|----------|-------|------------|-------------|
-| **44** | Scheduler & Connector Reliability | P0 | 7 | — | S |
-| **45** | Search UX & Intelligence | P0 | 8 | — | M |
-| **46** | System Monitoring UI | P1 | 7 | — | M |
-| **47** | Infrastructure Hardening | P1 | 6 | — | S |
-| **48** | Automated Reporting | P1 | 6 | 44, 46 | M |
-| **49** | Multi-User & Access Control | P0 | 8 | — | L |
-| **50** | Telegram Bot MVP | P0 | 8 | 11 | L |
-| **51** | Telegram Bot Advanced | P1 | 7 | 50 | L |
-| | **Total** | | **57** | | |
+### Iter 49 — Multi-User & Access Control (P0, 8 tasks)
 
-Effort: S = 1–2 days, M = 3–5 days, L = 5–8 days
+> Issues: [#383–#390](https://github.com/lemone112/labpics-dashboard/milestone/39)
+
+2–5 PM + Owner. Owner видит всё, PM — свои проекты.
+
+| # | Task | Priority |
+|---|------|----------|
+| 49.1 | DB schema: users table | P0 |
+| 49.2 | Auth upgrade: multi-user login | P0 |
+| 49.3 | Session upgrade: user_id + multi-session | P0 |
+| 49.4 | Permission middleware: role-based protection | P0 |
+| 49.5 | Project-user assignment API | P0 |
+| 49.6 | Team management UI | P1 |
+| 49.7 | User profile page | P2 |
+| 49.8 | Audit trail: user_id in events | P1 |
+
+### Iter 45 — Search UX & Intelligence (P0, 8 tasks)
+
+> Issues: [#356–#363](https://github.com/lemone112/labpics-dashboard/milestone/35)
+
+Поиск — ключевая функция продукта. Elasticsearch НЕ нужен.
+
+| # | Task | Priority |
+|---|------|----------|
+| 45.1 | Search debounce (300ms) + loading | P0 |
+| 45.2 | Pagination (offset/limit + UI) | P0 |
+| 45.3 | Date range filter | P0 |
+| 45.4 | Source type filter chips | P1 |
+| 45.5 | Search query analytics | P1 |
+| 45.6 | Fuzzy matching (pg_trgm) | P1 |
+| 45.7 | Autocomplete suggestions | P2 |
+| 45.8 | Reduce timeout 25s→10s + progressive load | P2 |
+
+### Iter 20 — UX Logic & Information Architecture (P0, 11 tasks)
+
+> Issues: [#138–#171](https://github.com/lemone112/labpics-dashboard/milestone/7)
+
+Фундамент UX: Action Queue, dashboard hierarchy, client-centric view, navigation.
+**Блокирует:** Iter 21 (page redesign) и Iter 20.5 (charts).
+
+| # | Task | Priority |
+|---|------|----------|
+| 20.1 | Design Action Queue data model | P0 |
+| 20.2 | Implement Action Queue API | P0 |
+| 20.3 | Design single guided setup flow | P0 |
+| 20.4 | Design navigation badge system | P1 |
+| 20.5 | Design client-centric view | P1 |
+| 20.6 | Define Insight Tile spec | P1 |
+| 20.7 | Define dashboard hierarchy | P0 |
+| 20.8 | Design cross-section search | P1 |
+| 20.9 | Define notification/alert system | P1 |
+| 20.10 | Design table interaction patterns | P1 |
+| 20.11 | Design error/recovery flows | P1 |
 
 ---
 
-## Iter 44 — Scheduler & Connector Reliability (P0)
+## Phase 3 — UX/UI Deep Work (34 tasks) ★★
 
-**Goal:** Fix 3x connector bottleneck, improve job observability, harden scheduler.
+> **Пристальное внимание к UX/UI.** Pixel-perfect, edge-cases, empty states,
+> responsive breakpoints, loading skeletons, error states. Clean & modern SaaS design.
+> Все правила: `DESIGN_SYSTEM_2026.md`, `QUALITY_GATES_UI.md`, `COMPONENT_SELECTION.md`.
 
-**Research finding:** Sequential connector execution (`for (const c of CONNECTORS) { await runConnectorSync(...) }` in `connector-sync.js:168`) takes 15min instead of 5min with Promise.all. PostgreSQL scheduler with `FOR UPDATE SKIP LOCKED` is sound but lacks observability.
+### Iter 21 — Page-Level Redesign (P0, 12 tasks)
 
-| # | Task | Priority | Notes |
+> Issues: [#158–#200](https://github.com/lemone112/labpics-dashboard/milestone/8)
+
+Секция за секцией: каждая страница проходит redesign по стандартам Design System.
+
+| # | Task | Priority |
+|---|------|----------|
+| 21.1 | Break section-page.jsx monolith | P0 |
+| 21.2 | Implement Action Queue page | P0 |
+| 21.3 | Implement guided setup flow | P0 |
+| 21.4 | Redesign Dashboard section | P0 |
+| 21.5 | Redesign Messages section | P0 |
+| 21.6 | Redesign Agreements section | P1 |
+| 21.7 | Redesign Risks section | P1 |
+| 21.8 | Redesign Finance section | P1 |
+| 21.9 | Redesign Offers section | P1 |
+| 21.10 | Implement navigation badges | P1 |
+| 21.11 | Implement client-centric view | P1 |
+| 21.12 | Implement Cmd+K command palette | P2 |
+
+### Iter 20.5 — Charts & Data Visualization (P0, 12 tasks) ★ DEEP CHART WORK
+
+> Issues: [#152–#196](https://github.com/lemone112/labpics-dashboard/milestone/6)
+
+**Выделенная итерация под глубокую работу с графиками:** аудит всех chart usages,
+система типов, dimension system, композиция карточек, цветовая палитра, тултипы,
+пустые состояния, оптимизация. Recharts + semantic chart tokens.
+
+| # | Task | Priority | Фокус |
 |---|------|----------|-------|
-| 44.1 | Parallel connector sync (Promise.all with per-connector error isolation) | P0 | 3x speedup, ~2h work |
-| 44.2 | Job duration metrics (histogram per job type) | P0 | prom-client histogram |
-| 44.3 | Dead job detection and auto-cleanup (stuck > 30min) | P1 | UPDATE SET status='failed' WHERE started_at < now()-30min |
-| 44.4 | Job retry with configurable backoff per job type | P1 | Currently hard-coded delays |
-| 44.5 | Connector sync progress events via SSE | P1 | Real-time sync status in UI |
-| 44.6 | Job execution concurrency limit (configurable max parallel) | P2 | Prevent resource exhaustion |
-| 44.7 | Scheduler health endpoint (last tick time, queue depth) | P2 | For monitoring integration |
+| 20.5.1 | Audit all current chart usages | P0 | Инвентаризация: какие графики где, что работает, что нет |
+| 20.5.2 | Define chart type selection matrix | P0 | Какой тип графика для каких данных (bar/line/area/pie/funnel) |
+| 20.5.3 | Define chart card composition spec | P0 | Стандартная карточка: заголовок-вопрос, legend, tooltip, no-data |
+| 20.5.4 | Define chart dimension system | P0 | Responsive sizes: compact/standard/detailed + breakpoints |
+| 20.5.5 | Fix chart internal spacing | P0 | Padding, margins, label alignment внутри chart containers |
+| 20.5.6 | Implement chart type migrations | P1 | Заменить неподходящие типы (по матрице из 20.5.2) |
+| 20.5.7 | Implement compact chart cards | P1 | Мини-версии для dashboard overview (sparklines, KPI tiles) |
+| 20.5.8 | Implement detailed chart cards | P1 | Полноэкранные версии с drill-down и фильтрами |
+| 20.5.9 | Implement empty chart state (compact) | P1 | ChartNoData с CTA (не пустой прямоугольник) |
+| 20.5.10 | Chart color palette enforcement | P1 | chart-1..chart-5 semantic tokens, no raw colors |
+| 20.5.11 | Chart tooltip standardization | P1 | Единый формат: значение, %, тренд, период |
+| 20.5.12 | Chart performance optimization | P2 | Dynamic imports, memoization, reduce re-renders |
+
+**Правила визуализации:**
+- Один вопрос на график (заголовок = вопрос или утверждение)
+- No-data state: компактный `ChartNoData` с CTA внутри карточки
+- Цвета: `chart-1`..`chart-5` для серий, `StatusChip` для статусов
+- Адаптивность: compact (mobile/sidebar) → standard (desktop) → detailed (full-width)
+- Варианты отображения: sparkline / mini card / full card / fullscreen modal
+
+### Iter 23 — Accessibility, Polish & Dark Mode (P1, 10 tasks)
+
+> Issues: [#202–#211](https://github.com/lemone112/labpics-dashboard/milestone/10)
+
+Финальная полировка: контрасты, клавиатура, screen reader, анимации, dark mode.
+
+| # | Task | Priority |
+|---|------|----------|
+| 23.1 | WCAG AA contrast audit (light mode) | P0 |
+| 23.2 | WCAG AA contrast audit (dark mode) | P0 |
+| 23.3 | Keyboard navigation full audit | P0 |
+| 23.4 | Screen reader audit | P1 |
+| 23.5 | Add axe-core to e2e tests | P1 |
+| 23.6 | Visual regression testing | P1 |
+| 23.7 | Animation polish pass | P1 |
+| 23.8 | Typography polish pass | P1 |
+| 23.9 | Spacing polish pass | P1 |
+| 23.10 | Dark mode visual polish | P1 |
 
 ---
 
-## Iter 45 — Search UX & Intelligence (P0)
+## Phase 4 — Platform & Monitoring (19 tasks)
 
-**Goal:** Improve search from "functional" to "delightful". Core product feature.
+### Iter 46 — System Monitoring UI (P1, 7 tasks)
 
-**Research finding:** Current search has no debounce, no autocomplete, no date filters, no pagination. 25s timeout is too long. No search analytics. pgvector + pg_trgm is sufficient for 5–10 projects — Elasticsearch NOT recommended.
+> Issues: [#364–#370](https://github.com/lemone112/labpics-dashboard/milestone/36)
 
-| # | Task | Priority | Notes |
-|---|------|----------|-------|
-| 45.1 | Search input debounce (300ms) + loading indicator | P0 | UX quick win |
-| 45.2 | Search results pagination (offset/limit + UI) | P0 | Currently returns all results |
-| 45.3 | Date range filter (from/to) on search | P0 | Filter by message/issue date |
-| 45.4 | Source type filter chips (Chatwoot / Linear / Attio) | P1 | Already has source param, needs UI |
-| 45.5 | Search query analytics (log queries + popular queries endpoint) | P1 | Table: search_queries(query, user, project, results_count, ts) |
-| 45.6 | Fuzzy matching tolerance (pg_trgm similarity threshold) | P1 | `SET pg_trgm.similarity_threshold = 0.3` |
-| 45.7 | Search autocomplete suggestions (recent queries + entity names) | P2 | Dropdown below search input |
-| 45.8 | Reduce search timeout from 25s to 10s + progressive loading | P2 | Show partial results as they arrive |
+Мониторинг встроен в UI (не Grafana отдельно).
 
----
+| # | Task | Priority |
+|---|------|----------|
+| 46.1 | System Health page (service status cards) | P0 |
+| 46.2 | Job dashboard (runs table + sparklines) | P0 |
+| 46.3 | Connector sync timeline + success rate | P1 |
+| 46.4 | Resource usage indicators (DB, Redis, disk) | P1 |
+| 46.5 | Alert history feed | P1 |
+| 46.6 | Log viewer (recent errors) | P2 |
+| 46.7 | System health SSE events | P2 |
 
-## Iter 46 — System Monitoring UI (P1)
+### Iter 47 — Infrastructure Hardening (P1, 6 tasks)
 
-**Goal:** Embed key system metrics in dashboard UI. No separate Grafana needed.
+> Issues: [#371–#376](https://github.com/lemone112/labpics-dashboard/milestone/37)
 
-**Research finding:** Full Prometheus + Grafana + Loki stack already deployed in `docker-compose.monitoring.yml`. 37+ metrics at `/metrics`. 11 alert rules configured. Just needs embedding in UI.
+| # | Task | Priority |
+|---|------|----------|
+| 47.1 | Automated PostgreSQL backup (cron + retention) | P0 |
+| 47.2 | Caddy: HTTP/2 + HTTP/3 verification | P1 |
+| 47.3 | Static asset CDN headers | P1 |
+| 47.4 | fail2ban (SSH + API brute force) | P1 |
+| 47.5 | Docker healthcheck improvements | P2 |
+| 47.6 | Deployment automation (zero-downtime) | P2 |
 
-| # | Task | Priority | Notes |
-|---|------|----------|-------|
-| 46.1 | System Health page: service status cards (API, DB, Redis, Worker) | P0 | New page in nav: "System" |
-| 46.2 | Job dashboard: last runs table + duration sparklines | P0 | Data from /jobs/status + new metrics |
-| 46.3 | Connector sync status visualization (timeline + success rate) | P1 | Per-connector cards with charts |
-| 46.4 | Resource usage indicators (DB pool, Redis memory, disk) | P1 | Expose via new /system/resources endpoint |
-| 46.5 | Alert history feed (recent Prometheus alerts in UI) | P1 | Read from alertmanager API or custom store |
-| 46.6 | Log viewer (recent errors, searchable) | P2 | Tail Loki via API, display in UI |
-| 46.7 | System health SSE events (real-time status updates) | P2 | Push health changes to UI |
+### Iter 48 — Automated Reporting (P1, 6 tasks)
 
----
+> Issues: [#377–#382](https://github.com/lemone112/labpics-dashboard/milestone/38)
 
-## Iter 47 — Infrastructure Hardening (P1)
-
-**Goal:** Production-grade infrastructure for VPS deployment.
-
-**Research finding:** Caddy 2.9.1 handles TLS/compression/routing well. Missing: HTTP/2 push, CDN for static assets, automated backups, DDoS protection.
-
-| # | Task | Priority | Notes |
-|---|------|----------|-------|
-| 47.1 | Caddy: enable HTTP/2 + verify HTTP/3 (QUIC) | P1 | Caddy supports by default, verify config |
-| 47.2 | Static asset CDN headers (Cache-Control immutable for _next/static) | P1 | Add to Caddyfile |
-| 47.3 | Automated PostgreSQL backup (pg_dump cron + retention) | P0 | Daily backup, 7-day retention, S3/local |
-| 47.4 | fail2ban integration for SSH + API brute force | P1 | Or Caddy rate-limit module |
-| 47.5 | Docker healthcheck improvements (all services) | P2 | Consistent healthcheck across compose |
-| 47.6 | Deployment automation script (zero-downtime docker compose) | P2 | Rolling restart with health gate |
+| # | Task | Priority |
+|---|------|----------|
+| 48.1 | Report data model (templates + runs + snapshots) | P0 |
+| 48.2 | Project status report (weekly, automated) | P0 |
+| 48.3 | Financial overview report (monthly) | P1 |
+| 48.4 | Team KPI dashboard | P1 |
+| 48.5 | Report scheduling (cron) | P1 |
+| 48.6 | Report viewer UI | P1 |
 
 ---
 
-## Iter 48 — Automated Reporting (P1)
+## Phase 5 — Telegram Bot (15 tasks)
 
-**Goal:** PM doesn't manually compile status reports. System generates them.
+### Iter 50 — Telegram Bot MVP (P0, 8 tasks)
 
-**Business context:** PMs waste time on manual reporting. Need automated project status, financial overview, team KPI. Export not needed now (backlog).
+> Issues: [#391–#398](https://github.com/lemone112/labpics-dashboard/milestone/40)
+> **Depends on:** Iter 11 (LightRAG для поиска)
 
-| # | Task | Priority | Notes |
-|---|------|----------|-------|
-| 48.1 | Report data model (report_templates, report_runs, report_snapshots) | P0 | DB schema + CRUD |
-| 48.2 | Project status report generator (automated weekly) | P0 | Aggregates: tasks, risks, messages, commitments |
-| 48.3 | Financial overview report generator (monthly) | P1 | Revenue, costs, margin per project |
-| 48.4 | Team KPI dashboard (utilization, response time, delivery rate) | P1 | Cross-project team metrics |
-| 48.5 | Report scheduling (cron-based, configurable per report type) | P1 | Integrate with scheduler |
-| 48.6 | Report viewer UI (history + current + comparison) | P1 | New page: "Reports" |
+| # | Task | Priority |
+|---|------|----------|
+| 50.1 | Bot auth: link TG user to dashboard user | P0 |
+| 50.2 | CryptoBot-style button navigation | P0 |
+| 50.3 | Status command (project summary card) | P0 |
+| 50.4 | Search via LightRAG (free text → results) | P0 |
+| 50.5 | Linear task list (with status buttons) | P1 |
+| 50.6 | Attio CRM quick view | P1 |
+| 50.7 | Push: risks + approaching deadlines | P0 |
+| 50.8 | Push: new client messages (Chatwoot) | P1 |
 
----
+### Iter 51 — Telegram Bot Advanced (P1, 7 tasks)
 
-## Iter 49 — Multi-User & Access Control (P0)
+> Issues: [#399–#405](https://github.com/lemone112/labpics-dashboard/milestone/41)
+> **Depends on:** Iter 50
 
-**Goal:** Support 2–5 PMs + Owner with proper access isolation.
-
-**Business context:** Owner sees all projects, PM sees only assigned. Currently single-user bcrypt auth. Need: users table, roles, project-scoped access, team management.
-
-| # | Task | Priority | Notes |
-|---|------|----------|-------|
-| 49.1 | DB schema: users table (id, email, name, password_hash, role, created_at) | P0 | Roles: owner, pm |
-| 49.2 | Auth upgrade: multi-user login (email + password) | P0 | Replace single AUTH_CREDENTIALS |
-| 49.3 | Session upgrade: user_id in sessions, multi-session support | P0 | Current session model + user_id FK |
-| 49.4 | Permission middleware: role-based route protection | P0 | Owner=all, PM=assigned projects |
-| 49.5 | Project-user assignment table + API | P0 | project_users(project_id, user_id, role) |
-| 49.6 | Team management UI (invite, assign to projects, manage roles) | P1 | Owner-only page |
-| 49.7 | User profile page (name, password change) | P2 | Self-service |
-| 49.8 | Audit trail: user_id in audit events | P1 | Who did what |
-
----
-
-## Iter 50 — Telegram Bot MVP (P0)
-
-**Goal:** PM team uses TG bot for quick status checks and actions.
-
-**Business context:** CryptoBot-style inline buttons, whole team uses it. Must mirror key dashboard features. Bot code exists in `telegram-bot/` (TypeScript, Docker, Supabase).
-
-**Depends on:** Iter 11 (LightRAG) for search integration.
-
-| # | Task | Priority | Notes |
-|---|------|----------|-------|
-| 50.1 | Bot auth: link TG user to dashboard user (token-based pairing) | P0 | telegram_user_links table |
-| 50.2 | Button navigation: main menu (Status / Search / Tasks / CRM / Digests) | P0 | CryptoBot-style inline keyboards |
-| 50.3 | Status command: project summary card (tasks, risks, messages count) | P0 | Formatted message with stats |
-| 50.4 | Search integration: free text query → LightRAG → formatted results | P0 | Forward to /lightrag/query |
-| 50.5 | Task list: show Linear tasks by project (with status buttons) | P1 | Read from Linear via API |
-| 50.6 | CRM quick view: recent Attio opportunities with stage | P1 | Read from Attio API |
-| 50.7 | Push notifications: risks + approaching deadlines | P0 | Scheduler-triggered, configurable |
-| 50.8 | Push notifications: new client messages (Chatwoot) | P1 | On sync event, notify assigned PM |
+| # | Task | Priority |
+|---|------|----------|
+| 51.1 | Composio MCP: Linear actions | P0 |
+| 51.2 | Composio MCP: Attio actions | P0 |
+| 51.3 | Free text NLU (intent → action) | P1 |
+| 51.4 | Whisper voice input | P0 |
+| 51.5 | Daily digest (morning summary) | P1 |
+| 51.6 | Weekly digest (Monday wrap-up) | P1 |
+| 51.7 | Voice command shortcuts | P2 |
 
 ---
 
-## Iter 51 — Telegram Bot Advanced (P1)
+## Phase 6 — Mobile & Responsive (8 tasks)
 
-**Goal:** Full AI-powered assistant with voice and actions.
+### Iter 22 — Mobile & Responsive (P1, 8 tasks)
 
-**Business context:** Composio MCP for Linear + Attio actions, Whisper voice-to-text, proactive daily/weekly digests.
+> Issues: [#175–#201](https://github.com/lemone112/labpics-dashboard/milestone/9)
+> **Depends on:** Iter 21 (page redesign — адаптировать что уже redesigned)
 
-**Depends on:** Iter 50 (TG Bot MVP).
-
-| # | Task | Priority | Notes |
-|---|------|----------|-------|
-| 51.1 | Composio MCP integration: Linear actions (create/update tasks) | P0 | Via MCP protocol |
-| 51.2 | Composio MCP integration: Attio actions (update deals, add notes) | P0 | Via MCP protocol |
-| 51.3 | Free text NLU: parse intent from text message → route to action | P1 | LLM-based intent extraction |
-| 51.4 | Whisper voice input: voice message → text → NLU → action | P0 | OpenAI Whisper API |
-| 51.5 | Proactive daily digest (morning summary per PM) | P1 | Scheduled at 09:00, customizable |
-| 51.6 | Proactive weekly digest (weekly wrap-up with trends) | P1 | Scheduled Monday 10:00 |
-| 51.7 | Voice command shortcuts (status, search, notes) | P2 | Whisper → intent → quick action |
+| # | Task | Priority |
+|---|------|----------|
+| 22.1 | Define mobile IA | P0 |
+| 22.2 | Optimize bottom tabbar | P0 |
+| 22.3 | Mobile Action Queue | P1 |
+| 22.4 | Mobile table responsive | P1 |
+| 22.5 | Mobile charts (compact variants) | P1 |
+| 22.6 | Mobile Sheet/Drawer | P1 |
+| 22.7 | Safe area handling | P2 |
+| 22.8 | Touch target audit | P1 |
 
 ---
 
-## Backlog (post Wave 3)
+## Phase 7 — Quality & Tech Debt (39 tasks)
 
-These items are tracked for future planning but not scheduled:
+### Iter 16 — QA & Release Readiness (3 open tasks)
 
-| Area | Item | Notes |
-|------|------|-------|
-| **Integrations** | Email connector (Gmail/Outlook) | Sync client emails into timeline |
-| **Integrations** | File attachments (S3/R2) | Upload/attach files to projects |
-| **Integrations** | Google Calendar connector | Sync meetings, deadlines |
-| **Integrations** | GitHub connector (dev metrics) | PR velocity, deployment frequency |
-| **Finance** | Invoicing integration (Stripe/manual) | Generate + track invoices |
-| **Finance** | Budget tracking per project | Cost vs budget alerts |
-| **Platform** | Client portal (read-only) | Client sees project status |
-| **Platform** | SaaS multi-tenancy | Org isolation, billing, onboarding |
-| **Platform** | PDF/XLSX export | Report export for offline sharing |
-| **Platform** | BullMQ job queue migration | If >10 projects or >5 concurrent users |
-| **Platform** | Webhook system (outgoing) | Notify external systems on events |
-| **AI** | Sentiment analysis on messages | Detect negative sentiment trends |
-| **AI** | Predictive churn model | Risk scoring from engagement patterns |
-| **AI** | Cross-sell/upsell engine | Suggest services based on project data |
+> Issues: [#94, #98, #99](https://github.com/lemone112/labpics-dashboard/milestone/5)
+
+| # | Task | Priority |
+|---|------|----------|
+| 16.6 | E2E tests for critical user paths | HIGH |
+| 16.10 | Clean-DB migration test in CI | HIGH |
+| 16.11 | Final regression suite (all green gate) | HIGH |
+
+### Iter 24 — Design Validation & QA (9 tasks)
+
+> Issues: [#212–#220](https://github.com/lemone112/labpics-dashboard/milestone/11)
+
+| # | Task | Priority |
+|---|------|----------|
+| 24.1 | Compare analytics: before vs after | P1 |
+| 24.2 | Run 5 user interviews | P1 |
+| 24.3 | 3-second test on all pages | P0 |
+| 24.4 | Full e2e test pass | P0 |
+| 24.5 | Design audit script: 0 violations | P0 |
+| 24.6 | Performance audit | P1 |
+| 24.7 | Cross-browser verification | P1 |
+| 24.8 | DoD checklist for every page | P1 |
+| 24.9 | Design system documentation update | P1 |
+
+### Iter 17 — Analytics Instrumentation (8 tasks)
+
+> Issues: [#125–#134](https://github.com/lemone112/labpics-dashboard/milestone/12)
+
+| # | Task | Priority |
+|---|------|----------|
+| 17.1 | Integrate PostHog/Mixpanel SDK | P1 |
+| 17.2 | Track section navigation events | P1 |
+| 17.3 | Track interaction events | P1 |
+| 17.4 | Track activation funnel | P2 |
+| 17.5 | Track empty state encounters | P2 |
+| 17.6 | Track feature adoption | P2 |
+| 17.7 | Session recording setup | P2 |
+| 17.8 | Create baseline metrics dashboard | P2 |
+
+### Iter 25 — Performance & Caching (9 tasks)
+
+> Issues: [#221–#231](https://github.com/lemone112/labpics-dashboard/milestone/13)
+
+| # | Task | Priority |
+|---|------|----------|
+| 25.1 | RSC + Streaming: portfolio overview | P1 |
+| 25.2 | RSC + Streaming: control-tower pages | P1 |
+| 25.3 | RSC: projects и login pages | P2 |
+| 25.4 | HTTP Cache-Control + stale-while-revalidate | P1 |
+| 25.5 | Redis cache: all read-heavy endpoints | P1 |
+| 25.6 | Scheduler: materialized view auto-refresh | P2 |
+| 25.7 | Dynamic imports для Recharts | P2 |
+| 25.8 | Bundle size budget в CI | P2 |
+| 25.9 | Dead code elimination | P2 |
+
+### Iter 26 — API Architecture & DX (8 tasks)
+
+> Issues: [#228–#240](https://github.com/lemone112/labpics-dashboard/milestone/14)
+
+| # | Task | Priority |
+|---|------|----------|
+| 26.1 | Extract routes из index.js → routes/*.js | P0 |
+| 26.2 | API versioning (/v1/ prefix) | P1 |
+| 26.3 | Per-endpoint rate limiting | P1 |
+| 26.4 | OpenAPI spec from Zod schemas | P1 |
+| 26.5 | Feature flags: DB + API + frontend hook | P2 |
+| 26.6 | Feature flags: admin UI | P2 |
+| 26.7 | Structured request/response logging | P2 |
+| 26.8 | API contract testing | P2 |
+
+### Iter 15 — TypeScript Migration (2 open tasks)
+
+> Issues: [#87, #88](https://github.com/lemone112/labpics-dashboard/milestone/4)
+
+| # | Task | Priority |
+|---|------|----------|
+| 15.11 | Server TypeScript migration (38 files) | P2 |
+| 15.12 | Web TypeScript migration (63 components) | P2 |
+
+---
+
+## UX/UI Quality Standards (обязательно для Phase 3+)
+
+Все UI-изменения обязаны проходить:
+
+1. **3-second test:** Где я? Что важно? Что делать? — должно быть очевидно
+2. **1 primary CTA** per page (не 0, не 2+)
+3. **Empty state = wizard** (title + reason + steps + CTA, НИКОГДА bare "Не найдено")
+4. **Control Tower structure:** HeroPanel → StatTiles → Primary CTA → TrustBar → Work Surface
+5. **Component selection:** Boolean→Switch, Actions→DropdownMenu, Status→StatusChip, Context→Sheet
+6. **Charts:** один вопрос на график, ChartNoData с CTA, chart-1..chart-5 палитра
+7. **Motion:** anime.js only, `prefers-reduced-motion` respected, max 420ms
+8. **npm run lint** passes (design:audit + ui:consistency, 0 violations)
+9. **Touch targets ≥ 44px**, WCAG AA contrast
+10. **Responsive:** compact (mobile) → standard (desktop) → detailed (full-width)
+
+Полные правила: `web/DESIGN_SYSTEM_2026.md`, `web/QUALITY_GATES_UI.md`, `web/COMPONENT_SELECTION.md`
+
+---
+
+## Backlog (post all phases)
+
+| Область | Элемент |
+|---------|---------|
+| Integrations | Email connector (Gmail/Outlook), File attachments (S3/R2), Google Calendar, GitHub |
+| Finance | Invoicing (Stripe), Budget tracking per project |
+| Platform | Client portal (read-only), SaaS multi-tenancy, PDF/XLSX export |
+| Platform | BullMQ job queue (if scaling beyond 10 projects) |
+| AI | Sentiment analysis, Predictive churn, Cross-sell/upsell engine |
 
 ---
 
 ## Changelog
 
-- **v1** (2026-02-20): Initial Wave 3 plan based on 5 research reports + 6-round Q&A session.
-  57 tasks across 8 iterations (Iter 44–51). Supersedes closed Iter 27–43 aspirational issues.
+- **v2** (2026-02-20): Unified master plan — integrated all 159 open issues from Iter 11–51
+  into 7 execution phases. Added dedicated chart iteration (Iter 20.5) with deep visualization work.
+  Added UX/UI quality standards section. Architecture diagrams updated (Composio + LightRAG MCP + Whisper).
+- **v1** (2026-02-20): Initial Wave 3 plan (57 tasks, Iter 44–51 only).

@@ -34,7 +34,8 @@ After any research, analysis, or audit — always review the result from a posit
 
 ## Task tracking
 
-- All tasks tracked as GitHub Issues with Milestones (Iter 11–16).
+- All tasks tracked as GitHub Issues with Milestones (Iter 11–51).
+- Unified execution plan: `docs/iteration-plan-wave3.md` (159 issues, 7 phases, 20 iterations).
 - `docs/iteration-plan-wave2.md` is the architectural reference; Issues are source of truth.
 
 ## Monorepo structure
@@ -57,6 +58,12 @@ labpics-dashboard/
 - Local dev: `docker compose --profile telegram-bot up` or `cd telegram-bot && npx wrangler dev`
 - Typecheck: `cd telegram-bot && npm run typecheck`
 - Bot docs: `telegram-bot/docs/`
+- Integrations: Composio MCP (Linear + Attio actions), daniel-lightrag-mcp (search/knowledge after Iter 11)
+- Planned: Whisper voice input (Iter 51)
+
+## Wave 3 scope
+
+Wave 3 introduces: multi-user support (Owner/PM roles), system monitoring UI, automated reporting, and search UX improvements.
 
 ## Git conventions
 

@@ -1,9 +1,18 @@
-# Labpics Dashboard (MVP)
+# Labpics Dashboard
 
-Репозиторий ориентирован на **web-платформу**:
+Операционная платформа для design studio lab.pics: 2–5 PM + Owner, 5–10 активных проектов,
+CRM/PM/support-интеграции, knowledge graph (LightRAG), Telegram bot.
+
+**Статус:** 159 open issues в 20 итерациях (Iter 11–51), 7 execution phases.
+Единый план: [`docs/iteration-plan-wave3.md`](./docs/iteration-plan-wave3.md).
+
+### Структура монорепо
 
 - `server/` — Fastify API + platform layers (scope/audit/outbox/scheduler) + Redis Pub/Sub + SSE
-- `web/` — Next.js UI (auth/projects/jobs/search + shell) с auto-refresh и SSE
+- `web/` — Next.js 16 UI (App Router, shadcn/ui, Radix, Tailwind v4, anime.js)
+- `telegram-bot/` — Telegram assistant bot (TypeScript, Supabase, Composio MCP, Docker)
+- `infra/` — Caddy, deployment configs
+- `scripts/` — smoke tests, утилиты
 - `docs/` — каноническая документация
 - `docker-compose.yml` — локальный и серверный запуск стека (Postgres, Redis, server, worker, web)
 
@@ -12,6 +21,16 @@
 Worker-контур введен как единый scheduler/worker слой (`server/src/worker-loop.js`).
 Real-time обновления: Redis Pub/Sub → SSE endpoint → auto-refresh в браузере. См. [`docs/redis-sse.md`](./docs/redis-sse.md).
 
+### Wave 3 — ключевые направления (Iter 44–51)
+
+- **Multi-user (Owner/PM):** роли, ACL, team management UI (Iter 49)
+- **Telegram Bot:** CryptoBot-style кнопки, Composio MCP (Linear/Attio), Whisper voice input, push-уведомления (Iter 50–51)
+- **System Monitoring UI:** встроенный мониторинг сервисов, job dashboard, alert history (Iter 46)
+- **Automated Reporting:** шаблоны отчётов, weekly/monthly auto-генерация (Iter 48)
+- **Search UX:** debounce, pagination, date/source фильтры, fuzzy matching (Iter 45)
+- **Parallel Connector Sync:** sequential → Promise.all, метрики, dead job detection (Iter 44)
+- **Infrastructure Hardening:** automated backups, HTTP/3, fail2ban, zero-downtime deploy (Iter 47)
+
 ---
 
 ## Документация
@@ -19,6 +38,8 @@ Real-time обновления: Redis Pub/Sub → SSE endpoint → auto-refresh 
 Стартовые точки:
 
 - Индекс документации: [`docs/index.md`](./docs/index.md)
+- **Единый план исполнения (Wave 3):** [`docs/iteration-plan-wave3.md`](./docs/iteration-plan-wave3.md) — 159 issues, 7 phases
+- Архитектурный reference (Wave 2): [`docs/iteration-plan-wave2.md`](./docs/iteration-plan-wave2.md)
 - Нормативный контракт LightRAG-only: [`docs/lightrag-contract.md`](./docs/lightrag-contract.md)
 - Продуктовый обзор: [`docs/product/overview.md`](./docs/product/overview.md)
 - Архитектура: [`docs/architecture.md`](./docs/architecture.md)
@@ -31,6 +52,7 @@ Real-time обновления: Redis Pub/Sub → SSE endpoint → auto-refresh 
 - Runbooks: [`docs/runbooks.md`](./docs/runbooks.md)
 - Roadmap: [`docs/mvp-vs-roadmap.md`](./docs/mvp-vs-roadmap.md)
 - Спеки: [`docs/specs/README.md`](./docs/specs/README.md)
+- Telegram Bot: [`telegram-bot/docs/`](./telegram-bot/docs/) (архитектура, UX, Composio, Supabase schema)
 
 ---
 
@@ -110,7 +132,7 @@ Protected routes требуют session cookie + CSRF header (`x-csrf-token`) д
 
 ## 2) UI (`web`) — текущий статус
 
-UI построен на **shadcn/ui** + Radix + Tailwind v4. Поверхности:
+UI построен на **shadcn/ui** + Radix + Tailwind v4 + anime.js. Поверхности:
 
 - **Control Tower** — 6 секций: dashboard/messages/agreements/risks/finance/offers
 - **Projects** — создание и выбор проектов
@@ -121,6 +143,12 @@ UI построен на **shadcn/ui** + Radix + Tailwind v4. Поверхнос
 - **Offers** — создание и approval flow
 - **Digests** — daily/weekly дайджесты
 - **Analytics** — метрики, forecast, risk radar
+
+Планируемые страницы (Wave 3):
+
+- **System** — мониторинг сервисов, job dashboard, connector timeline, alert history (Iter 46)
+- **Reports** — автоматические отчёты: project status (weekly), financial overview (monthly), team KPI (Iter 48)
+- **Team** — управление пользователями (Owner/PM), назначение проектов, роли (Iter 49)
 
 Real-time: SSE push (~1-2 сек) → fallback на polling (15-60 сек).
 

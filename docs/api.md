@@ -1,5 +1,7 @@
 # API reference
 
+Обновлено: 2026-02-20
+
 Базовый backend URL: `http://localhost:8080`
 UI обычно ходит через `NEXT_PUBLIC_API_BASE_URL` (например `/api`).
 
@@ -190,11 +192,45 @@ Legacy compatibility:
 Код, роуты и связанные scheduler jobs удалены. Любые новые интеграции
 используют только LightRAG и operational endpoints.
 
+## 15) Planned Endpoints (Wave 3)
+
+Следующие endpoints запланированы в Iter 44–51. Source of truth: [`docs/iteration-plan-wave3.md`](./iteration-plan-wave3.md).
+
+### Multi-User & Auth (Iter 49)
+
+- `GET /users` [PROTECTED, OWNER] — список пользователей
+- `POST /users` [PROTECTED, OWNER] — создание пользователя
+- `POST /users/:id/role` [PROTECTED, OWNER] — назначение роли
+- `GET /users/:id/projects` [PROTECTED] — проекты пользователя
+- `POST /projects/:id/assign` [PROTECTED, OWNER] — назначение PM на проект
+
+### System Monitoring (Iter 46)
+
+- `GET /system/health` [PROTECTED] — расширенный health (service status cards)
+- `GET /system/jobs` [PROTECTED] — job dashboard (runs + sparklines)
+- `GET /system/connectors/timeline` [PROTECTED] — connector sync timeline
+- `GET /system/alerts` [PROTECTED] — alert history feed
+- `GET /system/logs` [PROTECTED] — recent error logs
+
+### Reporting (Iter 48)
+
+- `GET /reports` [PROTECTED] — список отчётов
+- `POST /reports/generate` [PROTECTED] — генерация отчёта по шаблону
+- `GET /reports/:id` [PROTECTED] — конкретный отчёт (snapshot)
+- `GET /reports/templates` [PROTECTED] — доступные шаблоны
+
+### Scheduler (Iter 44)
+
+- `GET /scheduler/metrics` [PROTECTED] — job duration metrics (histogram)
+- `GET /scheduler/dead-jobs` [PROTECTED] — dead job list
+- `POST /scheduler/dead-jobs/:id/cleanup` [PROTECTED] — cleanup dead job
+
 ---
 
-Всего: **87 эндпоинтов** (80 protected, 7 public).
+Всего: **87 реализованных эндпоинтов** (80 protected, 7 public) + **16 запланированных** (Wave 3).
 
 См. также:
 
 - [`docs/pipelines.md`](./pipelines.md)
 - [`docs/runbooks.md`](./runbooks.md)
+- [`docs/iteration-plan-wave3.md`](./iteration-plan-wave3.md) — Wave 3 plan
