@@ -505,6 +505,7 @@ Fix 3x connector bottleneck (sequential → parallel). Quick wins.
 
 ### Iter 61 — Security Hardening (P0, 8 tasks) ★ NEW
 
+> Issues: [#507–#514](https://github.com/lemone112/labpics-dashboard/milestone/51)
 > Источник: Security agent critique. Findings не покрытые Iter 52-56.
 
 | # | Task | Priority | Finding |
@@ -520,6 +521,7 @@ Fix 3x connector bottleneck (sequential → parallel). Quick wins.
 
 ### Iter 62 — Business Logic Accuracy (P0, 8 tasks) ★ NEW
 
+> Issues: [#515–#522](https://github.com/lemone112/labpics-dashboard/milestone/52)
 > Источник: Business agent critique. Сигналы, метрики, revenue — всё показывает пустые/нулевые данные.
 > **Impact:** Без этих исправлений дашборд отображает фейковые данные (0% margin, 0 response time, 0 signals).
 
@@ -536,6 +538,7 @@ Fix 3x connector bottleneck (sequential → parallel). Quick wins.
 
 ### Iter 63 — DB & Vector Optimization (P0, 8 tasks) ★ NEW
 
+> Issues: [#523–#530](https://github.com/lemone112/labpics-dashboard/milestone/53)
 > Источник: DB/RAG agent critique. Vector search делает seq scan, индексы не используются.
 
 | # | Task | Priority | Finding |
