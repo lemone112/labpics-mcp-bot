@@ -2,7 +2,7 @@ services:
   redis:
     image: redis:7-alpine
     restart: unless-stopped
-    command: redis-server --maxmemory 128mb --maxmemory-policy allkeys-lru
+    command: redis-server --maxmemory 512mb --maxmemory-policy allkeys-lru --save 60 1000
     # ports intentionally not exposed to host — access only via internal network
     volumes:
       - redisdata:/data
@@ -14,8 +14,8 @@ services:
     deploy:
       resources:
         limits:
-          memory: 256m
-          cpus: "0.5"
+          memory: 768m
+          cpus: "1.0"
 
   db:
     image: pgvector/pgvector:pg16
@@ -24,6 +24,32 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:-labpics}
       POSTGRES_USER: ${POSTGRES_USER:-app}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-app}
+    command:
+      - postgres
+      - -c
+      - shared_buffers=4GB
+      - -c
+      - effective_cache_size=16GB
+      - -c
+      - work_mem=64MB
+      - -c
+      - maintenance_work_mem=1GB
+      - -c
+      - max_connections=100
+      - -c
+      - random_page_cost=1.1
+      - -c
+      - effective_io_concurrency=200
+      - -c
+      - wal_buffers=64MB
+      - -c
+      - max_wal_size=2GB
+      - -c
+      - checkpoint_completion_target=0.9
+      - -c
+      - default_statistics_target=200
+      - -c
+      - huge_pages=try
     # ports intentionally not exposed to host — access only via internal network
     volumes:
       - pgdata:/var/lib/postgresql/data
@@ -32,11 +58,12 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
+    shm_size: '4gb'
     deploy:
       resources:
         limits:
-          memory: 1g
-          cpus: "1.0"
+          memory: 8g
+          cpus: "3.0"
 
   server:
     build:
@@ -86,7 +113,7 @@ services:
       MIN_EMBED_CHARS: ${MIN_EMBED_CHARS:-30}
       SEARCH_IVFFLAT_PROBES: ${SEARCH_IVFFLAT_PROBES:-10}
       SEARCH_HNSW_EF_SEARCH: ${SEARCH_HNSW_EF_SEARCH:-40}
-      STORAGE_BUDGET_GB: ${STORAGE_BUDGET_GB:-20}
+      STORAGE_BUDGET_GB: ${STORAGE_BUDGET_GB:-200}
       STORAGE_ALERT_THRESHOLD_PCT: ${STORAGE_ALERT_THRESHOLD_PCT:-85}
     ports:
       - "${API_PORT:-8080}:8080"
@@ -104,8 +131,8 @@ services:
     deploy:
       resources:
         limits:
-          memory: 512m
-          cpus: "1.0"
+          memory: 2g
+          cpus: "2.0"
 
   worker:
     build:
@@ -148,7 +175,7 @@ services:
       MIN_EMBED_CHARS: ${MIN_EMBED_CHARS:-30}
       SEARCH_IVFFLAT_PROBES: ${SEARCH_IVFFLAT_PROBES:-10}
       SEARCH_HNSW_EF_SEARCH: ${SEARCH_HNSW_EF_SEARCH:-40}
-      STORAGE_BUDGET_GB: ${STORAGE_BUDGET_GB:-20}
+      STORAGE_BUDGET_GB: ${STORAGE_BUDGET_GB:-200}
       STORAGE_ALERT_THRESHOLD_PCT: ${STORAGE_ALERT_THRESHOLD_PCT:-85}
     depends_on:
       db:
@@ -166,8 +193,8 @@ services:
     deploy:
       resources:
         limits:
-          memory: 512m
-          cpus: "1.0"
+          memory: 2g
+          cpus: "2.0"
 
   web:
     build:
@@ -196,7 +223,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 512m
+          memory: 1g
           cpus: "1.0"
 
   edge:
@@ -222,8 +249,8 @@ services:
     deploy:
       resources:
         limits:
-          memory: 128m
-          cpus: "0.25"
+          memory: 256m
+          cpus: "0.5"
 
   telegram-bot:
     build:
@@ -241,7 +268,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 256m
+          memory: 512m
           cpus: "0.5"
 
 volumes:
