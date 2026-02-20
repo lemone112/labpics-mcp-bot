@@ -14,7 +14,8 @@ export async function insertIdempotencyKey(
     } as Record<string, unknown>);
     if (error) return false;
     return true;
-  } catch {
+  } catch (err) {
+    console.error("[idempotency] failed to insert key", { key }, err);
     return false;
   }
 }

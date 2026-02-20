@@ -16,7 +16,7 @@ export async function bestEffortAudit(
       payload,
       created_at: new Date().toISOString(),
     } as Record<string, unknown>);
-  } catch {
-    // audit must never block user flow
+  } catch (err) {
+    console.error("[audit] failed to write audit event", { eventType, draftId }, err);
   }
 }

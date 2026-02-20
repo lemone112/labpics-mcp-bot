@@ -26,8 +26,8 @@ function asText(value, max = 4000) {
 
 function dedupeKey(parts) {
   return crypto
-    .createHash("sha1")
-    .update(parts.map((part) => String(part || "")).join("|"))
+    .createHash("sha256")
+    .update(parts.map((part) => String(part || "")).join("\0"))
     .digest("hex");
 }
 

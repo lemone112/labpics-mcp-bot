@@ -90,8 +90,8 @@ export async function applyDraftStub(
       result: { ok: true, note: "Iteration 1 stub apply" },
       error_summary: null,
     } as Record<string, unknown>);
-  } catch {
-    // non-critical
+  } catch (err) {
+    console.error("[draft] failed to insert apply attempt record", err);
   }
 
   await db(env)

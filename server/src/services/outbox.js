@@ -115,6 +115,18 @@ async function enforcePolicyForSend(pool, scope, outbound, actorUsername, reques
         `,
         [outbound.id]
       );
+      await writeAuditEvent(pool, {
+        projectId: scope.projectId,
+        accountScopeId: scope.accountScopeId,
+        actorUsername,
+        action: "outbound.stop_on_reply_block",
+        entityType: "outbound_message",
+        entityId: outbound.id,
+        status: "blocked",
+        requestId,
+        payload: { reason: "stop_on_reply", last_inbound_at: policy.last_inbound_at },
+        evidenceRefs: outbound.evidence_refs,
+      });
       fail(409, "outbound_blocked_stop_on_reply", "Outbound blocked due to inbound reply");
     }
   }
@@ -133,6 +145,18 @@ async function enforcePolicyForSend(pool, scope, outbound, actorUsername, reques
       `,
       [outbound.id]
     );
+    await writeAuditEvent(pool, {
+      projectId: scope.projectId,
+      accountScopeId: scope.accountScopeId,
+      actorUsername,
+      action: "outbound.frequency_cap_block",
+      entityType: "outbound_message",
+      entityId: outbound.id,
+      status: "blocked",
+      requestId,
+      payload: { reason: "frequency_cap_reached", frequency_cap: frequencyCap, sent_in_window: sentInWindow },
+      evidenceRefs: outbound.evidence_refs,
+    });
     fail(429, "frequency_cap_reached", "Frequency cap reached");
   }
 
@@ -495,6 +519,33 @@ export async function listOutbound(pool, scope, options = {}) {
 
   const { rows } = await pool.query(query, values);
   return rows;
+}
+
+export async function cleanupOldOutboundMessages(pool, scope, logger = console) {
+  const retentionDays = toPositiveInt(process.env.OUTBOUND_RETENTION_DAYS, 90, 7, 730);
+  const batchLimit = toPositiveInt(process.env.OUTBOUND_RETENTION_BATCH, 1000, 100, 50_000);
+  const { rowCount } = await pool.query(
+    `
+      DELETE FROM outbound_messages
+      WHERE id IN (
+        SELECT id
+        FROM outbound_messages
+        WHERE project_id = $1
+          AND account_scope_id = $2
+          AND status IN ('sent', 'failed', 'blocked_opt_out', 'cancelled')
+          AND updated_at < now() - ($3::text || ' days')::interval
+        LIMIT $4
+      )
+    `,
+    [scope.projectId, scope.accountScopeId, String(retentionDays), batchLimit]
+  );
+  if (rowCount > 0) {
+    logger.info(
+      { project_id: scope.projectId, deleted: rowCount, retention_days: retentionDays },
+      "outbound retention cleanup"
+    );
+  }
+  return { deleted: rowCount, retention_days: retentionDays };
 }
 
 export async function processDueOutbounds(pool, scope, actorUsername = "scheduler", requestId = null, limit = 20) {

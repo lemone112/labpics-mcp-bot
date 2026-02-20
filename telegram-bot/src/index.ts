@@ -61,8 +61,8 @@ export default {
       if (chatId && allowed) {
         try {
           await tgSendMessage(env, chatId, formatUserError(err), menuKeyboard());
-        } catch {
-          // last resort — don't let error reporting break the webhook
+        } catch (sendErr) {
+          console.error("[webhook] failed to send error message to user", sendErr);
         }
       }
 

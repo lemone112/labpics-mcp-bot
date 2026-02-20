@@ -1,4 +1,4 @@
-import { processDueOutbounds } from "./outbox.js";
+import { processDueOutbounds, cleanupOldOutboundMessages } from "./outbox.js";
 import { runEmbeddings } from "./embeddings.js";
 import { extractSignalsAndNba } from "./signals.js";
 import { refreshUpsellRadar } from "./upsell.js";
@@ -165,6 +165,8 @@ function createHandlers(customHandlers = {}) {
           limit: 300,
         }
       ),
+    outbound_retention_cleanup: async ({ pool, scope, logger }) =>
+      cleanupOldOutboundMessages(pool, scope, logger),
   };
   return { ...handlers, ...customHandlers };
 }
@@ -183,6 +185,7 @@ export async function ensureDefaultScheduledJobs(pool, scope) {
     { jobType: "campaign_scheduler", cadenceSeconds: 300 },
     { jobType: "analytics_aggregates", cadenceSeconds: 1800 },
     { jobType: "loops_contacts_sync", cadenceSeconds: 3600 },
+    { jobType: "outbound_retention_cleanup", cadenceSeconds: 86400 },
   ];
   for (const item of defaults) {
     await pool.query(

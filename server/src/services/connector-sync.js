@@ -101,11 +101,23 @@ export async function runConnectorSync(pool, scope, connector, logger = console)
         }
       );
     }
-    const eventSync = await syncConnectorEventLog(pool, scope, {
-      connector: normalizedConnector,
-      since_ts: state?.cursor_ts || result?.since || null,
-      until_ts: result?.cursor_ts || new Date().toISOString(),
-    });
+    let eventSync = null;
+    try {
+      eventSync = await syncConnectorEventLog(pool, scope, {
+        connector: normalizedConnector,
+        since_ts: state?.cursor_ts || result?.since || null,
+        until_ts: result?.cursor_ts || new Date().toISOString(),
+      });
+    } catch (eventLogErr) {
+      const eventLogMsg = String(eventLogErr?.message || eventLogErr);
+      logger.error(
+        { connector: normalizedConnector, error: eventLogMsg },
+        "event log sync failed (non-fatal)"
+      );
+      await warnProcess(pool, scope, `sync_${normalizedConnector}`, "Event log sync failed", {
+        payload: { connector: normalizedConnector, error: eventLogMsg },
+      });
+    }
     await markConnectorSyncSuccess(pool, scope, normalizedConnector, mode, {
       cursor_ts: result?.cursor_ts || null,
       cursor_id: result?.cursor_id || null,
