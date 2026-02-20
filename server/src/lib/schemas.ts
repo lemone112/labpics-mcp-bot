@@ -40,7 +40,7 @@ export const CreateOpportunitySchema = z.object({
   stage: z.string().trim().toLowerCase().pipe(opportunityStageEnum).default("discovery"),
   probability,
   amount_estimate: positiveNumber(),
-  expected_close_date: z.string().optional().default(null).nullable(),
+  expected_close_date: z.string().optional().default(null as unknown as string).nullable(),
   owner_username: optionalTrimmedString(200),
   evidence_refs: evidenceRefs,
 });
@@ -57,8 +57,8 @@ export const UpdateStageSchema = z.object({
 
 export const CreateOfferSchema = z.object({
   title: trimmedString(1, 500),
-  account_id: z.string().optional().default(null).nullable(),
-  opportunity_id: z.string().optional().default(null).nullable(),
+  account_id: z.string().optional().default(null as unknown as string).nullable(),
+  opportunity_id: z.string().optional().default(null as unknown as string).nullable(),
   currency: z.string().trim().toUpperCase().max(6).default("USD"),
   subtotal: positiveNumber(),
   discount_pct: z.coerce.number().min(0).max(100).default(0),
@@ -228,3 +228,26 @@ export const UpsellStatusSchema = z.object({
 export const ContinuityApplySchema = z.object({
   action_ids: z.array(z.string()).default([]),
 });
+
+// ---------------------------------------------------------------------------
+// Inferred types (use these in service/route signatures)
+// ---------------------------------------------------------------------------
+
+export type CreateAccountInput = z.infer<typeof CreateAccountSchema>;
+export type CreateOpportunityInput = z.infer<typeof CreateOpportunitySchema>;
+export type UpdateStageInput = z.infer<typeof UpdateStageSchema>;
+export type CreateOfferInput = z.infer<typeof CreateOfferSchema>;
+export type ApproveOfferInput = z.infer<typeof ApproveOfferSchema>;
+export type CreateOutboundDraftInput = z.infer<typeof CreateOutboundDraftSchema>;
+export type OptOutInput = z.infer<typeof OptOutSchema>;
+export type LoginInput = z.infer<typeof LoginSchema>;
+export type CreateProjectInput = z.infer<typeof CreateProjectSchema>;
+export type LightRagQueryInput = z.infer<typeof LightRagQuerySchema>;
+export type LightRagFeedbackInput = z.infer<typeof LightRagFeedbackSchema>;
+export type SearchInput = z.infer<typeof SearchSchema>;
+export type SignalStatusInput = z.infer<typeof SignalStatusSchema>;
+export type NbaStatusInput = z.infer<typeof NbaStatusSchema>;
+export type IdentityPreviewInput = z.infer<typeof IdentityPreviewSchema>;
+export type RecommendationActionInput = z.infer<typeof RecommendationActionSchema>;
+export type ConnectorRetryInput = z.infer<typeof ConnectorRetrySchema>;
+export type AnalyticsRefreshInput = z.infer<typeof AnalyticsRefreshSchema>;

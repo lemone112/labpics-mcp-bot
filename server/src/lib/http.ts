@@ -1,86 +1,105 @@
-function sleep(ms) {
+import type { Logger } from "../types/index.js";
+
+function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-function shouldRetryStatus(status) {
+function shouldRetryStatus(status: number): boolean {
   return status === 408 || status === 425 || status === 429 || status >= 500;
 }
 
 // --- Circuit Breaker ---
-// States: closed (normal) → open (failing, instant reject) → half-open (probe)
-const CIRCUIT_CLOSED = "closed";
-const CIRCUIT_OPEN = "open";
-const CIRCUIT_HALF_OPEN = "half-open";
+type CircuitState = "closed" | "open" | "half-open";
 
-/**
- * Create a circuit breaker for a named service.
- * @param {string} name - service identifier (e.g. "chatwoot", "linear")
- * @param {{ failureThreshold?: number, resetTimeoutMs?: number, logger?: object }} opts
- */
-export function createCircuitBreaker(name, opts = {}) {
+export interface CircuitBreakerState {
+  name: string;
+  state: CircuitState;
+  failures: number;
+  lastFailureAt: number;
+}
+
+export interface CircuitBreaker {
+  recordSuccess(): void;
+  recordFailure(): void;
+  canRequest(): boolean;
+  getState(): CircuitBreakerState;
+}
+
+interface CircuitBreakerOptions {
+  failureThreshold?: number;
+  resetTimeoutMs?: number;
+  logger?: Logger | Console;
+}
+
+export function createCircuitBreaker(name: string, opts: CircuitBreakerOptions = {}): CircuitBreaker {
   const {
     failureThreshold = 5,
     resetTimeoutMs = 30_000,
     logger = console,
   } = opts;
 
-  let state = CIRCUIT_CLOSED;
+  let state: CircuitState = "closed";
   let failures = 0;
   let lastFailureAt = 0;
 
-  function recordSuccess() {
-    if (state === CIRCUIT_HALF_OPEN) {
+  function recordSuccess(): void {
+    if (state === "half-open") {
       logger.info({ circuit: name }, "circuit breaker closed (recovered)");
     }
-    state = CIRCUIT_CLOSED;
+    state = "closed";
     failures = 0;
   }
 
-  function recordFailure() {
+  function recordFailure(): void {
     failures++;
     lastFailureAt = Date.now();
-    if (failures >= failureThreshold && state === CIRCUIT_CLOSED) {
-      state = CIRCUIT_OPEN;
+    if (failures >= failureThreshold && state === "closed") {
+      state = "open";
       logger.warn({ circuit: name, failures }, "circuit breaker opened");
     }
   }
 
-  function canRequest() {
-    if (state === CIRCUIT_CLOSED) return true;
-    if (state === CIRCUIT_OPEN) {
+  function canRequest(): boolean {
+    if (state === "closed") return true;
+    if (state === "open") {
       if (Date.now() - lastFailureAt >= resetTimeoutMs) {
-        state = CIRCUIT_HALF_OPEN;
-        return true; // allow one probe request
+        state = "half-open";
+        return true;
       }
       return false;
     }
-    // half-open: allow probe
     return true;
   }
 
-  function getState() {
+  function getState(): CircuitBreakerState {
     return { name, state, failures, lastFailureAt };
   }
 
   return { recordSuccess, recordFailure, canRequest, getState };
 }
 
-// Registry of circuit breakers per host
-const circuitBreakers = new Map();
+const circuitBreakers = new Map<string, CircuitBreaker>();
 
-function getCircuitBreaker(url, logger) {
+function getCircuitBreaker(url: string, logger: Logger | Console): CircuitBreaker | null {
   try {
     const host = new URL(url).host;
     if (!circuitBreakers.has(host)) {
       circuitBreakers.set(host, createCircuitBreaker(host, { logger }));
     }
-    return circuitBreakers.get(host);
+    return circuitBreakers.get(host)!;
   } catch {
     return null;
   }
 }
 
-export async function fetchWithRetry(url, options = {}) {
+interface FetchWithRetryOptions extends RequestInit {
+  retries?: number;
+  timeoutMs?: number;
+  backoffMs?: number;
+  logger?: Logger | Console;
+}
+
+export async function fetchWithRetry(url: string, options: FetchWithRetryOptions = {}): Promise<Response> {
   const {
     retries = 2,
     timeoutMs = 15_000,
@@ -89,15 +108,14 @@ export async function fetchWithRetry(url, options = {}) {
     ...fetchOptions
   } = options;
 
-  // Circuit breaker check
   const breaker = getCircuitBreaker(url, logger);
   if (breaker && !breaker.canRequest()) {
     const err = new Error(`Circuit breaker open for ${new URL(url).host}`);
-    err.code = "CIRCUIT_OPEN";
+    (err as Error & { code: string }).code = "CIRCUIT_OPEN";
     throw err;
   }
 
-  let lastError = null;
+  let lastError: Error | null = null;
   for (let attempt = 0; attempt <= retries; attempt++) {
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(new Error("fetch timeout")), timeoutMs);
@@ -140,11 +158,11 @@ export async function fetchWithRetry(url, options = {}) {
       return response;
     } catch (error) {
       clearTimeout(timer);
-      lastError = error;
+      lastError = error as Error;
       if (breaker) breaker.recordFailure();
 
       if (attempt >= retries) break;
-      logger.warn({ url, attempt, retries, err: String(error?.message || error) }, "retrying fetch after error");
+      logger.warn({ url, attempt, retries, err: String((error as Error)?.message || error) }, "retrying fetch after error");
       await sleep(backoffMs * (attempt + 1));
     }
   }
@@ -152,16 +170,14 @@ export async function fetchWithRetry(url, options = {}) {
   throw lastError || new Error("fetchWithRetry failed");
 }
 
-/** Get all circuit breaker states (for /metrics or debugging) */
-export function getCircuitBreakerStates() {
-  const result = [];
+export function getCircuitBreakerStates(): CircuitBreakerState[] {
+  const result: CircuitBreakerState[] = [];
   for (const [, breaker] of circuitBreakers) {
     result.push(breaker.getState());
   }
   return result;
 }
 
-/** Reset all circuit breakers (for testing) */
-export function resetCircuitBreakers() {
+export function resetCircuitBreakers(): void {
   circuitBreakers.clear();
 }

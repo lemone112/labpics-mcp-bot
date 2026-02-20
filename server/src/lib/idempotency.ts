@@ -1,18 +1,23 @@
-/**
- * Idempotency key support for mutation endpoints.
- * Client sends X-Idempotency-Key header → server caches response for 24h.
- * On retry with same key, returns cached response without re-executing.
- */
+import type { Pool } from "../types/index.js";
 
 const HEADER = "x-idempotency-key";
 const TTL_HOURS = 24;
 
-export function getIdempotencyKey(request) {
+interface RequestHeaders {
+  headers?: Record<string, string | string[] | undefined>;
+}
+
+export function getIdempotencyKey(request: RequestHeaders): string | null {
   const key = String(request.headers?.[HEADER] || "").trim();
   return key.length >= 1 && key.length <= 256 ? key : null;
 }
 
-export async function findCachedResponse(pool, projectId, idempotencyKey) {
+interface CachedResponse {
+  status_code: number;
+  response_body: unknown;
+}
+
+export async function findCachedResponse(pool: Pool, projectId: string, idempotencyKey: string): Promise<CachedResponse | null> {
   const { rows } = await pool.query(
     `
       SELECT status_code, response_body
@@ -24,10 +29,17 @@ export async function findCachedResponse(pool, projectId, idempotencyKey) {
     `,
     [projectId, idempotencyKey]
   );
-  return rows[0] || null;
+  return (rows[0] as CachedResponse) || null;
 }
 
-export async function storeCachedResponse(pool, projectId, idempotencyKey, route, statusCode, responseBody) {
+export async function storeCachedResponse(
+  pool: Pool,
+  projectId: string,
+  idempotencyKey: string,
+  route: string,
+  statusCode: number,
+  responseBody: unknown,
+): Promise<void> {
   await pool.query(
     `
       INSERT INTO idempotency_keys (project_id, idempotency_key, route, status_code, response_body, expires_at)
@@ -39,7 +51,7 @@ export async function storeCachedResponse(pool, projectId, idempotencyKey, route
   );
 }
 
-export async function cleanExpiredKeys(pool) {
+export async function cleanExpiredKeys(pool: Pool): Promise<number> {
   const { rowCount } = await pool.query(
     `DELETE FROM idempotency_keys WHERE expires_at < now()`
   );

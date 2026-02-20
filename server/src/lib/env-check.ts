@@ -1,7 +1,4 @@
-/**
- * Startup env validation — fail fast if required vars are missing.
- * Call this before connecting to any services.
- */
+import type { Logger } from "../types/index.js";
 
 const REQUIRED = [
   "DATABASE_URL",
@@ -13,7 +10,7 @@ const RECOMMENDED = [
   "CORS_ORIGIN",
 ];
 
-export function validateEnv(logger = console) {
+export function validateEnv(logger: Logger | Console = console): void {
   const missing = REQUIRED.filter((key) => !process.env[key]?.trim());
   const unset = RECOMMENDED.filter((key) => !process.env[key]?.trim());
 

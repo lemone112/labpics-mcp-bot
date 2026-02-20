@@ -1,31 +1,26 @@
-/**
- * Simple in-memory sliding window rate limiter.
- * No external dependencies — suitable for single-instance deployment.
- */
-
+import type { FastifyRequest, FastifyReply } from "fastify";
+import type { Redis } from "ioredis";
 import { ApiError, sendError } from "./api-contract.js";
 
-const windows = new Map();
+interface RateLimitResult {
+  allowed: boolean;
+  remaining: number;
+  retryAfterMs: number;
+}
+
+const windows = new Map<string, { windowStart: number; count: number }>();
 const MAX_RATE_LIMIT_ENTRIES = 50_000;
 
-/**
- * @param {string} key - Unique identifier (e.g. "ip:127.0.0.1" or "user:admin")
- * @param {number} maxRequests - Max requests per window
- * @param {number} windowMs - Window size in milliseconds
- * @returns {{ allowed: boolean, remaining: number, retryAfterMs: number }}
- */
-export function checkRateLimit(key, maxRequests, windowMs) {
+export function checkRateLimit(key: string, maxRequests: number, windowMs: number): RateLimitResult {
   const now = Date.now();
   let entry = windows.get(key);
 
   if (!entry || now - entry.windowStart >= windowMs) {
     if (!entry && windows.size >= MAX_RATE_LIMIT_ENTRIES) {
-      // Evict oldest entries to prevent unbounded growth
       const maxAge = 10 * 60_000;
       for (const [k, v] of windows) {
         if (now - v.windowStart > maxAge) windows.delete(k);
       }
-      // If still over capacity, drop oldest quarter
       if (windows.size >= MAX_RATE_LIMIT_ENTRIES) {
         const toRemove = Math.floor(windows.size / 4);
         let removed = 0;
@@ -50,11 +45,7 @@ export function checkRateLimit(key, maxRequests, windowMs) {
   return { allowed: true, remaining: maxRequests - entry.count, retryAfterMs: 0 };
 }
 
-/**
- * Redis-backed rate limit check (INCR + EXPIRE).
- * Falls back to in-memory if Redis call fails.
- */
-async function checkRateLimitRedis(redisClient, key, maxRequests, windowMs) {
+async function checkRateLimitRedis(redisClient: Redis, key: string, maxRequests: number, windowMs: number): Promise<RateLimitResult> {
   const redisKey = `rl:${key}`;
   const windowSec = Math.max(1, Math.ceil(windowMs / 1000));
   try {
@@ -73,21 +64,22 @@ async function checkRateLimitRedis(redisClient, key, maxRequests, windowMs) {
   }
 }
 
-/**
- * Create a Fastify preHandler hook for rate limiting.
- * When redisClient is provided, uses distributed Redis rate limiting;
- * falls back to in-memory when Redis is unavailable.
- * @param {{ maxRequests?: number, windowMs?: number, keyFn?: (request: any) => string, redisClient?: object | null }} options
- */
-export function rateLimitHook(options = {}) {
+interface RateLimitHookOptions {
+  maxRequests?: number;
+  windowMs?: number;
+  keyFn?: (request: FastifyRequest) => string;
+  redisClient?: Redis | null;
+}
+
+export function rateLimitHook(options: RateLimitHookOptions = {}) {
   const {
     maxRequests = 30,
     windowMs = 60_000,
-    keyFn = (request) => `${request.ip}:${request.url}`,
+    keyFn = (request: FastifyRequest) => `${request.ip}:${request.url}`,
     redisClient = null,
   } = options;
 
-  return async (request, reply) => {
+  return async (request: FastifyRequest, reply: FastifyReply) => {
     const key = keyFn(request);
     const result = redisClient
       ? await checkRateLimitRedis(redisClient, key, maxRequests, windowMs)
@@ -98,7 +90,7 @@ export function rateLimitHook(options = {}) {
 
     if (!result.allowed) {
       reply.header("Retry-After", Math.ceil(result.retryAfterMs / 1000));
-      return sendError(reply, request.requestId || request.id, new ApiError(429, "rate_limit_exceeded", "Too many requests"));
+      return sendError(reply, (request as FastifyRequest & { requestId?: string }).requestId || request.id, new ApiError(429, "rate_limit_exceeded", "Too many requests"));
     }
   };
 }
@@ -106,7 +98,7 @@ export function rateLimitHook(options = {}) {
 // Periodic cleanup of expired windows (every 5 minutes)
 setInterval(() => {
   const now = Date.now();
-  const maxAge = 10 * 60_000; // 10 minutes
+  const maxAge = 10 * 60_000;
   for (const [key, entry] of windows) {
     if (now - entry.windowStart > maxAge) {
       windows.delete(key);
