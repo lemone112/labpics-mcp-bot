@@ -21,6 +21,8 @@ const databaseUrl = process.env.PLAYWRIGHT_DATABASE_URL || `postgresql://${dbUse
 const authCredentials = process.env.PLAYWRIGHT_AUTH_CREDENTIALS || "admin:admin";
 const keepDb = String(process.env.E2E_KEEP_DB || "").trim() === "1";
 
+const composeFiles = ["-f", "docker-compose.yml", "-f", "docker-compose.e2e.yml"];
+
 const composeEnv = {
   ...process.env,
   COMPOSE_PROJECT_NAME: composeProjectName,
@@ -73,7 +75,7 @@ async function waitForDbReady(maxAttempts = 60) {
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
     const code = await runCommand(
       "docker",
-      ["compose", "exec", "-T", "db", "pg_isready", "-U", dbUser, "-d", dbName],
+      ["compose", ...composeFiles, "exec", "-T", "db", "pg_isready", "-U", dbUser, "-d", dbName],
       { cwd: repoRoot, env: composeEnv, allowFailure: true }
     );
     if (code === 0) return;
@@ -83,7 +85,7 @@ async function waitForDbReady(maxAttempts = 60) {
 }
 
 async function cleanupDbStack() {
-  await runCommand("docker", ["compose", "down", "-v"], {
+  await runCommand("docker", ["compose", ...composeFiles, "down", "-v"], {
     cwd: repoRoot,
     env: composeEnv,
     allowFailure: true,
@@ -109,7 +111,7 @@ async function main() {
 
   dockerUsed = true;
   await cleanupDbStack();
-  await runCommand("docker", ["compose", "up", "-d", "db"], { cwd: repoRoot, env: composeEnv });
+  await runCommand("docker", ["compose", ...composeFiles, "up", "-d", "db"], { cwd: repoRoot, env: composeEnv });
   await waitForDbReady();
 
   await runCommand("node", ["scripts/reset-db-for-e2e.mjs"], {
