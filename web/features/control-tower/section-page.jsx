@@ -1,7 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 
+import { apiFetch } from "@/lib/api";
 import { useAuthGuard } from "@/hooks/use-auth-guard";
 import { useEventStream } from "@/hooks/use-event-stream";
 import { usePortfolioMessages } from "@/hooks/use-portfolio-messages";
@@ -23,12 +25,40 @@ import { FinanceSection } from "./sections/finance-section";
 import { OffersSection } from "./sections/offers-section";
 import { MessagesSection } from "./sections/messages-section";
 
+const CTA_JOBS = {
+  dashboard: "/jobs/chatwoot/sync",
+  messages: "/jobs/chatwoot/sync",
+  agreements: "/jobs/chatwoot/sync",
+  risks: "/jobs/chatwoot/sync",
+  finance: "/jobs/chatwoot/sync",
+  offers: null,
+};
+
 export default function ControlTowerSectionPage({ section }) {
   const normalizedSection = normalizePortfolioSection(section);
+  const router = useRouter();
   const { loading, session } = useAuthGuard();
   const { selectedProjectIds, selectedProject, isAllProjects, loadingProjects } = useProjectPortfolio();
   const { moneyFormatter, numberFormatter } = useFormatters();
   const [selectedPersonId, setSelectedPersonId] = useState("");
+  const [ctaBusy, setCtaBusy] = useState(false);
+
+  const onPrimaryCta = useCallback(async () => {
+    const jobPath = CTA_JOBS[normalizedSection];
+    if (normalizedSection === "offers") {
+      router.push("/offers");
+      return;
+    }
+    if (!jobPath) return;
+    setCtaBusy(true);
+    try {
+      await apiFetch(jobPath, { method: "POST" });
+    } catch {
+      // Error will surface via overview.error
+    } finally {
+      setCtaBusy(false);
+    }
+  }, [normalizedSection, router]);
 
   // Real-time: SSE event stream (must be above data hooks so sseConnected is available)
   const eventStream = useEventStream({
@@ -83,7 +113,7 @@ export default function ControlTowerSectionPage({ section }) {
           title={TITLES[normalizedSection]}
           reason="Нет доступных проектов."
           steps={["Создайте проект", "Выберите его в правом сайдбаре"]}
-          primaryAction={<Button>Создать проект</Button>}
+          primaryAction={<Button onClick={() => router.push("/projects")}>Создать проект</Button>}
         />
       </PageShell>
     );
@@ -117,7 +147,7 @@ export default function ControlTowerSectionPage({ section }) {
     <PageShell title={TITLES[normalizedSection]} subtitle={SUBTITLES[normalizedSection]}>
       <div className="space-y-4">
         <div data-testid="ct-hero" className="flex flex-wrap items-center justify-between gap-3">
-          <Button data-testid="primary-cta">{PRIMARY_CTA[normalizedSection]}</Button>
+          <Button data-testid="primary-cta" onClick={onPrimaryCta} disabled={ctaBusy}>{PRIMARY_CTA[normalizedSection]}</Button>
           <div data-testid="trust-bar">
             <LastUpdatedIndicator
               secondsAgo={secondsAgo}

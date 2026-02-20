@@ -71,7 +71,7 @@ export function ProjectSidebarPanel({ onRequestClose = null }) {
         <div className="space-y-2 pb-3">
           <p className="text-sm font-semibold text-sidebar-foreground">Проекты</p>
           <p className="text-xs text-sidebar-foreground/70">Выбор: {isAllProjects ? "Все проекты" : selectedProject?.name || "-"}</p>
-          <p className="text-[11px] text-sidebar-foreground/60">Список обновляется автоматически.</p>
+          <p className="text-xs text-sidebar-foreground/60">Список обновляется автоматически.</p>
         </div>
 
         <div className="flex-1 space-y-2 overflow-y-auto pr-1">
@@ -168,7 +168,7 @@ export function ProjectSidebarPanel({ onRequestClose = null }) {
                 <SelectItem value="system">Системная</SelectItem>
               </SelectContent>
             </Select>
-            <p className="text-[11px] text-sidebar-foreground/70">По умолчанию используется системная тема.</p>
+            <p className="text-xs text-sidebar-foreground/70">По умолчанию используется системная тема.</p>
 
             <Button type="button" variant="outline" size="sm" className="w-full justify-start" onClick={onLogout}>
               <LogOut className="size-4" />

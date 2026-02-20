@@ -28,15 +28,15 @@ Protected routes требуют:
 
 Конфиг auth: `AUTH_CREDENTIALS` (user:pass) или отдельно `AUTH_USERNAME` + `AUTH_PASSWORD`.
 
-## 2) Projects
+## 2) Projects [PROTECTED]
 
-- `GET /projects`
-- `POST /projects`
-- `POST /projects/:id/select`
+- `GET /projects` [PROTECTED]
+- `POST /projects` [PROTECTED]
+- `POST /projects/:id/select` [PROTECTED]
 
-## 3) LightRAG
+## 3) LightRAG [PROTECTED]
 
-- `POST /lightrag/query`
+- `POST /lightrag/query` [PROTECTED]
   - body: `{ query: string, topK?: number, sourceLimit?: number }`
   - response: `answer`, `chunks`, `evidence`, `entities`, `stats`
   - Внутренняя логика:
@@ -45,56 +45,56 @@ Protected routes требуют:
     - Evidence: до 50 элементов из всех источников, объединённых с metadata
     - Limits: query max 4000 chars, topK 1-50 (default 10), sourceLimit 1-25 (default 8)
     - Каждый запрос логируется в `lightrag_query_runs` (observability)
-- `POST /lightrag/refresh`
+- `POST /lightrag/refresh` [PROTECTED]
   - запускает embeddings refresh + возвращает статус
-- `GET /lightrag/status`
+- `GET /lightrag/status` [PROTECTED]
   - показывает состояния embeddings (`pending/processing/ready/failed` counts) и объёмы source-данных
 
 Legacy compatibility:
 
-- `POST /search` работает как alias к LightRAG query (`mode: "lightrag"` в ответе).
+- `POST /search` [PROTECTED] работает как alias к LightRAG query (`mode: "lightrag"` в ответе).
 
-## 4) Connectors / reliability
+## 4) Connectors / reliability [PROTECTED]
 
-- `GET /connectors/state`
-- `GET /connectors/errors`
-- `GET /connectors/reconciliation`
-- `POST /connectors/reconciliation/run`
-- `POST /connectors/sync`
-- `POST /connectors/:name/sync`
-- `POST /connectors/errors/retry`
+- `GET /connectors/state` [PROTECTED]
+- `GET /connectors/errors` [PROTECTED]
+- `GET /connectors/reconciliation` [PROTECTED]
+- `POST /connectors/reconciliation/run` [PROTECTED]
+- `POST /connectors/sync` [PROTECTED]
+- `POST /connectors/:name/sync` [PROTECTED]
+- `POST /connectors/errors/retry` [PROTECTED]
 
-## 5) Jobs / scheduler
+## 5) Jobs / scheduler [PROTECTED]
 
-- `POST /jobs/chatwoot/sync`
-- `POST /jobs/attio/sync`
-- `POST /jobs/linear/sync`
-- `POST /jobs/embeddings/run`
-- `GET /jobs/status` — агрегированный ответ:
+- `POST /jobs/chatwoot/sync` [PROTECTED]
+- `POST /jobs/attio/sync` [PROTECTED]
+- `POST /jobs/linear/sync` [PROTECTED]
+- `POST /jobs/embeddings/run` [PROTECTED]
+- `GET /jobs/status` [PROTECTED] — агрегированный ответ:
   - `jobs` — последний run по каждому job_name
   - `rag_counts` — количество chunks по статусам (pending/processing/ready/failed)
   - `entities` — counts по contacts, conversations, messages, rag_chunks
   - `storage` — database_bytes, scoped_logical_bytes, budget_bytes (`STORAGE_BUDGET_GB`, default 20), usage_percent
   - `watermarks` — последние 5 sync watermarks
-- `GET /jobs/scheduler`
-- `POST /jobs/scheduler/tick`
+- `GET /jobs/scheduler` [PROTECTED]
+- `POST /jobs/scheduler/tick` [PROTECTED]
 
 ### Real-time (SSE)
 
-- `GET /events/stream` — Server-Sent Events stream (требует session cookie)
+- `GET /events/stream` [PROTECTED] — Server-Sent Events stream (требует session cookie)
   - Event type: `connected` (при установке соединения)
   - Event type: `job_completed` (при завершении любой scheduler задачи)
   - Heartbeat: каждые 30 сек (`: heartbeat\n\n`)
   - Scope: project_id из активной сессии
   - Не требует CSRF (GET запрос)
 
-## 6) Control Tower / product surfaces
+## 6) Control Tower / product surfaces [PROTECTED]
 
-- Portfolio: `/portfolio/overview`, `/portfolio/messages`
-- CRM: `/crm/accounts`, `/crm/opportunities`, `/crm/overview`
-- Offers: `/offers`, `/offers/:id/approve-*`
-- Digests: `/digests/daily*`, `/digests/weekly*`
-- Analytics: `/analytics/*`, `/risk/*`
+- Portfolio: `/portfolio/overview` [PROTECTED], `/portfolio/messages` [PROTECTED]
+- CRM: `/crm/accounts` [PROTECTED], `/crm/opportunities` [PROTECTED], `/crm/overview` [PROTECTED]
+- Offers: `/offers` [PROTECTED], `/offers/:id/approve-*` [PROTECTED]
+- Digests: `/digests/daily*` [PROTECTED], `/digests/weekly*` [PROTECTED]
+- Analytics: `/analytics/*` [PROTECTED], `/risk/*` [PROTECTED]
 
 ## 7) Удалённые legacy маршруты
 

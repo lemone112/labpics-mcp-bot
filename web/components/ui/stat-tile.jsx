@@ -9,7 +9,7 @@ export function StatTile({ label, value, meta, className, onClick, href }) {
   return (
     <Tag
       className={cn(
-        "rounded-xl border bg-card p-3 text-card-foreground shadow-[var(--shadow-card)]",
+        "rounded-xl border bg-card p-3 text-card-foreground shadow-card",
         interactive && "cursor-pointer transition-colors hover:bg-accent/50",
         className,
       )}
