@@ -6,7 +6,7 @@ COPY apps/api/package.json ./apps/api/
 COPY apps/web/package.json ./apps/web/
 COPY apps/telegram-bot/package.json ./apps/telegram-bot/
 COPY packages/shared-types/package.json ./packages/shared-types/
-RUN npm ci -w apps/web
+RUN npm ci
 
 # --- build stage: produce .next output ---
 FROM node:22-alpine AS build
