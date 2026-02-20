@@ -23,6 +23,11 @@ function jsonOk(route, payload) {
 }
 
 async function installApiMocks(page) {
+  // Middleware requires a session cookie to allow access to protected pages
+  await page.context().addCookies([
+    { name: "sid", value: "mock-session-for-e2e", domain: "localhost", path: "/" },
+  ]);
+
   const state = {
     activeProjectId: null,
     selectedProjectIds: [],
