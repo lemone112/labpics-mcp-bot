@@ -21,4 +21,4 @@ COPY --chown=app:app apps/api/db ./db
 
 USER app
 EXPOSE 8080
-CMD ["node", "src/index.js"]
+CMD ["npm", "run", "start"]
