@@ -1,41 +1,52 @@
-# Unified Iteration Plan — All Open Work (228 issues)
+# Unified Iteration Plan — All Open Work (262 issues)
 
-> Обновлено: 2026-02-20
+> Обновлено: 2026-02-20 (v5 — post-critique)
 > Source of truth: [GitHub Milestones](https://github.com/lemone112/labpics-dashboard/milestones)
 >
 > **Контекст:** Design studio lab.pics, 2–5 PM + Owner, 5–10 активных проектов,
 > $5–20K avg, 1–3 месяца, стартапы/IT. Deploy: VPS + Docker Compose.
 >
 > **Источники:** 5 research reports (infra audit Feb 2026) + 6-round Q&A session.
+> **NEW:** 6-agent parallel critique (2026-02-20) — see `docs/critique-findings-2026-02-20.md`.
 > Closed Iter 27–43 — superseded (roadmap placeholders).
+> ✅ **Iter 55 — DONE** (committed as `27200c0`, all 306 tests pass).
 
 ---
 
-## Execution Phases
+## Execution Phases (post-critique re-prioritization)
 
 ```
-Phase 1 — Foundation ★ (unblocks everything)
-  Iter 11  LightRAG Integration ──────── 10 tasks  CRITICAL
+Phase 0 — Critical Fixes ★★★ (data integrity + security, start NOW)
+  Iter 61  Security Hardening ────────────── 8 tasks  P0  ← CSRF, webhook, auth rate limit    NEW
+  Iter 62  Business Logic Accuracy ──────── 8 tasks  P0  ← Russian signals, real metrics      NEW
+  Iter 63  DB & Vector Optimization ─────── 8 tasks  P0  ← vector operator fix, indexes       NEW
+  Iter 52  Critical Data Safety & Auth ──── 7 tasks  P0  ← watermark, TG bot auth
+  Iter 53  Scheduler & Worker Hardening ── 8 tasks  P0  ← timeouts, backoff, 429
+
+Phase 1 — Foundation (after critical fixes)
   Iter 44  Scheduler & Connectors ─────── 7 tasks  P0
+  Iter 11  LightRAG Integration ──────── 10 tasks  P1  ← LOWERED from CRITICAL (not revenue-critical)
 
 Phase 2 — Core Business Features
   Iter 49  Multi-User & Access Control ── 8 tasks  P0
+  Iter 48  Automated Reporting ────────── 6 tasks  P0  ← RAISED from P1 (revenue protection)
   Iter 45  Search UX & Intelligence ───── 8 tasks  P0
   Iter 20  UX Logic & IA ────────────── 11 tasks  P0
 
-Phase 3 — UX/UI Deep Work ★★ (пристальное внимание)
-  Iter 21    Page-Level Redesign ──────── 12 tasks  P0
-  Iter 20.5  Charts & Visualization ──── 12 tasks  P0  ← deep chart work
+Phase 3 — UX/UI Deep Work ★★ (only after data layer is accurate)
+  Iter 54  Frontend Resilience ──────────── 8 tasks  P0  ← RAISED from P1 (CSP, hooks, Promise.all)
+  Iter 21    Page-Level Redesign ──────── 12 tasks  P1  ← LOWERED from P0 (fix data first)
+  Iter 20.5  Charts & Visualization ──── 12 tasks  P1  ← LOWERED from P0 (charts show zeros)
   Iter 23    Accessibility & Polish ──── 10 tasks  P1
 
 Phase 4 — Platform & Monitoring
   Iter 46  System Monitoring UI ────────── 7 tasks  P1
   Iter 47  Infrastructure Hardening ────── 6 tasks  P1
-  Iter 48  Automated Reporting ────────── 6 tasks  P1
+  Iter 17  Analytics Instrumentation ───── 8 tasks  P1  ← RAISED from P2 (no usage data)
 
-Phase 5 — Telegram Bot
-  Iter 50  Telegram Bot MVP ───────────── 8 tasks  P0
-  Iter 51  Telegram Bot Advanced ──────── 7 tasks  P1
+Phase 5 — Telegram Bot (lowered: convenience, not necessity)
+  Iter 50  Telegram Bot MVP ───────────── 8 tasks  P2  ← LOWERED from P0
+  Iter 51  Telegram Bot Advanced ──────── 7 tasks  P2  ← LOWERED from P1
 
 Phase 6 — Mobile & Responsive
   Iter 22  Mobile & Responsive ─────────── 8 tasks  P1
@@ -43,78 +54,91 @@ Phase 6 — Mobile & Responsive
 Phase 7 — Quality & Tech Debt
   Iter 16  QA & Release Readiness ──────── 3 tasks  HIGH
   Iter 24  Design Validation & QA ──────── 9 tasks  P1
-  Iter 17  Analytics Instrumentation ───── 8 tasks  P2
   Iter 25  Performance & Caching ────────── 9 tasks  P2
   Iter 26  API Architecture & DX ────────── 8 tasks  P2
   Iter 15  TypeScript Migration ──────────── 2 tasks  P2
 
-Phase 8 — Code Audit Fixes ★ (2026-02-20 audit)
-  Iter 52  Critical Data Safety & Auth ──── 7 tasks  P0  ← watermark, TG bot auth
-  Iter 53  Scheduler & Worker Hardening ── 8 tasks  P0  ← timeouts, backoff, 429
-  Iter 54  Frontend Resilience ──────────── 8 tasks  P1  ← Promise.allSettled, hooks
-  Iter 55  Observability & Audit Trail ──── 8 tasks  P1  ← logging, retention, rate limit
-  Iter 56  Config & Infra Hardening ─────── 6 tasks  P2  ← env vars, Docker, validation
+Phase 8 — Remaining Audit Fixes
+  Iter 55  Observability & Audit Trail ──── 8 tasks  ✅ DONE
+  Iter 56  Config & Infra Hardening ─────── 6 tasks  P2
 
-Phase 9 — Comprehensive Testing ★★★ (финальная валидация)
-  Iter 57  Backend Unit Test Expansion ──── 8 tasks  P0  ← identity-graph, connectors, scheduler
-  Iter 58  E2E Test Suite ─────────────── 8 tasks  P0  ← все страницы, mobile, empty states
-  Iter 59  Integration & Contract Testing ── 8 tasks  P1  ← sync cycle, RBAC, cascade, API contracts
-  Iter 60  TG Bot & Performance Testing ── 8 tasks  P1  ← bot tests, load, Lighthouse, visual
+Phase 9 — Comprehensive Testing ★★★ (incremental, not final-phase-only)
+  Iter 57  Backend Unit Test Expansion ──── 8 tasks  P0  ← start alongside Phase 0
+  Iter 58  E2E Test Suite ─────────────── 8 tasks  P0
+  Iter 59  Integration & Contract Testing ── 8 tasks  P1
+  Iter 60  TG Bot & Performance Testing ── 8 tasks  P1
 ```
 
-**Total: 228 issues across 29 iterations in 9 phases.**
+**Total: 262 issues across 32 iterations in 10 phases.**
+
+### Key changes from v4 → v5 (critique-driven):
+- **NEW Phase 0** — 3 new iterations (61-63) for critique findings not in any existing plan
+- **Iter 11 (LightRAG)** lowered CRITICAL → P1: not revenue-critical, web dashboard is primary
+- **Iter 48 (Reporting)** raised P1 → P0: most direct revenue-protection mechanism
+- **Iter 54 (Frontend)** raised P1 → P0: CSP unsafe-eval, hooks violation affect production
+- **Iter 21, 20.5** lowered P0 → P1: redesigning pages showing fabricated data is wasted effort
+- **Iter 50, 51 (TG Bot)** lowered P0/P1 → P2: convenience for 2-5 person studio
+- **Iter 17 (Analytics)** raised P2 → P1: no usage data means blind product decisions
+- **Phase 9** now starts alongside Phase 0 (testing should accompany features, not follow them)
+- **Iter 55** marked ✅ DONE
 
 ---
 
-## Dependency Graph
+## Dependency Graph (post-critique)
 
 ```
+Phase 0 (START HERE):
+  Iter 61 (Security) ──────── no deps, start immediately
+  Iter 62 (Biz Logic) ─────── no deps, start immediately
+  Iter 63 (DB/Vector) ─────── no deps, start immediately
+  Iter 52 (Data Safety) ───── no deps
+  Iter 53 (Scheduler) ─────── no deps
+  Iter 57 (Backend Tests) ──← start alongside, test as we fix
+
 Phase 1:
-  Iter 11 (LightRAG) ─────────────────────────────────────┐
-  Iter 44 (Scheduler) ──┐                                  │
+  Iter 44 (Scheduler) ──┐
+  Iter 11 (LightRAG) ───┼──────────────────────────────────┐
                         │                                  │
 Phase 2:                ▼                                  │
   Iter 49 (Multi-user) ←┘                                  │
+  Iter 48 (Reporting) ← requires 44, 62 (accurate data)   │
   Iter 45 (Search UX)                                      │
   Iter 20 (UX Logic) ───────────┐                          │
                                 │                          │
-Phase 3:                        ▼                          │
-  Iter 21 (Page Redesign) ← requires 20                    │
-  Iter 20.5 (Charts) ← requires 20                        │
+Phase 3 (after data layer is accurate):                    │
+  Iter 54 (Frontend) ───────── no deps, can run early      │
+  Iter 21 (Page Redesign) ← requires 20, 62               │
+  Iter 20.5 (Charts) ← requires 20, 62 (real metric data) │
   Iter 23 (A11y/Polish) ← requires 21                     │
                                                            │
 Phase 4:                                                   │
   Iter 46 (Monitoring) ← enhanced by 44                    │
   Iter 47 (Infrastructure)                                 │
-  Iter 48 (Reporting) ← requires 44, 46                   │
+  Iter 17 (Analytics) ←── no deps, raised to P1            │
                                                            │
-Phase 5:                                                   ▼
-  Iter 50 (TG Bot MVP) ← requires Iter 11 (LightRAG) ────┘
+Phase 5 (lowered priority):                                ▼
+  Iter 50 (TG Bot MVP) ← requires 11 (LightRAG) ─────────┘
   Iter 51 (TG Bot Advanced) ← requires 50
 
 Phase 6: Iter 22 (Mobile) ← requires 21
-Phase 7: Iter 16, 24, 17, 25, 26, 15 — parallel, independent
-Phase 8: Iter 52-56 — independent, can start immediately (audit fixes)
-  Iter 52 (Data Safety) — no dependencies, P0
-  Iter 53 (Scheduler) — no dependencies, P0
-  Iter 54 (Frontend) — no dependencies, P1
-  Iter 55 (Observability) — no dependencies, P1
-  Iter 56 (Config) — no dependencies, P2
+Phase 7: Iter 16, 24, 25, 26, 15 — parallel, independent
+Phase 8: Iter 55 ✅ DONE, Iter 56 (Config) — P2
 
-Phase 9: Iter 57-60 — testing gate (requires Phase 1-8 features to exist)
-  Iter 57 (Backend Unit Tests) ← requires Phase 1 + Phase 8 code to exist
-  Iter 58 (E2E Tests) ← requires Phase 2-3 UI pages to exist
-  Iter 59 (Integration Tests) ← requires Iter 44, 49, 11 (scheduler, auth, LightRAG)
-  Iter 60 (TG Bot + Perf) ← requires Iter 50-51 (TG Bot), Phase 7 (perf infra)
+Phase 9 (incremental, not sequential):
+  Iter 57 (Backend Tests) ← start with Phase 0
+  Iter 58 (E2E Tests) ← start when Phase 2-3 pages exist
+  Iter 59 (Integration Tests) ← requires 44, 49, 11
+  Iter 60 (TG Bot + Perf) ← requires 50-51
 ```
 
 ---
 
 ## Phase 1 — Foundation (17 tasks)
 
-### Iter 11 — HKUDS LightRAG Integration (CRITICAL, 10 tasks)
+### Iter 11 — HKUDS LightRAG Integration (P1 ↓, 10 tasks) ★ LOWERED from CRITICAL
 
 > Issues: [#46–#55](https://github.com/lemone112/labpics-dashboard/milestone/1)
+> **LOWERED** by critique: LightRAG not revenue-critical; Owner/PMs use web dashboard, not TG bot.
 
 Миграция с custom hybrid RAG на HKUDS LightRAG. Knowledge graph + dual-level retrieval.
 **Блокирует:** Iter 50 (TG Bot search через LightRAG MCP).
@@ -473,10 +497,57 @@ Fix 3x connector bottleneck (sequential → parallel). Quick wins.
 
 ---
 
-## Phase 8 — Code Audit Fixes (37 tasks)
+## Phase 0 — Critical Fixes ★★★ (start NOW, 31 tasks)
 
-> Источник: полный code audit 2026-02-20 (backend, frontend, integrations, TG bot).
-> Все итерации Phase 8 **не имеют зависимостей** — можно начинать параллельно с Phase 1-7.
+> Источник: 6-agent parallel critique 2026-02-20. Все findings верифицированы file:line ссылками.
+> Полный отчёт: `docs/critique-findings-2026-02-20.md`
+> **Нет зависимостей** — начинать немедленно, параллельно с любой другой работой.
+
+### Iter 61 — Security Hardening (P0, 8 tasks) ★ NEW
+
+> Источник: Security agent critique. Findings не покрытые Iter 52-56.
+
+| # | Task | Priority | Finding |
+|---|------|----------|---------|
+| 61.1 | Fix logout CSRF bypass: require CSRF for POST /auth/logout | P0 | `index.js:679` all /auth/ paths skip CSRF |
+| 61.2 | Enforce TG webhook secret: reject when env var unset + startup check | P0 | `index.ts:33` + `types.ts:12` optional |
+| 61.3 | Fix CSRF cookie httpOnly → false (enable double-submit pattern) | P0 | `index.js:507-513` JS can't read cookie |
+| 61.4 | Gate Swagger UI behind NODE_ENV !== production | P0 | `index.js:395-397,679` unauthenticated |
+| 61.5 | Use crypto.timingSafeEqual for TG webhook secret comparison | P1 | `index.ts:35` uses `!==` |
+| 61.6 | Sanitize x-request-id header (format, length, charset) | P1 | `index.js:356` log injection |
+| 61.7 | Add rate limiting to /auth/me, /auth/signup/* endpoints | P1 | `index.js:689` exits before rate limit |
+| 61.8 | Authenticate /metrics endpoint (or gate behind isProd) | P1 | `index.js:679,755` exposes internals |
+
+### Iter 62 — Business Logic Accuracy (P0, 8 tasks) ★ NEW
+
+> Источник: Business agent critique. Сигналы, метрики, revenue — всё показывает пустые/нулевые данные.
+> **Impact:** Без этих исправлений дашборд отображает фейковые данные (0% margin, 0 response time, 0 signals).
+
+| # | Task | Priority | Finding |
+|---|------|----------|---------|
+| 62.1 | Add Russian keyword patterns to signal detection | P0 | `signals.js:28-72` English-only → 0 signals for RU clients |
+| 62.2 | Add Russian keyword patterns to upsell radar | P0 | `upsell.js:16` English-only → 0 upsell signals |
+| 62.3 | Compute actual avg_response_minutes (pair messages) | P0 | `intelligence.js:89` hardcoded 0 |
+| 62.4 | Feed outbound_messages count into analytics snapshots | P0 | `intelligence.js:89` hardcoded 0 |
+| 62.5 | Add client communication gap detection (N days silence) | P0 | No query for `last_message_at < now() - interval` |
+| 62.6 | Separate failedJobPressure from client health score | P1 | `intelligence.js:276` technical metric ≠ business health |
+| 62.7 | Calibrate upsell thresholds for $5-20K deal range | P1 | `upsell.js:37-58` $50K threshold too high |
+| 62.8 | Add project lifecycle phase field (kickoff→completed) | P1 | No phase concept → missed upsell window |
+
+### Iter 63 — DB & Vector Optimization (P0, 8 tasks) ★ NEW
+
+> Источник: DB/RAG agent critique. Vector search делает seq scan, индексы не используются.
+
+| # | Task | Priority | Finding |
+|---|------|----------|---------|
+| 63.1 | Fix vector search operator: `<->` → `<=>` (cosine distance) | P0 | `embeddings.js:248,254` index mismatch → full seq scan |
+| 63.2 | Fix token budget truncation: add budget_exhausted flag | P0 | `openai.js:79-82` infinite retry loop |
+| 63.3 | Add expression indexes for COALESCE(updated_at, created_at) | P0 | 4 queries in `event-log.js` can't use indexes |
+| 63.4 | Wrap connector-sync success path in withTransaction | P1 | `connector-sync.js:74-170` partial-write risk |
+| 63.5 | Rename stale kag_event_log indexes → connector_events | P1 | `0022:15-16` 3 of 5 not renamed |
+| 63.6 | Drop redundant IVFFlat index (HNSW is preferred) | P1 | `0002:13-15` unused, slows inserts |
+| 63.7 | Add pool saturation warning (queue length monitoring) | P2 | `db.js:8` max:25, no exhaustion alert |
+| 63.8 | Move dimension validation before API calls (save tokens) | P2 | `openai.js:96-99` checks after all calls |
 
 ### Iter 52 — Critical Data Safety & Auth (P0, 7 tasks)
 
@@ -494,56 +565,62 @@ Fix 3x connector bottleneck (sequential → parallel). Quick wins.
 | 52.6 | Fix: TG bot Supabase has no RLS policies | P0 |
 | 52.7 | Fix: embedding batch failure rolls back ALL chunks | P0 |
 
-### Iter 53 — Scheduler & Worker Hardening (P0, 8 tasks)
+### Iter 53 — Scheduler & Worker Hardening (P0, 12 tasks) ★ EXPANDED by critique
 
 > Issues: [#410–#420](https://github.com/lemone112/labpics-dashboard/milestone/43)
 
-Таймауты, backoff, устойчивость к внешним API.
+Таймауты, backoff, конкурентность, устойчивость к внешним API.
 
-| # | Task | Priority |
-|---|------|----------|
-| 53.1 | Add per-handler timeout for scheduler jobs (10min) | P0 |
-| 53.2 | Implement exponential backoff for failed jobs | P0 |
-| 53.3 | Parse Retry-After headers, 429-specific backoff | P0 |
-| 53.4 | Make OpenAI embeddings endpoint URL configurable | P1 |
-| 53.5 | Add OpenAI embeddings cost tracking | P1 |
-| 53.6 | Enforce token budget for evidence building | P1 |
-| 53.7 | Add SSE heartbeat + fix dead connection cleanup | P1 |
-| 53.8 | Improve Redis reconnection strategy | P1 |
+| # | Task | Priority | Note |
+|---|------|----------|------|
+| 53.1 | Add per-handler timeout for scheduler jobs (10min) | P0 | |
+| 53.2 | Implement exponential backoff for failed jobs | P0 | |
+| 53.3 | Parse Retry-After headers, 429-specific backoff | P0 | |
+| 53.4 | Fix scheduler job claim: atomic UPDATE...RETURNING (not FOR UPDATE) | P0 | NEW: `scheduler.js:240` locks release immediately |
+| 53.5 | Fix processDueOutbounds: add FOR UPDATE SKIP LOCKED | P0 | NEW: `outbox.js:551` double-send possible |
+| 53.6 | Fix ensureDefaultScheduledJobs: run once at startup, not every tick | P1 | NEW: `scheduler.js:238` 13*N queries/min |
+| 53.7 | Fix circuit breaker half-open: allow single probe only | P1 | NEW: `http.js:48-58` unlimited probes |
+| 53.8 | Fix metrics cb.failureCount → cb.failures property name | P1 | NEW: `health.js:77` undefined in Prometheus |
+| 53.9 | Add SSE connection limit per project | P1 | NEW: `sse-broadcaster.js` unbounded |
+| 53.10 | Make OpenAI embeddings endpoint URL configurable | P1 | |
+| 53.11 | Add SSE heartbeat + fix dead connection cleanup | P1 | |
+| 53.12 | Improve Redis reconnection strategy (maxRetriesPerRequest:1) | P1 | `redis.js:20` 3 retries = seconds of blocking |
 
-### Iter 54 — Frontend Resilience (P1, 8 tasks)
+### Iter 54 — Frontend Resilience (P0 ↑, 10 tasks) ★ RAISED from P1
 
 > Issues: [#421–#429](https://github.com/lemone112/labpics-dashboard/milestone/44)
+> **RAISED** by critique: CSP unsafe-eval, hooks violation, Promise.all all affect production.
 
-Устойчивость UI к частичным ошибкам, производительность.
+Устойчивость UI к частичным ошибкам, безопасность, производительность.
 
-| # | Task | Priority |
-|---|------|----------|
-| 54.1 | Replace Promise.all with Promise.allSettled (6 pages) | P1 |
-| 54.2 | Split use-project-portfolio hook (335 LOC → 3 hooks) | P1 |
-| 54.3 | Migrate feature pages to React Query (useQuery) | P1 |
-| 54.4 | Add granular error boundaries per section | P1 |
-| 54.5 | Replace inline empty states with EmptyState component | P1 |
-| 54.6 | Add dynamic imports for feature pages (code splitting) | P2 |
-| 54.7 | Add virtualization for project list in sidebar | P2 |
-| 54.8 | Persist sidebar collapse state across navigations | P2 |
+| # | Task | Priority | Note |
+|---|------|----------|------|
+| 54.1 | Replace Promise.all with Promise.allSettled (6 pages) | P0 | CRITICAL: single API failure kills page |
+| 54.2 | Split use-project-portfolio hook (335 LOC → 3 hooks) | P0 | 6 useEffects, 20 context props |
+| 54.3 | Migrate feature pages to React Query (useQuery) | P1 | 7 pages with manual useState/useEffect |
+| 54.4 | Add granular error boundaries per section | P1 | 4 pages missing error.jsx |
+| 54.5 | Replace inline empty states with EmptyState component | P1 | 14 violations across 6 pages |
+| 54.6 | Remove CSP unsafe-eval (use nonce-based CSP) | P0 | NEW: `next.config.mjs:28-29` negates XSS protection |
+| 54.7 | Fix useState called conditionally in section-page.jsx | P0 | NEW: line 136, hooks violation |
+| 54.8 | Replace local toast state with global useToast() | P1 | NEW: 8 pages duplicate pattern |
+| 54.9 | Add dynamic imports for feature pages (code splitting) | P2 | |
+| 54.10 | Add chart config prop to finance-section ChartContainers | P1 | NEW: 7 instances without labels |
 
-### Iter 55 — Observability & Audit Trail (P1, 8 tasks)
+### Iter 55 — Observability & Audit Trail (✅ DONE, 8 tasks)
 
 > Issues: [#428–#439](https://github.com/lemone112/labpics-dashboard/milestone/45)
+> ✅ **Completed:** commit `27200c0`, 306 tests pass, TG bot typecheck clean.
 
-Логирование, retention, rate limiting.
-
-| # | Task | Priority |
-|---|------|----------|
-| 55.1 | Add outbound_messages retention policy (90-day cleanup) | P1 |
-| 55.2 | Add audit events for outbox policy enforcement failures | P1 |
-| 55.3 | Replace silent catch blocks in TG bot with logging | P1 |
-| 55.4 | Log failures in fire-and-forget auth audit events | P1 |
-| 55.5 | Fix event-log dedup key collision on same timestamps | P1 |
-| 55.6 | Add size cap to in-memory rate limit Maps | P1 |
-| 55.7 | Implement distributed rate limiting via Redis | P1 |
-| 55.8 | Fix connector sync event log failure silently ignored | P1 |
+| # | Task | Status |
+|---|------|--------|
+| 55.1 | Add outbound_messages retention policy (90-day cleanup) | ✅ Done |
+| 55.2 | Add audit events for outbox policy enforcement failures | ✅ Done |
+| 55.3 | Replace silent catch blocks in TG bot with logging | ✅ Done |
+| 55.4 | Log failures in fire-and-forget auth audit events | ✅ Done |
+| 55.5 | Fix event-log dedup key collision (SHA-256 + null byte) | ✅ Done |
+| 55.6 | Add size cap to in-memory rate limit Maps (50K + eviction) | ✅ Done |
+| 55.7 | Implement distributed rate limiting via Redis (INCR+EXPIRE) | ✅ Done |
+| 55.8 | Fix connector sync event log failure silently ignored | ✅ Done |
 
 ### Iter 56 — Config & Infrastructure Hardening (P2, 6 tasks)
 
@@ -671,6 +748,12 @@ Full-stack интеграционные тесты с реальной PostgreSQ
 
 ## Changelog
 
+- **v5** (2026-02-20): **6-agent parallel critique** — 86 verified findings across Security, Backend,
+  DB/RAG, Business, Frontend, QA agents. Added Phase 0 with 3 new iterations (Iter 61-63, 24 tasks).
+  Expanded Iter 53 (+4 tasks), Iter 54 (+2 tasks, raised P1→P0). Reprioritized: LightRAG CRITICAL→P1,
+  Reporting P1→P0, TG Bot P0→P2, Page Redesign P0→P1, Charts P0→P1, Analytics P2→P1.
+  Marked Iter 55 ✅ DONE. 262 total issues across 32 iterations in 10 phases.
+  Full findings: `docs/critique-findings-2026-02-20.md`.
 - **v4** (2026-02-20): Comprehensive testing — added Phase 9 (Iter 57–60) with 32 testing tasks.
   228 total issues across 29 iterations in 9 phases. Coverage: backend unit tests (identity-graph,
   connectors, scheduler, embeddings), full E2E suite (all pages + mobile), integration tests
