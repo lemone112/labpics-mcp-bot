@@ -10,7 +10,7 @@
 import { readdir, stat } from "node:fs/promises";
 import { join } from "node:path";
 
-const MAX_KB_DEFAULT = 500;
+const MAX_KB_DEFAULT = 2500;
 
 async function getDirectorySize(dir) {
   let total = 0;
