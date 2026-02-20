@@ -5,27 +5,11 @@ function uniqueProjectName(prefix) {
 }
 
 async function signIn(page, username = "admin", password = "admin") {
-  const consoleLogs = [];
-  page.on("console", (msg) => consoleLogs.push(`[${msg.type()}] ${msg.text()}`));
-  page.on("pageerror", (err) => consoleLogs.push(`[PAGE_ERROR] ${err.message}`));
-  const networkRequests = [];
-  page.on("request", (req) => networkRequests.push(`${req.method()} ${req.url()}`));
-
   await page.goto("/login");
   await expect(page.getByTestId("login-username")).toBeVisible();
   await page.getByTestId("login-username").fill(username);
   await page.getByTestId("login-password").fill(password);
   await page.getByTestId("login-submit").click();
-  await page.waitForTimeout(5_000);
-
-  const currentUrl = page.url();
-  const pageContent = await page.content();
-  const bodySnippet = pageContent.replace(/<script[\s\S]*?<\/script>/g, "").slice(0, 2000);
-  console.log(`[signIn] URL after click: ${currentUrl}`);
-  console.log(`[signIn] Console (${consoleLogs.length}):\n${consoleLogs.slice(0, 20).join("\n")}`);
-  console.log(`[signIn] ALL network (${networkRequests.length}):\n${networkRequests.slice(0, 30).join("\n")}`);
-  console.log(`[signIn] Page body snippet:\n${bodySnippet.slice(0, 500)}`);
-
   await expect(page).toHaveURL(/\/control-tower\/dashboard$/);
 }
 

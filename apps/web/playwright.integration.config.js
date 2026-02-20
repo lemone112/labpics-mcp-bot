@@ -50,7 +50,7 @@ module.exports = defineConfig({
       cwd: ".",
       env: {
         ...process.env,
-        NEXT_PUBLIC_API_BASE_URL: apiBaseUrl,
+        API_UPSTREAM_URL: `http://localhost:${apiPort}`,
         NEXT_PUBLIC_CSRF_COOKIE_NAME: "csrf_token",
       },
       url: `${baseURL}/login`,
