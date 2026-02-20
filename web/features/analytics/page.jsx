@@ -1,3 +1,5 @@
+// TODO: Migrate manual useState/useEffect data fetching to useQuery (@tanstack/react-query).
+// This page has 3 parallel fetches + 2 mutations — good candidate for useQuery + useMutation.
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
@@ -27,14 +29,25 @@ export default function AnalyticsFeaturePage() {
     if (!hasProject) return;
     setBusy(true);
     try {
-      const [overviewResp, riskResp, evidenceResp] = await Promise.all([
+      const results = await Promise.allSettled([
         apiFetch("/analytics/overview"),
         apiFetch("/risk/overview"),
         apiFetch("/analytics/drilldown?limit=30"),
       ]);
-      setOverview(overviewResp);
-      setRisk(riskResp);
-      setEvidence(Array.isArray(evidenceResp?.evidence) ? evidenceResp.evidence : []);
+      const [overviewRes, riskRes, evidenceRes] = results;
+      const errors = [];
+      if (overviewRes.status === "fulfilled") {
+        setOverview(overviewRes.value);
+      } else { errors.push("обзор"); }
+      if (riskRes.status === "fulfilled") {
+        setRisk(riskRes.value);
+      } else { errors.push("риски"); }
+      if (evidenceRes.status === "fulfilled") {
+        setEvidence(Array.isArray(evidenceRes.value?.evidence) ? evidenceRes.value.evidence : []);
+      } else { errors.push("доказательства"); }
+      if (errors.length) {
+        setToast({ type: "error", message: `Не удалось загрузить: ${errors.join(", ")}` });
+      }
     } catch (error) {
       setToast({ type: "error", message: error?.message || "Ошибка загрузки аналитики" });
     } finally {

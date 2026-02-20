@@ -25,9 +25,18 @@ export default function DigestsFeaturePage() {
     if (!hasProject) return;
     setBusy(true);
     try {
-      const [dailyResp, weeklyResp] = await Promise.all([apiFetch("/digests/daily"), apiFetch("/digests/weekly")]);
-      setDaily(Array.isArray(dailyResp?.digests) ? dailyResp.digests : []);
-      setWeekly(Array.isArray(weeklyResp?.digests) ? weeklyResp.digests : []);
+      const results = await Promise.allSettled([apiFetch("/digests/daily"), apiFetch("/digests/weekly")]);
+      const [dailyRes, weeklyRes] = results;
+      const errors = [];
+      if (dailyRes.status === "fulfilled") {
+        setDaily(Array.isArray(dailyRes.value?.digests) ? dailyRes.value.digests : []);
+      } else { errors.push("ежедневные"); }
+      if (weeklyRes.status === "fulfilled") {
+        setWeekly(Array.isArray(weeklyRes.value?.digests) ? weeklyRes.value.digests : []);
+      } else { errors.push("еженедельные"); }
+      if (errors.length) {
+        setToast({ type: "error", message: `Не удалось загрузить: ${errors.join(", ")} дайджесты` });
+      }
     } catch (error) {
       setToast({ type: "error", message: error?.message || "Ошибка загрузки дайджестов" });
     } finally {

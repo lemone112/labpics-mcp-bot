@@ -1,3 +1,5 @@
+// TODO: Migrate manual useState/useEffect data fetching to useQuery (@tanstack/react-query).
+// This page has 5 parallel fetches + 7 mutation actions — prime candidate for useQuery + useMutation.
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -34,18 +36,33 @@ export default function SignalsFeaturePage() {
     if (!hasProject) return;
     setBusy(true);
     try {
-      const [signalsResp, nbaResp, upsellResp, suggestionsResp, continuityResp] = await Promise.all([
+      const results = await Promise.allSettled([
         apiFetch("/signals"),
         apiFetch("/nba"),
         apiFetch("/upsell/radar"),
         apiFetch("/identity/suggestions"),
         apiFetch("/continuity/actions?status=previewed"),
       ]);
-      setSignals(Array.isArray(signalsResp?.signals) ? signalsResp.signals : []);
-      setNba(Array.isArray(nbaResp?.items) ? nbaResp.items : []);
-      setUpsell(Array.isArray(upsellResp?.opportunities) ? upsellResp.opportunities : []);
-      setIdentitySuggestions(Array.isArray(suggestionsResp?.suggestions) ? suggestionsResp.suggestions : []);
-      setContinuityActions(Array.isArray(continuityResp?.actions) ? continuityResp.actions : []);
+      const [signalsRes, nbaRes, upsellRes, suggestionsRes, continuityRes] = results;
+      const errors = [];
+      if (signalsRes.status === "fulfilled") {
+        setSignals(Array.isArray(signalsRes.value?.signals) ? signalsRes.value.signals : []);
+      } else { errors.push("сигналы"); }
+      if (nbaRes.status === "fulfilled") {
+        setNba(Array.isArray(nbaRes.value?.items) ? nbaRes.value.items : []);
+      } else { errors.push("NBA"); }
+      if (upsellRes.status === "fulfilled") {
+        setUpsell(Array.isArray(upsellRes.value?.opportunities) ? upsellRes.value.opportunities : []);
+      } else { errors.push("допродажи"); }
+      if (suggestionsRes.status === "fulfilled") {
+        setIdentitySuggestions(Array.isArray(suggestionsRes.value?.suggestions) ? suggestionsRes.value.suggestions : []);
+      } else { errors.push("identity"); }
+      if (continuityRes.status === "fulfilled") {
+        setContinuityActions(Array.isArray(continuityRes.value?.actions) ? continuityRes.value.actions : []);
+      } else { errors.push("continuity"); }
+      if (errors.length) {
+        setToast({ type: "error", message: `Не удалось загрузить: ${errors.join(", ")}` });
+      }
     } catch (error) {
       setToast({ type: "error", message: error?.message || "Не удалось загрузить данные сигналов" });
     } finally {

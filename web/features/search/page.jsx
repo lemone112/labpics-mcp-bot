@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Toast } from "@/components/ui/toast";
+import { EmptyState } from "@/components/ui/empty-state";
 import { apiFetch } from "@/lib/api";
 import { useAuthGuard } from "@/hooks/use-auth-guard";
 import { useProjectGate } from "@/hooks/use-project-gate";
@@ -115,7 +116,9 @@ export default function SearchFeaturePage() {
             <CardTitle>Краткий ответ</CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-sm leading-relaxed text-muted-foreground">{answer || "Ответ появится после запроса."}</p>
+            {answer
+              ? <p className="text-sm leading-relaxed text-muted-foreground">{answer}</p>
+              : <EmptyState title="Краткий ответ" description="Ответ появится после выполнения запроса." />}
           </CardContent>
         </Card>
 
@@ -167,7 +170,7 @@ export default function SearchFeaturePage() {
                 <p className="text-sm">{item.title || item.snippet || "Без описания"}</p>
               </div>
             ))}
-            {!evidence.length ? <p className="text-sm text-muted-foreground">Evidence появится после запроса.</p> : null}
+            {!evidence.length ? <EmptyState title="Evidence из источников" description="Evidence появится после выполнения запроса." /> : null}
           </CardContent>
         </Card>
 

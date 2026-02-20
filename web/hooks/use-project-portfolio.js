@@ -1,48 +1,14 @@
 "use client";
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { createContext, useContext, useMemo } from "react";
 import { usePathname } from "next/navigation";
 
-import { apiFetch } from "@/lib/api";
 import { parsePortfolioSectionFromPath, sectionAllowsAllProjects } from "@/lib/portfolio-sections";
-import { useAutoRefresh } from "@/hooks/use-auto-refresh";
-
-const STORAGE_SCOPE_KEY = "labpics:portfolio:selected-scope";
-const STORAGE_LAST_PROJECT_KEY = "labpics:portfolio:last-concrete-project";
-const ALL_PROJECTS_SCOPE = "__all_projects__";
-const PROJECTS_AUTO_REFRESH_MS = 60_000;
+import { usePortfolioData } from "@/hooks/use-portfolio-data";
+import { usePortfolioActions } from "@/hooks/use-portfolio-actions";
+import { usePortfolioFilters } from "@/hooks/use-portfolio-filters";
 
 const ProjectPortfolioContext = createContext(null);
-
-function normalizeProjectId(value) {
-  const normalized = String(value || "").trim();
-  return normalized || null;
-}
-
-function isLegacyScopeProject(project) {
-  const name = String(project?.name || "").trim().toLowerCase();
-  return name === "__legacy_scope__";
-}
-
-function humanizeProjectError(rawError, fallbackMessage) {
-  const message = String(rawError?.message || fallbackMessage || "").trim();
-  if (!message) return "Не удалось обработать запрос по проектам";
-  const normalized = message.toLowerCase();
-  if (normalized === "internal_error") return "Временная ошибка сервера. Повторим автоматически.";
-  if (normalized.includes("account_scope_mismatch")) return "Выбранные проекты относятся к разным рабочим областям.";
-  if (normalized.includes("project_not_found")) return "Проект больше не доступен. Обновим список автоматически.";
-  return message;
-}
-
-function readStorageValue(key, fallback = null) {
-  if (typeof window === "undefined") return fallback;
-  try {
-    const value = window.localStorage.getItem(key);
-    return value == null ? fallback : value;
-  } catch {
-    return fallback;
-  }
-}
 
 export function ProjectPortfolioProvider({ children }) {
   const pathname = usePathname();
@@ -50,276 +16,78 @@ export function ProjectPortfolioProvider({ children }) {
   const inPortfolio = String(pathname || "").startsWith("/control-tower");
   const canSelectAll = inPortfolio && sectionAllowsAllProjects(currentSection);
 
-  const [projects, setProjects] = useState([]);
-  const [selectedScopeId, setSelectedScopeId] = useState(null);
-  const [lastConcreteProjectId, setLastConcreteProjectId] = useState(null);
-  const [activeProjectId, setActiveProjectId] = useState(null);
-  const [activatingProjectId, setActivatingProjectId] = useState("");
-  const [activationError, setActivationError] = useState("");
-  const [loadingProjects, setLoadingProjects] = useState(true);
-  const [error, setError] = useState("");
-  const autoRepairAttemptRef = useRef("");
+  const data = usePortfolioData({ canSelectAll });
 
-  const projectIds = useMemo(() => projects.map((project) => String(project.id)), [projects]);
-  const projectIdSet = useMemo(() => new Set(projectIds), [projectIds]);
+  const actions = usePortfolioActions({
+    projectIds: data.projectIds,
+    projectIdSet: data.projectIdSet,
+    activeProjectId: data.activeProjectId,
+    setActiveProjectId: data.setActiveProjectId,
+    setSelectedScopeId: data.setSelectedScopeId,
+    setLastConcreteProjectId: data.setLastConcreteProjectId,
+    lastConcreteProjectId: data.lastConcreteProjectId,
+    ensureConcreteSelection: data.ensureConcreteSelection,
+    canSelectAll,
+  });
 
-  const ensureConcreteSelection = useCallback(
-    (candidateId) => {
-      if (!projectIds.length) return null;
-      const normalizedCandidate = normalizeProjectId(candidateId);
-      if (normalizedCandidate && projectIdSet.has(normalizedCandidate)) {
-        return normalizedCandidate;
-      }
-      const normalizedActive = normalizeProjectId(activeProjectId);
-      if (normalizedActive && projectIdSet.has(normalizedActive)) {
-        return normalizedActive;
-      }
-      return projectIds[0];
-    },
-    [projectIdSet, projectIds, activeProjectId]
-  );
-
-  const refreshProjects = useCallback(async (options = {}) => {
-    const silent = Boolean(options?.silent);
-    if (!silent) {
-      setLoadingProjects(true);
-      setError("");
-      setActivationError("");
-    }
-    try {
-      const data = await apiFetch("/projects");
-      const sourceProjects = Array.isArray(data?.projects) ? data.projects : [];
-      const nextProjects = sourceProjects.filter((project) => !isLegacyScopeProject(project));
-      const nextProjectIds = nextProjects.map((project) => String(project.id));
-      const nextProjectIdSet = new Set(nextProjectIds);
-      const nextActiveProjectId = normalizeProjectId(data?.active_project_id);
-      setProjects(nextProjects);
-      setActiveProjectId(nextActiveProjectId);
-      setError("");
-
-      const fallbackConcrete =
-        (nextActiveProjectId && nextProjectIdSet.has(nextActiveProjectId) ? nextActiveProjectId : null) || nextProjectIds[0] || null;
-      const storedScope = normalizeProjectId(readStorageValue(STORAGE_SCOPE_KEY, null));
-      const storedLast = normalizeProjectId(readStorageValue(STORAGE_LAST_PROJECT_KEY, null));
-      const nextLastConcrete = storedLast && nextProjectIdSet.has(storedLast) ? storedLast : fallbackConcrete;
-
-      let nextScope = fallbackConcrete;
-      if (storedScope === ALL_PROJECTS_SCOPE && canSelectAll) {
-        nextScope = ALL_PROJECTS_SCOPE;
-      } else if (storedScope && nextProjectIdSet.has(storedScope)) {
-        nextScope = storedScope;
-      }
-      if (!nextScope && nextProjectIds.length) {
-        nextScope = nextLastConcrete || nextProjectIds[0];
-      }
-
-      setLastConcreteProjectId(nextLastConcrete);
-      setSelectedScopeId(nextScope);
-    } catch (requestError) {
-      const message = humanizeProjectError(requestError, "Не удалось загрузить список проектов");
-      if (!silent) {
-        setError(message);
-      }
-      if (!silent) {
-        setProjects([]);
-        setSelectedScopeId(null);
-        setLastConcreteProjectId(null);
-        setActiveProjectId(null);
-      }
-    } finally {
-      if (!silent) {
-        setLoadingProjects(false);
-      }
-    }
-  }, [canSelectAll]);
-
-  useEffect(() => {
-    refreshProjects();
-  }, [refreshProjects]);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return undefined;
-    const refreshSilently = () => {
-      if (document.visibilityState !== "visible") return;
-      refreshProjects({ silent: true }).catch(() => {});
-    };
-    const intervalId = window.setInterval(refreshSilently, PROJECTS_AUTO_REFRESH_MS);
-    const onFocus = () => refreshSilently();
-    const onVisibilityChange = () => refreshSilently();
-    window.addEventListener("focus", onFocus);
-    document.addEventListener("visibilitychange", onVisibilityChange);
-    return () => {
-      window.clearInterval(intervalId);
-      window.removeEventListener("focus", onFocus);
-      document.removeEventListener("visibilitychange", onVisibilityChange);
-    };
-  }, [refreshProjects]);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    if (selectedScopeId) {
-      window.localStorage.setItem(STORAGE_SCOPE_KEY, selectedScopeId);
-    }
-  }, [selectedScopeId]);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    if (lastConcreteProjectId) {
-      window.localStorage.setItem(STORAGE_LAST_PROJECT_KEY, lastConcreteProjectId);
-    }
-  }, [lastConcreteProjectId]);
-
-  useEffect(() => {
-    if (!projectIds.length) return;
-
-    const fallbackConcrete = ensureConcreteSelection(lastConcreteProjectId);
-    const selected = normalizeProjectId(selectedScopeId);
-
-    if (!selected) {
-      setSelectedScopeId(fallbackConcrete);
-      return;
-    }
-
-    if (selected === ALL_PROJECTS_SCOPE) {
-      if (!canSelectAll) {
-        setSelectedScopeId(fallbackConcrete);
-      }
-      return;
-    }
-
-    if (!projectIdSet.has(selected)) {
-      setSelectedScopeId(fallbackConcrete);
-      return;
-    }
-
-    if (lastConcreteProjectId !== selected) {
-      setLastConcreteProjectId(selected);
-    }
-  }, [projectIds, projectIdSet, selectedScopeId, canSelectAll, lastConcreteProjectId, ensureConcreteSelection]);
-
-  const activateProject = useCallback(
-    async (projectId) => {
-      const normalized = normalizeProjectId(projectId);
-      if (!normalized || !projectIdSet.has(normalized)) {
-        throw new Error("Проект недоступен для выбора");
-      }
-      setActivationError("");
-      setActivatingProjectId(normalized);
-      try {
-        if (normalizeProjectId(activeProjectId) !== normalized) {
-          await apiFetch(`/projects/${normalized}/select`, { method: "POST" });
-        }
-        setActiveProjectId(normalized);
-        setSelectedScopeId(normalized);
-        setLastConcreteProjectId(normalized);
-      } catch (requestError) {
-        const message = humanizeProjectError(requestError, "Не удалось переключить проект");
-        setActivationError(message);
-        throw requestError;
-      } finally {
-        setActivatingProjectId("");
-      }
-    },
-    [projectIdSet, activeProjectId]
-  );
-
-  const selectAllProjects = useCallback(() => {
-    if (!canSelectAll || !projectIds.length) return;
-    setActivationError("");
-    setSelectedScopeId(ALL_PROJECTS_SCOPE);
-  }, [canSelectAll, projectIds.length]);
-
-  useEffect(() => {
-    if (!projectIds.length) return;
-    if (activatingProjectId) return;
-    const normalizedActive = normalizeProjectId(activeProjectId);
-    if (normalizedActive && projectIdSet.has(normalizedActive)) return;
-    const fallbackConcrete = ensureConcreteSelection(lastConcreteProjectId);
-    if (!fallbackConcrete) return;
-    const repairKey = `${normalizedActive || "none"}->${fallbackConcrete}|${projectIds.join(",")}`;
-    if (autoRepairAttemptRef.current === repairKey) return;
-    autoRepairAttemptRef.current = repairKey;
-    activateProject(fallbackConcrete).catch(() => {});
-  }, [
-    projectIds,
-    projectIdSet,
-    activeProjectId,
-    activatingProjectId,
-    ensureConcreteSelection,
-    lastConcreteProjectId,
-    activateProject,
-  ]);
-
-  const selectedProjectIds = useMemo(() => {
-    if (!projectIds.length) return [];
-    if (selectedScopeId === ALL_PROJECTS_SCOPE && canSelectAll) {
-      return projectIds;
-    }
-    const concrete =
-      selectedScopeId === ALL_PROJECTS_SCOPE
-        ? ensureConcreteSelection(lastConcreteProjectId)
-        : normalizeProjectId(selectedScopeId) || ensureConcreteSelection(lastConcreteProjectId);
-    return concrete ? [concrete] : [];
-  }, [selectedScopeId, canSelectAll, projectIds, ensureConcreteSelection, lastConcreteProjectId]);
-
-  const isAllProjects = selectedScopeId === ALL_PROJECTS_SCOPE && canSelectAll;
-
-  const selectedProjects = useMemo(() => {
-    if (isAllProjects) return projects;
-    const selectedId = selectedProjectIds[0];
-    return selectedId ? projects.filter((project) => String(project.id) === selectedId) : [];
-  }, [projects, selectedProjectIds, isAllProjects]);
-
-  const selectedProject = selectedProjects[0] || null;
-
-  const autoRefresh = useAutoRefresh(refreshProjects, 60_000, { enabled: !loadingProjects });
+  const filters = usePortfolioFilters({
+    projects: data.projects,
+    projectIds: data.projectIds,
+    projectIdSet: data.projectIdSet,
+    selectedScopeId: data.selectedScopeId,
+    setSelectedScopeId: data.setSelectedScopeId,
+    lastConcreteProjectId: data.lastConcreteProjectId,
+    setLastConcreteProjectId: data.setLastConcreteProjectId,
+    canSelectAll,
+    ensureConcreteSelection: data.ensureConcreteSelection,
+  });
 
   const contextValue = useMemo(
     () => ({
-      projects,
-      projectIds,
-      projectIdSet,
+      projects: data.projects,
+      projectIds: data.projectIds,
+      projectIdSet: data.projectIdSet,
       inPortfolio,
       currentSection,
       canSelectAll,
-      isAllProjects,
-      selectedScopeId,
-      selectedProjectIds,
-      selectedProjects,
-      selectedProject,
-      lastConcreteProjectId,
-      activeProjectId,
-      activatingProjectId,
-      activationError,
-      loadingProjects,
-      error,
-      refreshProjects,
-      autoRefresh,
-      activateProject,
-      selectAllProjects,
+      isAllProjects: filters.isAllProjects,
+      selectedScopeId: data.selectedScopeId,
+      selectedProjectIds: filters.selectedProjectIds,
+      selectedProjects: filters.selectedProjects,
+      selectedProject: filters.selectedProject,
+      lastConcreteProjectId: data.lastConcreteProjectId,
+      activeProjectId: data.activeProjectId,
+      activatingProjectId: actions.activatingProjectId,
+      activationError: actions.activationError,
+      loadingProjects: data.loadingProjects,
+      error: data.error,
+      refreshProjects: data.refreshProjects,
+      autoRefresh: data.autoRefresh,
+      activateProject: actions.activateProject,
+      selectAllProjects: actions.selectAllProjects,
     }),
     [
-      projects,
-      projectIds,
-      projectIdSet,
+      data.projects,
+      data.projectIds,
+      data.projectIdSet,
       inPortfolio,
       currentSection,
       canSelectAll,
-      isAllProjects,
-      selectedScopeId,
-      selectedProjectIds,
-      selectedProjects,
-      selectedProject,
-      lastConcreteProjectId,
-      activeProjectId,
-      activatingProjectId,
-      activationError,
-      loadingProjects,
-      error,
-      refreshProjects,
-      autoRefresh,
-      activateProject,
-      selectAllProjects,
+      filters.isAllProjects,
+      data.selectedScopeId,
+      filters.selectedProjectIds,
+      filters.selectedProjects,
+      filters.selectedProject,
+      data.lastConcreteProjectId,
+      data.activeProjectId,
+      actions.activatingProjectId,
+      actions.activationError,
+      data.loadingProjects,
+      data.error,
+      data.refreshProjects,
+      data.autoRefresh,
+      actions.activateProject,
+      actions.selectAllProjects,
     ]
   );
 

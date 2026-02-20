@@ -1,3 +1,5 @@
+// TODO: Migrate manual useState/useEffect data fetching to useQuery (@tanstack/react-query).
+// This page has 3 parallel fetches + 2 mutations — good candidate for useQuery + useMutation.
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -37,14 +39,25 @@ export default function CrmFeaturePage() {
     if (!hasProject) return;
     setBusy(true);
     try {
-      const [overviewResp, accountsResp, opportunitiesResp] = await Promise.all([
+      const results = await Promise.allSettled([
         apiFetch("/crm/overview"),
         apiFetch("/crm/accounts"),
         apiFetch("/crm/opportunities"),
       ]);
-      setOverview(overviewResp);
-      setAccounts(Array.isArray(accountsResp?.accounts) ? accountsResp.accounts : []);
-      setOpportunities(Array.isArray(opportunitiesResp?.opportunities) ? opportunitiesResp.opportunities : []);
+      const [overviewRes, accountsRes, opportunitiesRes] = results;
+      const errors = [];
+      if (overviewRes.status === "fulfilled") {
+        setOverview(overviewRes.value);
+      } else { errors.push("обзор"); }
+      if (accountsRes.status === "fulfilled") {
+        setAccounts(Array.isArray(accountsRes.value?.accounts) ? accountsRes.value.accounts : []);
+      } else { errors.push("аккаунты"); }
+      if (opportunitiesRes.status === "fulfilled") {
+        setOpportunities(Array.isArray(opportunitiesRes.value?.opportunities) ? opportunitiesRes.value.opportunities : []);
+      } else { errors.push("возможности"); }
+      if (errors.length) {
+        setToast({ type: "error", message: `Не удалось загрузить: ${errors.join(", ")}` });
+      }
     } catch (error) {
       setToast({ type: "error", message: error?.message || "Ошибка загрузки данных CRM" });
     } finally {

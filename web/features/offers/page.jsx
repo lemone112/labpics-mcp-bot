@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { PageLoadingSkeleton } from "@/components/ui/page-loading-skeleton";
 import { ProjectScopeRequired } from "@/components/project-scope-required";
 import { Toast } from "@/components/ui/toast";
+import { EmptyState } from "@/components/ui/empty-state";
 import { StatusChip } from "@/components/ui/status-chip";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { apiFetch } from "@/lib/api";
@@ -28,9 +29,18 @@ export default function OffersFeaturePage() {
     if (!hasProject) return;
     setBusy(true);
     try {
-      const [offersResp, outboundResp] = await Promise.all([apiFetch("/offers"), apiFetch("/outbound")]);
-      setOffers(Array.isArray(offersResp?.offers) ? offersResp.offers : []);
-      setOutbound(Array.isArray(outboundResp?.outbound) ? outboundResp.outbound : []);
+      const results = await Promise.allSettled([apiFetch("/offers"), apiFetch("/outbound")]);
+      const [offersRes, outboundRes] = results;
+      const errors = [];
+      if (offersRes.status === "fulfilled") {
+        setOffers(Array.isArray(offersRes.value?.offers) ? offersRes.value.offers : []);
+      } else { errors.push("офферы"); }
+      if (outboundRes.status === "fulfilled") {
+        setOutbound(Array.isArray(outboundRes.value?.outbound) ? outboundRes.value.outbound : []);
+      } else { errors.push("исходящие"); }
+      if (errors.length) {
+        setToast({ type: "error", message: `Не удалось загрузить: ${errors.join(", ")}` });
+      }
     } catch (error) {
       setToast({ type: "error", message: error?.message || "Ошибка загрузки офферов/исходящих" });
     } finally {
@@ -208,7 +218,9 @@ export default function OffersFeaturePage() {
                 ))}
                 {!offers.length ? (
                   <TableRow>
-                    <TableCell colSpan={5} className="text-muted-foreground">Офферов пока нет.</TableCell>
+                    <TableCell colSpan={5}>
+                      <EmptyState title="Офферов пока нет" description="Создайте первый оффер, чтобы начать работу." />
+                    </TableCell>
                   </TableRow>
                 ) : null}
               </TableBody>
@@ -255,7 +267,9 @@ export default function OffersFeaturePage() {
                 ))}
                 {!outbound.length ? (
                   <TableRow>
-                    <TableCell colSpan={4} className="text-muted-foreground">Исходящих сообщений пока нет.</TableCell>
+                    <TableCell colSpan={4}>
+                      <EmptyState title="Исходящих сообщений пока нет" description="Создайте черновик для отправки исходящего сообщения." />
+                    </TableCell>
                   </TableRow>
                 ) : null}
               </TableBody>
