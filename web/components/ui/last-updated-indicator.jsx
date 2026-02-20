@@ -23,7 +23,7 @@ export function LastUpdatedIndicator({ secondsAgo, onRefresh, loading, className
       {errorCount != null && errorCount > 0 ? (
         <span className="text-destructive">{errorCount} ош.</span>
       ) : null}
-      <Button variant="ghost" size="sm" onClick={onRefresh} disabled={loading} className="h-6 px-2 text-xs">
+      <Button variant="ghost" size="sm" onClick={onRefresh} disabled={loading} className="relative h-8 min-w-[44px] px-2 text-xs">
         Обновить
       </Button>
     </div>

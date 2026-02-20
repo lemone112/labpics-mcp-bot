@@ -10,6 +10,7 @@ export function Filters({ className, queryValue, onQueryChange, queryPlaceholder
         value={queryValue}
         onChange={(event) => onQueryChange?.(event.target.value)}
         placeholder={queryPlaceholder}
+        aria-label={queryPlaceholder}
         className="md:max-w-sm"
       />
       {trailing ? <div className="flex flex-wrap items-center gap-2">{trailing}</div> : null}
