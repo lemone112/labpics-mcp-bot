@@ -19,6 +19,9 @@ test-results/
 .wrangler/
 .dev.vars
 
+# Python
+__pycache__/
+
 # OS / editor
 .DS_Store
 *.swp
