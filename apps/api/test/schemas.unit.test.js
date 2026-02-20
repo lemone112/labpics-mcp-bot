@@ -221,6 +221,27 @@ describe("LightRagQuerySchema", () => {
     assert.deepEqual(result.sourceFilter, ["messages", "issues"]);
   });
 
+  it("accepts date range fields", () => {
+    const result = parseBody(LightRagQuerySchema, {
+      query: "search",
+      date_from: "2026-01-01",
+      date_to: "2026-01-31",
+    });
+    assert.ok(result.date_from instanceof Date);
+    assert.ok(result.date_to instanceof Date);
+  });
+
+  it("rejects inverted date range", () => {
+    assert.throws(
+      () => parseBody(LightRagQuerySchema, {
+        query: "search",
+        date_from: "2026-02-01",
+        date_to: "2026-01-01",
+      }),
+      (err) => err.status === 400
+    );
+  });
+
   it("rejects empty query", () => {
     assert.throws(
       () => parseBody(LightRagQuerySchema, { query: "" }),
@@ -261,4 +282,27 @@ describe("SearchSchema", () => {
     assert.equal(result.query, "hello world");
     assert.equal(result.topK, 10);
   });
+
+  it("accepts search with optional date range", () => {
+    const result = parseBody(SearchSchema, {
+      query: "hello world",
+      date_from: "2026-01-01",
+      date_to: "2026-01-15",
+    });
+    assert.ok(result.date_from instanceof Date);
+    assert.ok(result.date_to instanceof Date);
+  });
+
+
+  it("rejects inverted date range", () => {
+    assert.throws(
+      () => parseBody(SearchSchema, {
+        query: "hello world",
+        date_from: "2026-02-01",
+        date_to: "2026-01-01",
+      }),
+      (err) => err.status === 400
+    );
+  });
+
 });
