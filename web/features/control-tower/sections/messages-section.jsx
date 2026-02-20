@@ -93,7 +93,7 @@ export const MessagesSection = memo(function MessagesSection({ messagesPayload, 
                         incoming ? "rounded-bl-sm bg-muted" : "rounded-br-sm bg-primary text-primary-foreground"
                       )}
                     >
-                      <div className="mb-1 flex items-center gap-2 text-[11px] opacity-80">
+                      <div className="mb-1 flex items-center gap-2 text-xs opacity-80">
                         <span>{message.author_name || (incoming ? "Клиент" : "Команда")}</span>
                         <span>•</span>
                         <span>{message.channel || "-"}</span>
@@ -102,13 +102,13 @@ export const MessagesSection = memo(function MessagesSection({ messagesPayload, 
                       {Array.isArray(message.attachments) && message.attachments.length ? (
                         <div className="mt-2 flex flex-wrap gap-1.5">
                           {message.attachments.map((file) => (
-                            <Badge key={file.id} variant="outline" className="text-[11px]">
+                            <Badge key={file.id} variant="outline" className="text-xs">
                               attachment: {file.name}
                             </Badge>
                           ))}
                         </div>
                       ) : null}
-                      <div className="mt-2 text-right text-[11px] opacity-80">
+                      <div className="mt-2 text-right text-xs opacity-80">
                         {message.created_at ? new Date(message.created_at).toLocaleString("ru-RU") : "-"}
                       </div>
                     </div>

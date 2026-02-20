@@ -52,7 +52,7 @@ const ChartTooltipContent = React.forwardRef(
         ref={ref}
         className={cn("min-w-40 rounded-md border bg-popover px-3 py-2 text-xs text-popover-foreground", className)}
       >
-        {!hideLabel && label ? <div className="mb-1 text-[11px] text-muted-foreground">{label}</div> : null}
+        {!hideLabel && label ? <div className="mb-1 text-xs text-muted-foreground">{label}</div> : null}
         <div className="space-y-1">
           {payload.map((item, index) => {
             const key = String(item.dataKey || item.name || index);

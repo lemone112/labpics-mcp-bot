@@ -44,7 +44,7 @@ function FormError({ id, className, children }) {
     <p
       id={id}
       role="alert"
-      className={cn("text-[13px] text-destructive", className)}
+      className={cn("text-xs text-destructive", className)}
     >
       {children}
     </p>
