@@ -95,3 +95,27 @@ test("resolveOwnerReference keeps unresolved username for transitional compatibi
   assert.equal(resolved.resolved, false);
   assert.equal(resolved.invalidOwnerUserId, null);
 });
+
+test("resolveOwnerReference falls back to auth username lookup", async () => {
+  const pool = createPool({
+    usersByUsername: { erin: { id: "u-erin", username: "erin" } },
+  });
+
+  const resolved = await resolveOwnerReference(pool, { authUsername: "Erin" });
+  assert.equal(resolved.ownerUserId, "u-erin");
+  assert.equal(resolved.ownerUsername, "erin");
+  assert.equal(resolved.source, "auth_username");
+  assert.equal(resolved.resolved, true);
+});
+
+test("resolveOwnerReference returns none-source when no inputs provided", async () => {
+  const pool = createPool();
+  const resolved = await resolveOwnerReference(pool, {});
+  assert.deepStrictEqual(resolved, {
+    ownerUserId: null,
+    ownerUsername: null,
+    source: "none",
+    resolved: false,
+    invalidOwnerUserId: null,
+  });
+});

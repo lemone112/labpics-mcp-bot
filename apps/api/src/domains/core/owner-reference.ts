@@ -111,15 +111,7 @@ export async function resolveOwnerReference(
 
   const explicitUser = await byUserId(ownerUserId, "owner_user_id");
   if (ownerUserId) {
-    return (
-      explicitUser || {
-        ownerUserId: null,
-        ownerUsername: null,
-        source: "owner_user_id",
-        resolved: false,
-        invalidOwnerUserId: ownerUserId,
-      }
-    );
+    return explicitUser as OwnerReferenceResult;
   }
 
   return (
