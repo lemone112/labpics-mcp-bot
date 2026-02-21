@@ -6,6 +6,7 @@ import pg from "pg";
 import { Redis } from "ioredis";
 
 import { applyMigrations } from "../db/migrate-lib.js";
+import { evaluatePlanShape, flattenExplainNodes } from "./perf-plan-regression.mjs";
 
 const { Pool } = pg;
 
@@ -309,6 +310,141 @@ async function seedPerfData(pool, runTag) {
     [projectA, scopeA]
   );
 
+  // Add high-cardinality rows to make plan-shape checks meaningful.
+  await pool.query(
+    `
+      INSERT INTO employees(account_scope_id, user_id, display_name, status, timezone, created_at, updated_at)
+      SELECT
+        $1::uuid,
+        NULL::uuid,
+        concat('Perf Bulk Employee ', gs)::text,
+        CASE WHEN gs % 5 = 0 THEN 'inactive' ELSE 'active' END,
+        'UTC',
+        now() - make_interval(days => (gs % 90)),
+        now() - make_interval(days => (gs % 30))
+      FROM generate_series(1, 1800) AS gs
+    `,
+    [scopeA]
+  );
+
+  await pool.query(
+    `
+      INSERT INTO employee_conditions(
+        employee_id, project_id, account_scope_id, condition_type, payload, effective_from, effective_to, created_at, updated_at
+      )
+      SELECT
+        e.id,
+        $1::uuid,
+        $2::uuid,
+        'workload',
+        jsonb_build_object('hours', ((gs % 8) + 1)),
+        now() - make_interval(days => (gs % 120)),
+        now() + make_interval(days => ((gs % 120) + 1)),
+        now() - make_interval(days => (gs % 60)),
+        now() - make_interval(days => (gs % 20))
+      FROM (
+        SELECT id
+        FROM employees
+        WHERE account_scope_id = $2::uuid
+        ORDER BY created_at DESC
+        LIMIT 200
+      ) AS e
+      CROSS JOIN generate_series(1, 10) AS gs
+    `,
+    [projectA, scopeA]
+  );
+
+  await pool.query(
+    `
+      WITH bulk_accounts AS (
+        INSERT INTO crm_accounts(project_id, account_scope_id, name, stage, owner_username, created_at, updated_at)
+        SELECT
+          $1::uuid,
+          $2::uuid,
+          concat('Perf Bulk Account ', gs)::text,
+          'active',
+          $3::text,
+          now() - make_interval(days => (gs % 120)),
+          now() - make_interval(days => (gs % 40))
+        FROM generate_series(1, 800) AS gs
+        RETURNING id
+      ),
+      bulk_opps AS (
+        INSERT INTO crm_opportunities(
+          project_id,
+          account_scope_id,
+          account_id,
+          title,
+          stage,
+          amount_estimate,
+          probability,
+          next_step,
+          owner_username,
+          created_at,
+          updated_at
+        )
+        SELECT
+          $1::uuid,
+          $2::uuid,
+          a.id,
+          concat('Perf Bulk Opp ', row_number() OVER ())::text,
+          'qualified',
+          5000 + (row_number() OVER ())::int,
+          0.6,
+          'follow_up',
+          $3::text,
+          now() - make_interval(days => ((row_number() OVER ()) % 120)),
+          now() - make_interval(days => ((row_number() OVER ()) % 40))
+        FROM bulk_accounts AS a
+        RETURNING id
+      ),
+      pool_employees AS (
+        SELECT id, row_number() OVER (ORDER BY created_at DESC, id) AS rn
+        FROM employees
+        WHERE account_scope_id = $2::uuid
+      ),
+      scoped_opps AS (
+        SELECT id, row_number() OVER (ORDER BY id) AS rn
+        FROM bulk_opps
+      )
+      INSERT INTO client_executor_links(
+        project_id,
+        account_scope_id,
+        client_type,
+        client_id,
+        employee_id,
+        link_type,
+        allocation_pct,
+        priority,
+        status,
+        effective_from,
+        source,
+        metadata,
+        created_at,
+        updated_at
+      )
+      SELECT
+        $1::uuid,
+        $2::uuid,
+        'crm_opportunity',
+        o.id,
+        e.id,
+        'owner',
+        100,
+        ((o.rn % 5) + 1)::int,
+        'active',
+        now() - make_interval(days => (o.rn % 120)),
+        'perf_seed_bulk',
+        jsonb_build_object('seed', 'bulk-links'),
+        now() - make_interval(days => (o.rn % 90)),
+        now() - make_interval(days => (o.rn % 30))
+      FROM scoped_opps AS o
+      INNER JOIN pool_employees AS e
+        ON ((o.rn % 200) + 1) = e.rn
+    `,
+    [projectA, scopeA, `perf_user_a_${runTag}`]
+  );
+
   return {
     scopeA,
     scopeB,
@@ -399,10 +535,12 @@ async function runQueryBenchmarks(pool, fixture, sampleSize) {
       queryClass.params
     );
     const explainRaw = explain.rows[0]?.["QUERY PLAN"] || null;
+    const explainNodes = flattenExplainNodes(explainRaw);
     results.push({
       key: queryClass.key,
       ...metric,
       explain_summary: parseExplainSummary(explainRaw),
+      explain_nodes: explainNodes,
     });
   }
   return results;
@@ -546,6 +684,7 @@ async function main() {
   );
   const budgets = configFile.budgets || {};
   const baselines = configFile.baselines || {};
+  const planShapes = configFile.plan_shapes || {};
 
   const pool = new Pool({ connectionString: databaseUrl, max: 20 });
   try {
@@ -584,12 +723,20 @@ async function main() {
         if (failOnRegression) failures.push(msg);
         else warnings.push(msg);
       }
+
+      const planShapeRule = planShapes?.[queryResult.key] || null;
+      let planCheck = { ok: true, failures: [] };
+      if (planShapeRule) {
+        planCheck = evaluatePlanShape(queryResult.key, queryResult.explain_nodes, planShapeRule);
+        for (const planFailure of planCheck.failures) failures.push(planFailure);
+      }
       return {
         key: queryResult.key,
         baseline_p95_ms: Number.isFinite(baselineMs) ? baselineMs : null,
         current_p95_ms: queryResult.p95_ms,
         regression_pct: regressionPct,
         explain_summary: queryResult.explain_summary,
+        plan_check: planCheck,
       };
     });
 
