@@ -240,7 +240,7 @@ export default function ReportListPage() {
                     </TableCell>
                   </TableRow>
                 ))}
-                {!busy && !templates.length ? (
+                {!loadingTemplates && !templates.length ? (
                   <TableRow>
                     <TableCell colSpan={6}>
                       <EmptyState
