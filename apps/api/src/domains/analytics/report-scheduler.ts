@@ -166,7 +166,7 @@ export async function runScheduledReports(
   const listTemplates = options.listTemplates || listReportTemplates;
   const generateReport = options.generateReport || generateAndStoreReport;
 
-  const templates = await listTemplates(pool, scope);
+  const templates = (await listTemplates(pool, scope)) as ReportTemplate[];
   const activeWithSchedule = templates.filter(
     (tpl) => Boolean(tpl.active) && Boolean(tpl.schedule)
   );
