@@ -12,6 +12,7 @@ import {
   listGeneratedReports,
   getGeneratedReport,
 } from "../domains/analytics/report-generator.js";
+import { requestIdOf } from "../infra/utils.js";
 import type { Pool } from "../types/index.js";
 import type { FastifyReply, FastifyRequest } from "fastify";
 
@@ -39,10 +40,6 @@ interface RouteCtx {
   registerGet: RegisterFn;
   registerPost: RegisterFn;
   pool: Pool;
-}
-
-function requestIdOf(request: RequestLike): string {
-  return String(request.requestId || request.id);
 }
 
 /**

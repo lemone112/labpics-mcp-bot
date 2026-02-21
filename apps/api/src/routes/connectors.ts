@@ -10,6 +10,7 @@ import {
 } from "../domains/connectors/connector-sync.js";
 import { listDeadLetterErrors, retryDeadLetterError } from "../domains/connectors/connector-state.js";
 import { getCompletenessDiff, listSyncReconciliation, runSyncReconciliation } from "../domains/connectors/reconciliation.js";
+import { requestIdOf } from "../infra/utils.js";
 import type { Pool } from "../types/index.js";
 import type { FastifyReply, FastifyRequest } from "fastify";
 import type { ZodTypeAny } from "zod";
@@ -40,10 +41,6 @@ interface RouteCtx {
   pool: Pool;
   cache: { invalidateByPrefix: (prefix: string) => void };
   ConnectorRetrySchema: ZodTypeAny;
-}
-
-function requestIdOf(request: RequestLike): string {
-  return String(request.requestId || request.id);
 }
 
 export function registerConnectorRoutes(ctx: RouteCtx) {

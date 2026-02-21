@@ -1,7 +1,7 @@
 import { generateApiKey, sanitizeApiKeyScopes } from "../infra/api-keys.js";
 import { ApiError, sendError } from "../infra/api-contract.js";
 import { getEffectiveRole } from "../infra/rbac.js";
-import { assertUuid } from "../infra/utils.js";
+import { assertUuid, requestIdOf } from "../infra/utils.js";
 import type { Pool } from "../types/index.js";
 import type { FastifyReply, FastifyRequest } from "fastify";
 
@@ -23,10 +23,6 @@ interface RouteCtx {
   registerGet: RegisterFn;
   registerPost: RegisterFn;
   pool: Pool;
-}
-
-function requestIdOf(request: RequestLike): string {
-  return String(request.requestId || request.id);
 }
 
 function requireOwnerSession(request: RequestLike, reply: ReplyLike) {

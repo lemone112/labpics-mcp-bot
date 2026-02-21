@@ -1,6 +1,6 @@
 import { ApiError, parseBody, sendError, sendOk } from "../infra/api-contract.js";
 import { requireProjectScope } from "../infra/scope.js";
-import { assertUuid } from "../infra/utils.js";
+import { assertUuid, requestIdOf } from "../infra/utils.js";
 import { writeAuditEvent } from "../domains/core/audit.js";
 import { extractSignalsAndNba, listNba, listSignals, updateNbaStatus, updateSignalStatus } from "../domains/analytics/signals.js";
 import { listUpsellRadar, refreshUpsellRadar, updateUpsellStatus } from "../domains/analytics/upsell.js";
@@ -43,10 +43,6 @@ interface RouteCtx {
   IdentityPreviewSchema: ZodTypeAny;
   IdentitySuggestionApplySchema: ZodTypeAny;
   ContinuityApplySchema: ZodTypeAny;
-}
-
-function requestIdOf(request: RequestLike): string {
-  return String(request.requestId || request.id);
 }
 
 async function recordScopedAudit(

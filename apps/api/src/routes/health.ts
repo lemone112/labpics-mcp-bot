@@ -1,5 +1,6 @@
 import { sendOk } from "../infra/api-contract.js";
 import { getCircuitBreakerStates } from "../infra/http.js";
+import { requestIdOf } from "../infra/utils.js";
 import { getSchedulerMetrics, getSchedulerState } from "../domains/core/scheduler.js";
 import type { Pool } from "../types/index.js";
 import type { FastifyReply, FastifyRequest } from "fastify";
@@ -46,10 +47,6 @@ interface RouteCtx {
   sseBroadcaster: SseBroadcaster;
   cache: CacheLayer;
   pool: Pool;
-}
-
-function requestIdOf(request: RequestLike): string {
-  return String(request.requestId || request.id);
 }
 
 export function registerHealthRoutes(ctx: RouteCtx) {

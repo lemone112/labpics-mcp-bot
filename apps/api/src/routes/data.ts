@@ -1,5 +1,6 @@
 import { parseLimit, sendOk } from "../infra/api-contract.js";
 import { requireProjectScope } from "../infra/scope.js";
+import { requestIdOf } from "../infra/utils.js";
 import type { Pool } from "../types/index.js";
 import type { FastifyReply, FastifyRequest } from "fastify";
 
@@ -23,10 +24,6 @@ type RegisterFn = (
 interface RouteCtx {
   registerGet: RegisterFn;
   pool: Pool;
-}
-
-function requestIdOf(request: RequestLike): string {
-  return String(request.requestId || request.id);
 }
 
 /**

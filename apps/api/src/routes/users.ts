@@ -1,7 +1,7 @@
 import { ApiError, parseBody, sendError, sendOk } from "../infra/api-contract.js";
 import { writeAuditEvent } from "../domains/core/audit.js";
 import { getEffectiveRole } from "../infra/rbac.js";
-import { assertUuid } from "../infra/utils.js";
+import { assertUuid, requestIdOf } from "../infra/utils.js";
 import { z } from "zod";
 import bcrypt from "bcrypt";
 import type { Pool } from "../types/index.js";
@@ -60,10 +60,6 @@ interface RouteCtx {
   registerGet: RegisterFn;
   registerPost: RegisterFn;
   pool: Pool;
-}
-
-function requestIdOf(request: RequestLike): string {
-  return String(request.requestId || request.id);
 }
 
 function requireOwner(request: RequestLike, reply: ReplyLike, message: string) {

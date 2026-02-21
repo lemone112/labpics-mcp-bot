@@ -1,6 +1,6 @@
 import { fail, parseBody, parseLimit, sendOk } from "../infra/api-contract.js";
 import { requireProjectScope } from "../infra/scope.js";
-import { assertUuid } from "../infra/utils.js";
+import { assertUuid, requestIdOf } from "../infra/utils.js";
 import { listAuditEvents } from "../domains/core/audit.js";
 import { approveOutbound, createOutboundDraft, listOutbound, processDueOutbounds, sendOutbound, setOptOut } from "../domains/outbound/outbox.js";
 import { findCachedResponse, getIdempotencyKey, storeCachedResponse } from "../infra/idempotency.js";
@@ -41,10 +41,6 @@ interface RouteCtx {
   OutboundProcessSchema: ZodTypeAny;
   LoopsSyncSchema: ZodTypeAny;
   parseProjectIdsInput: (input: unknown, max?: number) => string[];
-}
-
-function requestIdOf(request: RequestLike): string {
-  return String(request.requestId || request.id);
 }
 
 /**
