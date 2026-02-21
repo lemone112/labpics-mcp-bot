@@ -1,4 +1,18 @@
-async function getStorageStats(pool, scope) {
+import type { Pool } from "../../types/index.js";
+
+type Scope = {
+  projectId: string;
+  accountScopeId: string;
+};
+
+type JobPatch = {
+  status?: string;
+  processedCount?: number;
+  error?: unknown;
+  meta?: unknown;
+};
+
+async function getStorageStats(pool: Pool, scope: Scope) {
   const budgetGbRaw = Number.parseFloat(process.env.STORAGE_BUDGET_GB || "20");
   const budgetGb = Number.isFinite(budgetGbRaw) && budgetGbRaw > 0 ? budgetGbRaw : 20;
   const budgetBytes = Math.floor(budgetGb * 1024 * 1024 * 1024);
@@ -31,13 +45,13 @@ async function getStorageStats(pool, scope) {
     ),
   ]);
 
-  const tableSizes = {};
-  for (const row of relationSizes.rows) {
+  const tableSizes: Record<string, number> = {};
+  for (const row of relationSizes.rows as Array<{ relname: string; bytes: string | number }>) {
     tableSizes[row.relname] = Number(row.bytes || 0);
   }
 
-  const databaseBytes = Number(dbSize.rows?.[0]?.bytes || 0);
-  const scopedLogicalBytes = Number(scopedRowStats.rows?.[0]?.bytes || 0);
+  const databaseBytes = Number((dbSize.rows?.[0] as { bytes?: string | number } | undefined)?.bytes || 0);
+  const scopedLogicalBytes = Number((scopedRowStats.rows?.[0] as { bytes?: string | number } | undefined)?.bytes || 0);
   return {
     database_bytes: databaseBytes,
     scoped_logical_bytes: scopedLogicalBytes,
@@ -47,7 +61,7 @@ async function getStorageStats(pool, scope) {
   };
 }
 
-export async function startJob(pool, jobName, scope) {
+export async function startJob(pool: Pool, jobName: string, scope: Scope) {
   const { rows } = await pool.query(
     `
       INSERT INTO job_runs(job_name, status, project_id, account_scope_id, started_at)
@@ -59,9 +73,9 @@ export async function startJob(pool, jobName, scope) {
   return rows[0];
 }
 
-export async function finishJob(pool, jobId, patch) {
+export async function finishJob(pool: Pool, jobId: string | number, patch: JobPatch) {
   const status = patch?.status || "ok";
-  const processedCount = Number.isFinite(patch?.processedCount) ? patch.processedCount : 0;
+  const processedCount = Number.isFinite(patch?.processedCount) ? Number(patch.processedCount) : 0;
   const error = patch?.error ? String(patch.error).slice(0, 2000) : null;
   const meta = patch?.meta && typeof patch.meta === "object" ? patch.meta : {};
 
@@ -79,7 +93,7 @@ export async function finishJob(pool, jobId, patch) {
   );
 }
 
-export async function getJobsStatus(pool, scope) {
+export async function getJobsStatus(pool: Pool, scope: Scope) {
   const [latestRuns, chunkStatusCounts, watermarks, entityCounts, storage] = await Promise.all([
     pool.query(
       `
@@ -126,8 +140,8 @@ export async function getJobsStatus(pool, scope) {
     getStorageStats(pool, scope),
   ]);
 
-  const ragCounts = { pending: 0, processing: 0, ready: 0, failed: 0 };
-  for (const row of chunkStatusCounts.rows) {
+  const ragCounts: Record<string, number> = { pending: 0, processing: 0, ready: 0, failed: 0 };
+  for (const row of chunkStatusCounts.rows as Array<{ embedding_status: string; count: number }>) {
     ragCounts[row.embedding_status] = row.count;
   }
 
