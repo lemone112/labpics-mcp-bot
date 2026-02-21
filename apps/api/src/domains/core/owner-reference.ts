@@ -6,31 +6,49 @@
  *  2) explicit owner_username
  *  3) auth user_id
  *  4) auth username
- *
- * @param {import('pg').Pool} pool
- * @param {{
- *   ownerUserId?: string | null,
- *   ownerUsername?: string | null,
- *   authUserId?: string | null,
- *   authUsername?: string | null,
- * }} input
- * @returns {Promise<{
- *   ownerUserId: string | null,
- *   ownerUsername: string | null,
- *   source: 'owner_user_id' | 'owner_username' | 'auth_user_id' | 'auth_username' | 'none',
- *   resolved: boolean,
- *   invalidOwnerUserId: string | null,
- * }>}
  */
-export async function resolveOwnerReference(pool, input = {}) {
+
+import type { Pool } from "../../types/index.js";
+
+type ResolveSource =
+  | "owner_user_id"
+  | "owner_username"
+  | "auth_user_id"
+  | "auth_username"
+  | "none";
+
+interface OwnerReferenceInput {
+  ownerUserId?: string | null;
+  ownerUsername?: string | null;
+  authUserId?: string | null;
+  authUsername?: string | null;
+}
+
+interface OwnerReferenceResult {
+  ownerUserId: string | null;
+  ownerUsername: string | null;
+  source: ResolveSource;
+  resolved: boolean;
+  invalidOwnerUserId: string | null;
+}
+
+interface UserLookupRow {
+  id: string;
+  username: string | null;
+}
+
+export async function resolveOwnerReference(
+  pool: Pool,
+  input: OwnerReferenceInput = {}
+): Promise<OwnerReferenceResult> {
   const ownerUserId = String(input.ownerUserId || "").trim();
   const ownerUsername = String(input.ownerUsername || "").trim().toLowerCase();
   const authUserId = String(input.authUserId || "").trim();
   const authUsername = String(input.authUsername || "").trim().toLowerCase();
 
-  async function byUserId(userId, source) {
+  async function byUserId(userId: string, source: ResolveSource): Promise<OwnerReferenceResult | null> {
     if (!userId) return null;
-    const { rows } = await pool.query(
+    const { rows } = await pool.query<UserLookupRow>(
       `
         SELECT id::text AS id, username
         FROM app_users
@@ -58,9 +76,12 @@ export async function resolveOwnerReference(pool, input = {}) {
     };
   }
 
-  async function byUsername(username, source) {
+  async function byUsername(
+    username: string,
+    source: ResolveSource
+  ): Promise<OwnerReferenceResult | null> {
     if (!username) return null;
-    const { rows } = await pool.query(
+    const { rows } = await pool.query<UserLookupRow>(
       `
         SELECT id::text AS id, username
         FROM app_users
@@ -90,13 +111,15 @@ export async function resolveOwnerReference(pool, input = {}) {
 
   const explicitUser = await byUserId(ownerUserId, "owner_user_id");
   if (ownerUserId) {
-    return explicitUser || {
-      ownerUserId: null,
-      ownerUsername: null,
-      source: "owner_user_id",
-      resolved: false,
-      invalidOwnerUserId: ownerUserId,
-    };
+    return (
+      explicitUser || {
+        ownerUserId: null,
+        ownerUsername: null,
+        source: "owner_user_id",
+        resolved: false,
+        invalidOwnerUserId: ownerUserId,
+      }
+    );
   }
 
   return (
