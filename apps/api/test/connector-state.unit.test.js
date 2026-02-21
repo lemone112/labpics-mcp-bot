@@ -4,6 +4,7 @@ import {
   addSeconds,
   clampInt,
   dedupeKeyForError,
+  getConnectorSyncState,
   listDeadLetterErrors,
   listDueConnectorErrors,
   markConnectorSyncFailure,
@@ -252,9 +253,70 @@ describe("registerConnectorError", () => {
       else process.env.CONNECTOR_RETRY_BASE_SECONDS = prevBase;
     }
   });
+
+  it("accepts object payload_json and persists it as jsonb", async () => {
+    const pool = {
+      query: async (sql, params) => {
+        const text = String(sql);
+        if (text.includes("FROM connector_errors")) {
+          return { rows: [] };
+        }
+        if (text.includes("INSERT INTO connector_errors")) {
+          assert.equal(params[8], JSON.stringify({ detail: "x", code: 42 }));
+          return { rows: [{ id: "err-json" }] };
+        }
+        throw new Error(`Unexpected SQL in test pool: ${text.slice(0, 60)}`);
+      },
+    };
+
+    const result = await registerConnectorError(pool, scope, {
+      connector: "attio",
+      operation: "sync",
+      payload_json: { detail: "x", code: 42 },
+    });
+    assert.equal(result.id, "err-json");
+    assert.equal(result.attempt, 1);
+  });
 });
 
 describe("connector error helpers", () => {
+  it("getConnectorSyncState returns row or null", async () => {
+    let calls = 0;
+    const pool = {
+      query: async (_sql) => {
+        calls += 1;
+        if (calls === 1) {
+          return {
+            rows: [
+              {
+                project_id: scope.projectId,
+                account_scope_id: scope.accountScopeId,
+                connector: "chatwoot",
+                mode: "http",
+                cursor_ts: null,
+                cursor_id: null,
+                page_cursor: null,
+                last_success_at: null,
+                last_attempt_at: null,
+                status: "ok",
+                retry_count: 0,
+                last_error: null,
+                meta: {},
+                updated_at: "2026-02-21T00:00:00.000Z",
+              },
+            ],
+          };
+        }
+        return { rows: [] };
+      },
+    };
+
+    const existing = await getConnectorSyncState(pool, scope, "chatwoot");
+    assert.equal(existing.connector, "chatwoot");
+    const missing = await getConnectorSyncState(pool, scope, "linear");
+    assert.equal(missing, null);
+  });
+
   it("resolveConnectorErrors returns affected row count", async () => {
     const pool = {
       query: async (sql, params) => {
