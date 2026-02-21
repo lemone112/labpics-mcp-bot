@@ -29,6 +29,7 @@ export const CreateAccountSchema = z.object({
   domain: optionalTrimmedString(300),
   external_ref: optionalTrimmedString(500),
   stage: z.string().trim().toLowerCase().pipe(accountStageEnum).default("prospect"),
+  owner_user_id: z.string().uuid().optional().nullable().default(null),
   owner_username: optionalTrimmedString(200),
   evidence_refs: evidenceRefs,
 });
@@ -41,6 +42,7 @@ export const CreateOpportunitySchema = z.object({
   probability,
   amount_estimate: positiveNumber(),
   expected_close_date: z.string().optional().default(null as unknown as string).nullable(),
+  owner_user_id: z.string().uuid().optional().nullable().default(null),
   owner_username: optionalTrimmedString(200),
   evidence_refs: evidenceRefs,
 });

@@ -2,6 +2,7 @@ import { ApiError, parseBody, parseLimit, sendError, sendOk } from "../infra/api
 import { requireProjectScope } from "../infra/scope.js";
 import { assertUuid } from "../infra/utils.js";
 import { normalizeEvidenceRefs, writeAuditEvent } from "../domains/core/audit.js";
+import { resolveOwnerReference } from "../domains/core/owner-reference.js";
 import { findCachedResponse, getIdempotencyKey, storeCachedResponse } from "../infra/idempotency.js";
 import type { Pool, FastifyReply, FastifyRequest } from "../types/index.js";
 import type { ZodTypeAny } from "zod";
@@ -42,11 +43,21 @@ export function registerCrmRoutes(ctx: RouteCtx) {
     const limit = parseLimit(request.query?.limit, 200, 500);
     const rows = await pool.query(
       `
-        SELECT id, name, domain, external_ref, stage, owner_username, created_at, updated_at
-        FROM crm_accounts
-        WHERE project_id = $1
-          AND account_scope_id = $2
-        ORDER BY updated_at DESC
+        SELECT
+          a.id,
+          a.name,
+          a.domain,
+          a.external_ref,
+          a.stage,
+          a.owner_user_id,
+          COALESCE(owner_user.username, a.owner_username) AS owner_username,
+          a.created_at,
+          a.updated_at
+        FROM crm_accounts AS a
+        LEFT JOIN app_users AS owner_user ON owner_user.id = a.owner_user_id
+        WHERE a.project_id = $1
+          AND a.account_scope_id = $2
+        ORDER BY a.updated_at DESC
         LIMIT $3
       `,
       [scope.projectId, scope.accountScopeId, limit]
@@ -66,17 +77,55 @@ export function registerCrmRoutes(ctx: RouteCtx) {
       domain?: string | null;
       external_ref?: string | null;
       stage: string;
+      owner_user_id?: string | null;
       owner_username?: string | null;
       evidence_refs?: unknown;
     }>(CreateAccountSchema as any, request.body);
-    const ownerUsername = body.owner_username || request.auth?.username || null;
+    const ownerRef = await resolveOwnerReference(pool, {
+      ownerUserId: body.owner_user_id || null,
+      ownerUsername: body.owner_username || null,
+      authUserId: request.auth?.user_id || null,
+      authUsername: request.auth?.username || null,
+    });
+    if (ownerRef.invalidOwnerUserId) {
+      return sendError(
+        reply,
+        request.requestId,
+        new ApiError(400, "invalid_owner_user_id", "owner_user_id does not reference an existing user")
+      );
+    }
     const { rows } = await pool.query(
       `
-        INSERT INTO crm_accounts(project_id, account_scope_id, name, domain, external_ref, stage, owner_username, updated_at)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, now())
-        RETURNING id, name, domain, external_ref, stage, owner_username, created_at, updated_at
+        WITH inserted AS (
+          INSERT INTO crm_accounts(
+            project_id, account_scope_id, name, domain, external_ref, stage, owner_user_id, owner_username, updated_at
+          )
+          VALUES ($1, $2, $3, $4, $5, $6, $7::uuid, $8, now())
+          RETURNING id, name, domain, external_ref, stage, owner_user_id, owner_username, created_at, updated_at
+        )
+        SELECT
+          i.id,
+          i.name,
+          i.domain,
+          i.external_ref,
+          i.stage,
+          i.owner_user_id,
+          COALESCE(u.username, i.owner_username) AS owner_username,
+          i.created_at,
+          i.updated_at
+        FROM inserted AS i
+        LEFT JOIN app_users AS u ON u.id = i.owner_user_id
       `,
-      [scope.projectId, scope.accountScopeId, body.name, body.domain, body.external_ref || null, body.stage, ownerUsername]
+      [
+        scope.projectId,
+        scope.accountScopeId,
+        body.name,
+        body.domain,
+        body.external_ref || null,
+        body.stage,
+        ownerRef.ownerUserId,
+        ownerRef.ownerUsername,
+      ]
     );
     await writeAuditEvent(pool, {
       projectId: scope.projectId,
@@ -87,7 +136,11 @@ export function registerCrmRoutes(ctx: RouteCtx) {
       entityId: (rows[0] as any).id,
       status: "ok",
       requestId: request.requestId,
-      payload: { name: (rows[0] as any).name, stage: (rows[0] as any).stage },
+      payload: {
+        name: (rows[0] as any).name,
+        stage: (rows[0] as any).stage,
+        owner_user_id: (rows[0] as any).owner_user_id || null,
+      },
       evidenceRefs: normalizeEvidenceRefs(body.evidence_refs as any),
     });
     const responseBody = { ok: true, account: rows[0], request_id: request.requestId };
@@ -111,12 +164,14 @@ export function registerCrmRoutes(ctx: RouteCtx) {
           o.probability,
           o.expected_close_date,
           o.next_step,
-          o.owner_username,
+          o.owner_user_id,
+          COALESCE(owner_user.username, o.owner_username) AS owner_username,
           o.evidence_refs,
           o.created_at,
           o.updated_at
         FROM crm_opportunities AS o
         LEFT JOIN crm_accounts AS a ON a.id = o.account_id
+        LEFT JOIN app_users AS owner_user ON owner_user.id = o.owner_user_id
         WHERE o.project_id = $1
           AND o.account_scope_id = $2
           AND ($3 = '' OR o.stage = $3)
@@ -138,28 +193,53 @@ export function registerCrmRoutes(ctx: RouteCtx) {
       probability?: number | null;
       expected_close_date?: string | null;
       next_step?: string | null;
+      owner_user_id?: string | null;
       owner_username?: string | null;
       evidence_refs?: unknown;
     }>(CreateOpportunitySchema as any, request.body);
-    const ownerUsername = body.owner_username || request.auth?.username || null;
+    const ownerRef = await resolveOwnerReference(pool, {
+      ownerUserId: body.owner_user_id || null,
+      ownerUsername: body.owner_username || null,
+      authUserId: request.auth?.user_id || null,
+      authUsername: request.auth?.username || null,
+    });
+    if (ownerRef.invalidOwnerUserId) {
+      return sendError(
+        reply,
+        request.requestId,
+        new ApiError(400, "invalid_owner_user_id", "owner_user_id does not reference an existing user")
+      );
+    }
     const { rows } = await pool.query(
       `
-        INSERT INTO crm_opportunities(
-          project_id,
-          account_scope_id,
-          account_id,
-          title,
-          stage,
-          amount_estimate,
-          probability,
-          expected_close_date,
-          next_step,
-          owner_username,
-          evidence_refs,
-          updated_at
+        WITH inserted AS (
+          INSERT INTO crm_opportunities(
+            project_id,
+            account_scope_id,
+            account_id,
+            title,
+            stage,
+            amount_estimate,
+            probability,
+            expected_close_date,
+            next_step,
+            owner_user_id,
+            owner_username,
+            evidence_refs,
+            updated_at
+          )
+          VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::uuid, $11, $12::jsonb, now())
+          RETURNING
+            id, account_id, title, stage, amount_estimate, probability, expected_close_date, next_step,
+            owner_user_id, owner_username, evidence_refs, created_at, updated_at
         )
-        VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::jsonb, now())
-        RETURNING id, account_id, title, stage, amount_estimate, probability, expected_close_date, next_step, owner_username, evidence_refs, created_at, updated_at
+        SELECT
+          i.id, i.account_id, i.title, i.stage, i.amount_estimate, i.probability,
+          i.expected_close_date, i.next_step, i.owner_user_id,
+          COALESCE(u.username, i.owner_username) AS owner_username,
+          i.evidence_refs, i.created_at, i.updated_at
+        FROM inserted AS i
+        LEFT JOIN app_users AS u ON u.id = i.owner_user_id
       `,
       [
         scope.projectId,
@@ -171,7 +251,8 @@ export function registerCrmRoutes(ctx: RouteCtx) {
         body.probability,
         body.expected_close_date,
         body.next_step,
-        ownerUsername,
+        ownerRef.ownerUserId,
+        ownerRef.ownerUsername,
         JSON.stringify(normalizeEvidenceRefs(body.evidence_refs as any)),
       ]
     );
@@ -189,6 +270,7 @@ export function registerCrmRoutes(ctx: RouteCtx) {
         stage: (rows[0] as any).stage,
         amount_estimate: (rows[0] as any).amount_estimate,
         probability: (rows[0] as any).probability,
+        owner_user_id: (rows[0] as any).owner_user_id || null,
       },
       evidenceRefs: ((rows[0] as any).evidence_refs || []) as any,
     });
