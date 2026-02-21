@@ -1,23 +1,53 @@
-function stableSortObject(value) {
+interface CriteriaDefinition {
+  criteria_key?: string | null;
+  version?: number | null;
+  severity?: string | null;
+  rule_spec?: unknown;
+}
+
+interface CriteriaContext {
+  metricValues?: Record<string, unknown>;
+  thresholds?: Record<string, unknown>;
+  evidence_refs?: unknown[];
+}
+
+interface CriteriaEvaluationResult {
+  criteria_key: string;
+  version: number;
+  status: "pass" | "fail" | "error";
+  score: number;
+  reason: string;
+  metric_snapshot: unknown;
+  threshold_snapshot: unknown;
+  evidence_refs: unknown[];
+  error: string | null;
+}
+
+interface ConditionEvaluation {
+  passed: boolean;
+  reason: string;
+}
+
+function stableSortObject(value: unknown): unknown {
   if (Array.isArray(value)) {
     return value.map((item) => stableSortObject(item));
   }
   if (value && typeof value === "object") {
-    const out = {};
-    for (const key of Object.keys(value).sort()) {
-      out[key] = stableSortObject(value[key]);
+    const out: Record<string, unknown> = {};
+    for (const key of Object.keys(value as Record<string, unknown>).sort()) {
+      out[key] = stableSortObject((value as Record<string, unknown>)[key]);
     }
     return out;
   }
   return value;
 }
 
-function toNumber(value) {
+function toNumber(value: unknown): number | null {
   const n = Number(value);
   return Number.isFinite(n) ? n : null;
 }
 
-function compareNumbers(operator, left, right) {
+function compareNumbers(operator: string, left: number, right: number): boolean {
   if (operator === ">") return left > right;
   if (operator === ">=") return left >= right;
   if (operator === "<") return left < right;
@@ -27,7 +57,7 @@ function compareNumbers(operator, left, right) {
   throw new Error(`unsupported_operator:${operator}`);
 }
 
-function resolveThresholdValue(condition, thresholds) {
+function resolveThresholdValue(condition: Record<string, unknown>, thresholds: Record<string, unknown>): unknown {
   if (condition.threshold_ref) {
     const key = String(condition.threshold_ref || "").trim();
     if (!key || !Object.prototype.hasOwnProperty.call(thresholds, key)) {
@@ -38,7 +68,7 @@ function resolveThresholdValue(condition, thresholds) {
   return condition.value;
 }
 
-function evaluateCondition(condition, context) {
+function evaluateCondition(condition: Record<string, unknown>, context: CriteriaContext): ConditionEvaluation {
   const kind = String(condition?.type || "").trim().toLowerCase();
   if (!kind) throw new Error("condition_type_required");
 
@@ -90,9 +120,9 @@ function evaluateCondition(condition, context) {
     if (!Array.isArray(condition.conditions) || condition.conditions.length === 0) {
       throw new Error(`empty_logical_conditions:${kind}`);
     }
-    const parts = [];
-    const outcomes = [];
-    for (const child of condition.conditions) {
+    const parts: string[] = [];
+    const outcomes: boolean[] = [];
+    for (const child of condition.conditions as Record<string, unknown>[]) {
       const result = evaluateCondition(child, context);
       outcomes.push(result.passed);
       parts.push(result.reason);
@@ -108,7 +138,7 @@ function evaluateCondition(condition, context) {
     if (!condition.condition || typeof condition.condition !== "object") {
       throw new Error("not_condition_required");
     }
-    const nested = evaluateCondition(condition.condition, context);
+    const nested = evaluateCondition(condition.condition as Record<string, unknown>, context);
     return {
       passed: !nested.passed,
       reason: `not(${nested.reason})`,
@@ -118,7 +148,7 @@ function evaluateCondition(condition, context) {
   throw new Error(`unsupported_condition_type:${kind}`);
 }
 
-function severityFailScore(severity) {
+function severityFailScore(severity: string): number {
   if (severity === "critical") return 0;
   if (severity === "high") return 20;
   if (severity === "medium") return 40;
@@ -126,7 +156,10 @@ function severityFailScore(severity) {
   return 80;
 }
 
-export function evaluateCriteriaDefinition(definition, context = {}) {
+export function evaluateCriteriaDefinition(
+  definition: CriteriaDefinition,
+  context: CriteriaContext = {}
+): CriteriaEvaluationResult {
   const criteriaKey = String(definition?.criteria_key || "").trim();
   const severity = String(definition?.severity || "medium").trim().toLowerCase();
   const version = Number(definition?.version || 1);
@@ -165,7 +198,7 @@ export function evaluateCriteriaDefinition(definition, context = {}) {
   }
 
   try {
-    const decision = evaluateCondition(ruleSpec, {
+    const decision = evaluateCondition(ruleSpec as Record<string, unknown>, {
       metricValues: context.metricValues || {},
       thresholds: context.thresholds || {},
     });
@@ -191,12 +224,15 @@ export function evaluateCriteriaDefinition(definition, context = {}) {
       metric_snapshot: metricSnapshot,
       threshold_snapshot: thresholdSnapshot,
       evidence_refs: evidenceRefs,
-      error: String(error?.message || error),
+      error: String((error as Error)?.message || error),
     };
   }
 }
 
-export function evaluateCriteriaBatch(criteriaDefinitions, contextByCriteriaKey) {
+export function evaluateCriteriaBatch(
+  criteriaDefinitions: CriteriaDefinition[],
+  contextByCriteriaKey: Record<string, CriteriaContext>
+): CriteriaEvaluationResult[] {
   const sortedDefs = [...(criteriaDefinitions || [])].sort((a, b) =>
     String(a?.criteria_key || "").localeCompare(String(b?.criteria_key || ""))
   );

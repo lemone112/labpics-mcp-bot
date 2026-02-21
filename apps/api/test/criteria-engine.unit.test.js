@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { evaluateCriteriaBatch, evaluateCriteriaDefinition } from "../src/domains/analytics/criteria-engine.js";
+import { evaluateCriteriaBatch, evaluateCriteriaDefinition } from "../src/domains/analytics/criteria-engine.ts";
 
 test("criteria engine evaluates metric thresholds and severity scoring", () => {
   const definition = {
