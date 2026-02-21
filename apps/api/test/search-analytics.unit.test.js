@@ -62,6 +62,51 @@ test("trackSearchEvent writes scoped analytics payload", async () => {
   assert.equal(calls[0].params[9], 125);
 });
 
+test("trackSearchEvent handles default optional fields and fallback values", async () => {
+  const calls = [];
+  const pool = {
+    query: async (sql, params) => {
+      calls.push({ sql, params });
+      return { rows: [{ id: "evt-2" }] };
+    },
+  };
+
+  const result = await trackSearchEvent(
+    pool,
+    { projectId: "p-1", accountScopeId: "s-1" },
+    {
+      query: "x",
+      resultCount: Number.NaN,
+      durationMs: Number.NaN,
+    }
+  );
+
+  assert.equal(result, "evt-2");
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].params[1], 0);
+  assert.equal(calls[0].params[6], null);
+  assert.equal(calls[0].params[7], null);
+  assert.equal(calls[0].params[8], "search");
+  assert.equal(calls[0].params[9], null);
+});
+
+test("trackSearchEvent returns null and warns on DB failure", async () => {
+  const warnings = [];
+  const pool = {
+    query: async () => {
+      throw new Error("db unavailable");
+    },
+  };
+  const logger = {
+    warn: (payload, msg) => warnings.push({ payload, msg }),
+  };
+
+  const result = await trackSearchEvent(pool, { projectId: "p-1", accountScopeId: "s-1" }, { query: "q" }, logger);
+  assert.equal(result, null);
+  assert.equal(warnings.length, 1);
+  assert.equal(warnings[0].msg, "failed to track search analytics event");
+});
+
 test("getSearchAnalyticsSummary clamps bounds and returns normalized response", async () => {
   const calls = [];
   const pool = {
@@ -115,4 +160,36 @@ test("getSearchAnalyticsSummary clamps bounds and returns normalized response", 
   assert.equal(summary.top_queries.length, 1);
   assert.equal(summary.daily_volume.length, 1);
   assert.equal(summary.source_clicks.length, 1);
+});
+
+test("getSearchAnalyticsSummary applies default bounds and zero CTR branch", async () => {
+  const calls = [];
+  const pool = {
+    query: async (sql, params) => {
+      calls.push({ sql, params });
+      if (calls.length === 1) return { rows: [{}] };
+      if (calls.length === 2) return { rows: [] };
+      if (calls.length === 3) return { rows: [] };
+      if (calls.length === 4) return { rows: [{ total_query_types: 0, clicked_query_types: 0 }] };
+      return { rows: [] };
+    },
+  };
+
+  const summary = await getSearchAnalyticsSummary(pool, { projectId: "p-2", accountScopeId: "s-2" });
+
+  assert.equal(calls.length, 5);
+  for (const call of calls) {
+    assert.equal(call.params[0], "p-2");
+    assert.equal(call.params[1], "s-2");
+    assert.equal(call.params[2], 30);
+  }
+  assert.equal(calls[1].params[3], 20);
+
+  assert.equal(summary.period_days, 30);
+  assert.equal(summary.overview.total_searches, 0);
+  assert.equal(summary.overview.total_clicks, 0);
+  assert.equal(summary.overview.click_through_rate_pct, 0);
+  assert.deepStrictEqual(summary.top_queries, []);
+  assert.deepStrictEqual(summary.daily_volume, []);
+  assert.deepStrictEqual(summary.source_clicks, []);
 });
