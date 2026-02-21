@@ -1,26 +1,54 @@
 import { runEmbeddings, searchChunks } from "./embeddings.js";
+import type { Pool, ProjectScope } from "../../types/index.js";
 
-function toPositiveInt(value, fallback, min = 1, max = 200) {
+type LoggerLike = {
+  warn?: (obj: Record<string, unknown>, msg?: string) => void;
+};
+
+type SourceRow = Record<string, unknown>;
+
+type ChunkSearchRow = {
+  id: string;
+  text?: string | null;
+  created_at?: string | null;
+  message_global_id?: string | null;
+  conversation_global_id?: string | null;
+  distance?: number;
+  chunk_index?: number;
+};
+
+type ChunkSearchResult = {
+  results: ChunkSearchRow[];
+  embedding_model?: string | null;
+  search_config?: Record<string, unknown> | null;
+};
+
+export function toPositiveInt(
+  value: unknown,
+  fallback: number,
+  min = 1,
+  max = 200
+): number {
   const parsed = Number.parseInt(String(value ?? ""), 10);
   if (!Number.isFinite(parsed)) return fallback;
   return Math.max(min, Math.min(max, parsed));
 }
 
-export function asText(value, max = 4000) {
+export function asText(value: unknown, max = 4000): string {
   const text = String(value || "").trim();
   if (!text) return "";
   return text.slice(0, max);
 }
 
-export function tokenizeQuery(query) {
+export function tokenizeQuery(query: unknown): string[] {
   const source = asText(query, 4000).toLowerCase();
   if (!source) return [];
   const tokens = source
     .split(/[^a-zA-Zа-яА-Я0-9_]+/)
     .map((item) => item.trim())
     .filter((item) => item.length >= 3);
-  const deduped = [];
-  const seen = new Set();
+  const deduped: string[] = [];
+  const seen = new Set<string>();
   for (const token of tokens) {
     if (seen.has(token)) continue;
     seen.add(token);
@@ -30,11 +58,11 @@ export function tokenizeQuery(query) {
   return deduped;
 }
 
-export function sanitizeLike(text) {
-  return text.replace(/[%\\_]/g, "");
+export function sanitizeLike(text: unknown): string {
+  return String(text || "").replace(/[%\\_]/g, "");
 }
 
-export function buildLikePatterns(query) {
+export function buildLikePatterns(query: unknown): string[] {
   const tokens = tokenizeQuery(query);
   if (!tokens.length) {
     const fallback = sanitizeLike(asText(query, 300));
@@ -43,13 +71,19 @@ export function buildLikePatterns(query) {
   return tokens.map((token) => `%${sanitizeLike(token)}%`);
 }
 
-function toDateOrNull(value) {
+function toDateOrNull(value: unknown): Date | null {
   if (!value) return null;
-  const date = value instanceof Date ? value : new Date(value);
+  const date = value instanceof Date ? value : new Date(String(value));
   return Number.isNaN(date.getTime()) ? null : date;
 }
 
-export function lightragAnswer(query, chunkCount, messageCount, issueCount, opportunityCount) {
+export function lightragAnswer(
+  query: unknown,
+  chunkCount: number,
+  messageCount: number,
+  issueCount: number,
+  opportunityCount: number
+): string {
   const parts = [];
   parts.push(`Запрос: "${asText(query, 500)}".`);
   parts.push(`Найдено chunk-фрагментов: ${chunkCount}.`);
@@ -59,7 +93,10 @@ export function lightragAnswer(query, chunkCount, messageCount, issueCount, oppo
   return parts.join(" ");
 }
 
-export function buildEvidenceFromRows(rows, sourceType) {
+export function buildEvidenceFromRows(
+  rows: SourceRow[],
+  sourceType: string
+): Array<Record<string, unknown>> {
   return rows.map((row) => ({
     source_type: sourceType,
     source_pk: row.id,
@@ -71,9 +108,12 @@ export function buildEvidenceFromRows(rows, sourceType) {
   }));
 }
 
-function computeQualityScore(evidence, stats) {
+function computeQualityScore(
+  evidence: Array<Record<string, unknown>>,
+  stats: { chunks: number }
+): number {
   if (!evidence.length) return 0;
-  const sourceTypes = new Set(evidence.map((e) => e.source_type));
+  const sourceTypes = new Set(evidence.map((e) => String(e.source_type || "")));
   const diversity = sourceTypes.size;
   const coverageScore = Math.min(1, evidence.length / 10) * 40;
   const diversityScore = Math.min(1, diversity / 3) * 35;
@@ -81,9 +121,14 @@ function computeQualityScore(evidence, stats) {
   return Math.round(Math.min(100, coverageScore + diversityScore + depthScore));
 }
 
-async function persistLightRagQueryRun(pool, scope, payload = {}, logger = console) {
+async function persistLightRagQueryRun(
+  pool: Pool,
+  scope: ProjectScope,
+  payload: Record<string, unknown> = {},
+  logger: LoggerLike = console
+): Promise<number | null> {
   try {
-    const { rows } = await pool.query(
+    const { rows } = await pool.query<{ id: number }>(
       `
         INSERT INTO lightrag_query_runs(
           project_id,
@@ -117,14 +162,20 @@ async function persistLightRagQueryRun(pool, scope, payload = {}, logger = conso
     );
     return rows[0]?.id || null;
   } catch (error) {
-    logger.warn({ err: String(error?.message || error || "persist_lightrag_query_failed") }, "unable to persist lightrag query run");
+    logger.warn?.(
+      { err: String((error as Error)?.message || error || "persist_lightrag_query_failed") },
+      "unable to persist lightrag query run"
+    );
     return null;
   }
 }
 
-export async function getLightRagStatus(pool, scope) {
+export async function getLightRagStatus(
+  pool: Pool,
+  scope: ProjectScope
+): Promise<Record<string, unknown>> {
   const [chunkCounts, sourceCounts] = await Promise.all([
-    pool.query(
+    pool.query<{ embedding_status: string; count: number }>(
       `
         SELECT embedding_status, count(*)::int AS count
         FROM rag_chunks
@@ -134,7 +185,7 @@ export async function getLightRagStatus(pool, scope) {
       `,
       [scope.projectId, scope.accountScopeId]
     ),
-    pool.query(
+    pool.query<Record<string, unknown>>(
       `
         SELECT
           (SELECT count(*)::int FROM cw_messages WHERE project_id = $1 AND account_scope_id = $2) AS messages_total,
@@ -145,7 +196,12 @@ export async function getLightRagStatus(pool, scope) {
     ),
   ]);
 
-  const embeddingCounts = { pending: 0, processing: 0, ready: 0, failed: 0 };
+  const embeddingCounts: Record<string, number> = {
+    pending: 0,
+    processing: 0,
+    ready: 0,
+    failed: 0,
+  };
   for (const row of chunkCounts.rows) {
     embeddingCounts[String(row.embedding_status || "")] = Number(row.count || 0);
   }
@@ -162,7 +218,11 @@ export async function getLightRagStatus(pool, scope) {
   };
 }
 
-export async function refreshLightRag(pool, scope, logger = console) {
+export async function refreshLightRag(
+  pool: Pool,
+  scope: ProjectScope,
+  logger: LoggerLike = console
+): Promise<Record<string, unknown>> {
   const embeddings = await runEmbeddings(pool, scope, logger);
   const status = await getLightRagStatus(pool, scope);
   return {
@@ -171,7 +231,12 @@ export async function refreshLightRag(pool, scope, logger = console) {
   };
 }
 
-export async function queryLightRag(pool, scope, options = {}, logger = console) {
+export async function queryLightRag(
+  pool: Pool,
+  scope: ProjectScope,
+  options: Record<string, unknown> = {},
+  logger: LoggerLike = console
+): Promise<Record<string, unknown>> {
   const query = asText(options.query, 4000);
   if (!query) {
     return {
@@ -199,21 +264,34 @@ export async function queryLightRag(pool, scope, options = {}, logger = console)
   const safePatterns = patterns.length ? patterns : [`%${query}%`];
 
   const sourceFilter = Array.isArray(options.sourceFilter)
-    ? new Set(options.sourceFilter.map((s) => String(s).toLowerCase().trim()).filter(Boolean))
+    ? new Set(
+        options.sourceFilter
+          .map((s) => String(s).toLowerCase().trim())
+          .filter(Boolean)
+      )
     : null;
   const dateFrom = toDateOrNull(options.dateFrom);
   const dateTo = toDateOrNull(options.dateTo);
-  const dateToExclusive = dateTo ? new Date(dateTo.getTime() + (24 * 60 * 60 * 1000)) : null;
+  const dateToExclusive = dateTo
+    ? new Date(dateTo.getTime() + 24 * 60 * 60 * 1000)
+    : null;
   const includeMessages = !sourceFilter || sourceFilter.has("messages");
   const includeIssues = !sourceFilter || sourceFilter.has("issues");
-  const includeOpportunities = !sourceFilter || sourceFilter.has("deals") || sourceFilter.has("opportunities");
+  const includeOpportunities =
+    !sourceFilter ||
+    sourceFilter.has("deals") ||
+    sourceFilter.has("opportunities");
   const includeChunks = !sourceFilter || sourceFilter.has("chunks");
 
-  const emptyResult = { rows: [] };
-  const [chunkSearch, messageRows, issueRows, opportunityRows] = await Promise.all([
-    includeChunks ? searchChunks(pool, scope, query, topK, logger, { dateFrom, dateTo }) : { results: [], embedding_model: null, search_config: null },
-    includeMessages ? pool.query(
-      `
+  const emptyResult = { rows: [] as SourceRow[] };
+  const [chunkSearchRaw, messageRows, issueRows, opportunityRows] =
+    await Promise.all([
+      includeChunks
+        ? searchChunks(pool, scope, query, topK, logger, { dateFrom, dateTo })
+        : { results: [], embedding_model: null, search_config: null },
+      includeMessages
+        ? pool.query<SourceRow>(
+            `
         SELECT
           id,
           message_id::text AS source_ref,
@@ -234,10 +312,19 @@ export async function queryLightRag(pool, scope, options = {}, logger = console)
         ORDER BY created_at DESC NULLS LAST
         LIMIT $6
       `,
-      [scope.projectId, scope.accountScopeId, safePatterns, dateFrom, dateToExclusive, sourceLimit]
-    ) : emptyResult,
-    includeIssues ? pool.query(
-      `
+            [
+              scope.projectId,
+              scope.accountScopeId,
+              safePatterns,
+              dateFrom,
+              dateToExclusive,
+              sourceLimit,
+            ]
+          )
+        : emptyResult,
+      includeIssues
+        ? pool.query<SourceRow>(
+            `
         SELECT
           id,
           external_id::text AS source_ref,
@@ -262,10 +349,19 @@ export async function queryLightRag(pool, scope, options = {}, logger = console)
         ORDER BY updated_at DESC NULLS LAST
         LIMIT $6
       `,
-      [scope.projectId, scope.accountScopeId, safePatterns, dateFrom, dateToExclusive, sourceLimit]
-    ) : emptyResult,
-    includeOpportunities ? pool.query(
-      `
+            [
+              scope.projectId,
+              scope.accountScopeId,
+              safePatterns,
+              dateFrom,
+              dateToExclusive,
+              sourceLimit,
+            ]
+          )
+        : emptyResult,
+      includeOpportunities
+        ? pool.query<SourceRow>(
+            `
         SELECT
           id,
           external_id::text AS source_ref,
@@ -291,10 +387,19 @@ export async function queryLightRag(pool, scope, options = {}, logger = console)
         ORDER BY updated_at DESC NULLS LAST
         LIMIT $6
       `,
-      [scope.projectId, scope.accountScopeId, safePatterns, dateFrom, dateToExclusive, sourceLimit]
-    ) : emptyResult,
-  ]);
+            [
+              scope.projectId,
+              scope.accountScopeId,
+              safePatterns,
+              dateFrom,
+              dateToExclusive,
+              sourceLimit,
+            ]
+          )
+        : emptyResult,
+    ]);
 
+  const chunkSearch = chunkSearchRaw as ChunkSearchResult;
   const messages = messageRows.rows || [];
   const issues = issueRows.rows || [];
   const opportunities = opportunityRows.rows || [];
@@ -326,8 +431,15 @@ export async function queryLightRag(pool, scope, options = {}, logger = console)
     opportunities: opportunities.length,
   };
 
-  const sourceTypes = new Set(evidence.map((e) => e.source_type));
+  const sourceTypes = new Set(evidence.map((e) => String(e.source_type || "")));
   const qualityScore = computeQualityScore(evidence, stats);
+  const answer = lightragAnswer(
+    query,
+    stats.chunks,
+    stats.messages,
+    stats.issues,
+    stats.opportunities
+  );
 
   const queryRunId = await persistLightRagQueryRun(
     pool,
@@ -338,7 +450,7 @@ export async function queryLightRag(pool, scope, options = {}, logger = console)
       chunkHits: stats.chunks,
       sourceHits: stats.messages + stats.issues + stats.opportunities,
       evidence,
-      answer: lightragAnswer(query, stats.chunks, stats.messages, stats.issues, stats.opportunities),
+      answer,
       createdBy: options.createdBy || null,
       qualityScore,
       sourceDiversity: sourceTypes.size,
@@ -354,7 +466,7 @@ export async function queryLightRag(pool, scope, options = {}, logger = console)
     search_config: chunkSearch.search_config || null,
     quality_score: qualityScore,
     source_diversity: sourceTypes.size,
-    answer: lightragAnswer(query, stats.chunks, stats.messages, stats.issues, stats.opportunities),
+    answer,
     chunks: chunkSearch.results || [],
     evidence,
     entities: { messages, issues, opportunities },
@@ -362,7 +474,11 @@ export async function queryLightRag(pool, scope, options = {}, logger = console)
   };
 }
 
-export async function submitLightRagFeedback(pool, scope, options = {}) {
+export async function submitLightRagFeedback(
+  pool: Pool,
+  scope: ProjectScope,
+  options: Record<string, unknown> = {}
+): Promise<Record<string, unknown> | null> {
   const queryRunId = Number(options.queryRunId);
   if (!Number.isFinite(queryRunId) || queryRunId <= 0) {
     return null;
@@ -374,7 +490,7 @@ export async function submitLightRagFeedback(pool, scope, options = {}) {
   const comment = asText(options.comment, 2000) || null;
   const createdBy = asText(options.createdBy, 200) || null;
 
-  const { rows } = await pool.query(
+  const { rows } = await pool.query<Record<string, unknown>>(
     `
       INSERT INTO lightrag_feedback(project_id, account_scope_id, query_run_id, rating, comment, created_by)
       VALUES ($1, $2, $3, $4, $5, $6)
