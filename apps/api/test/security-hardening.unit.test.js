@@ -1,15 +1,20 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readFileSync, existsSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const currentDir = dirname(fileURLToPath(import.meta.url));
 const indexSource = readFileSync(join(currentDir, "..", "src", "index.js"), "utf8");
 const apiSource = readFileSync(join(currentDir, "..", "src", "infra", "api-contract.ts"), "utf8");
-// Route files (route handlers extracted from index.js into routes/*.js)
-const authRouteSource = readFileSync(join(currentDir, "..", "src", "routes", "auth.js"), "utf8");
-const projectsRouteSource = readFileSync(join(currentDir, "..", "src", "routes", "projects.js"), "utf8");
+// Route files (route handlers extracted from index.js into routes/*.{js,ts})
+const routesDir = join(currentDir, "..", "src", "routes");
+const authRoutePath = existsSync(join(routesDir, "auth.ts")) ? join(routesDir, "auth.ts") : join(routesDir, "auth.js");
+const projectsRoutePath = existsSync(join(routesDir, "projects.ts"))
+  ? join(routesDir, "projects.ts")
+  : join(routesDir, "projects.js");
+const authRouteSource = readFileSync(authRoutePath, "utf8");
+const projectsRouteSource = readFileSync(projectsRoutePath, "utf8");
 const allRouteSource = indexSource + authRouteSource + projectsRouteSource;
 
 // ===========================================================================

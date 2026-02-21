@@ -1,25 +1,49 @@
-import { ApiError, sendError, sendOk } from "../infra/api-contract.js";
+import { ApiError, parseLimit, sendError, sendOk } from "../infra/api-contract.js";
 import { requireProjectScope } from "../infra/scope.js";
 import { writeAuditEvent } from "../domains/core/audit.js";
 import { runEmbeddings } from "../domains/rag/embeddings.js";
 import { finishJob, getJobsStatus, startJob } from "../domains/core/jobs.js";
 import { runConnectorSync } from "../domains/connectors/connector-sync.js";
 import { listScheduledJobs, runSchedulerTick } from "../domains/core/scheduler.js";
-import { parseLimit } from "../infra/api-contract.js";
+import type { Pool, FastifyReply, FastifyRequest } from "../types/index.js";
 
-/**
- * @param {object} ctx
- */
-export function registerJobRoutes(ctx) {
+type RequestLike = FastifyRequest & {
+  requestId: string;
+  auth?: {
+    active_project_id?: string | null;
+    account_scope_id?: string | null;
+    user_id?: string | null;
+    user_role?: "owner" | "pm" | null;
+    username?: string | null;
+  };
+  query?: Record<string, unknown>;
+};
+
+type ReplyLike = FastifyReply;
+type RegisterFn = (
+  path: string,
+  handler: (request: RequestLike, reply: ReplyLike) => Promise<unknown> | unknown
+) => void;
+
+interface RouteCtx {
+  registerGet: RegisterFn;
+  registerPost: RegisterFn;
+  pool: Pool;
+  cache: {
+    invalidateByPrefix: (prefix: string) => void;
+  };
+}
+
+export function registerJobRoutes(ctx: RouteCtx) {
   const { registerGet, registerPost, pool, cache } = ctx;
 
   registerPost("/jobs/chatwoot/sync", async (request, reply) => {
-    const scope = requireProjectScope(request);
+    const scope = requireProjectScope(request as any);
     const job = await startJob(pool, "chatwoot_sync", scope);
     try {
-      const sync = await runConnectorSync(pool, scope, "chatwoot", request.log);
-      const result = sync.result;
-      await finishJob(pool, job.id, {
+      const sync = await runConnectorSync(pool, scope, "chatwoot", request.log as any);
+      const result = (sync as any).result;
+      await finishJob(pool, (job as any).id, {
         status: "ok",
         processedCount: result.processed_messages,
         meta: result,
@@ -30,7 +54,7 @@ export function registerJobRoutes(ctx) {
         actorUsername: request.auth?.username || null,
         action: "job.chatwoot_sync",
         entityType: "job_run",
-        entityId: String(job.id),
+        entityId: String((job as any).id),
         status: "ok",
         requestId: request.requestId,
         payload: result,
@@ -38,8 +62,8 @@ export function registerJobRoutes(ctx) {
       });
       return sendOk(reply, request.requestId, { result });
     } catch (error) {
-      const errMsg = String(error?.message || error);
-      await finishJob(pool, job.id, { status: "failed", error: errMsg });
+      const errMsg = String((error as Error)?.message || error);
+      await finishJob(pool, (job as any).id, { status: "failed", error: errMsg });
       request.log.error({ err: errMsg, request_id: request.requestId }, "chatwoot sync job failed");
       await writeAuditEvent(pool, {
         projectId: scope.projectId,
@@ -47,7 +71,7 @@ export function registerJobRoutes(ctx) {
         actorUsername: request.auth?.username || null,
         action: "job.chatwoot_sync",
         entityType: "job_run",
-        entityId: String(job.id),
+        entityId: String((job as any).id),
         status: "failed",
         requestId: request.requestId,
         payload: { error: errMsg },
@@ -65,14 +89,14 @@ export function registerJobRoutes(ctx) {
   });
 
   registerPost("/jobs/embeddings/run", async (request, reply) => {
-    const scope = requireProjectScope(request);
+    const scope = requireProjectScope(request as any);
     const job = await startJob(pool, "embeddings_run", scope);
     try {
-      const result = await runEmbeddings(pool, scope, request.log);
-      await finishJob(pool, job.id, {
+      const result = await runEmbeddings(pool, scope, request.log as any);
+      await finishJob(pool, (job as any).id, {
         status: "ok",
-        processedCount: result.processed,
-        meta: result,
+        processedCount: (result as any).processed,
+        meta: result as any,
       });
       await writeAuditEvent(pool, {
         projectId: scope.projectId,
@@ -80,17 +104,17 @@ export function registerJobRoutes(ctx) {
         actorUsername: request.auth?.username || null,
         action: "job.embeddings_run",
         entityType: "job_run",
-        entityId: String(job.id),
+        entityId: String((job as any).id),
         status: "ok",
         requestId: request.requestId,
-        payload: result,
+        payload: result as any,
         evidenceRefs: [],
       });
       cache.invalidateByPrefix(`lightrag:${scope.projectId}`);
       return sendOk(reply, request.requestId, { result });
     } catch (error) {
-      const errMsg = String(error?.message || error);
-      await finishJob(pool, job.id, { status: "failed", error: errMsg });
+      const errMsg = String((error as Error)?.message || error);
+      await finishJob(pool, (job as any).id, { status: "failed", error: errMsg });
       request.log.error({ err: errMsg, request_id: request.requestId }, "embeddings job failed");
       await writeAuditEvent(pool, {
         projectId: scope.projectId,
@@ -98,7 +122,7 @@ export function registerJobRoutes(ctx) {
         actorUsername: request.auth?.username || null,
         action: "job.embeddings_run",
         entityType: "job_run",
-        entityId: String(job.id),
+        entityId: String((job as any).id),
         status: "failed",
         requestId: request.requestId,
         payload: { error: errMsg },
@@ -109,12 +133,12 @@ export function registerJobRoutes(ctx) {
   });
 
   registerPost("/jobs/attio/sync", async (request, reply) => {
-    const scope = requireProjectScope(request);
+    const scope = requireProjectScope(request as any);
     const job = await startJob(pool, "attio_sync", scope);
     try {
-      const sync = await runConnectorSync(pool, scope, "attio", request.log);
-      const result = sync.result;
-      await finishJob(pool, job.id, {
+      const sync = await runConnectorSync(pool, scope, "attio", request.log as any);
+      const result = (sync as any).result;
+      await finishJob(pool, (job as any).id, {
         status: "ok",
         processedCount: Number(result.touched_accounts || 0) + Number(result.touched_opportunities || 0),
         meta: result,
@@ -125,7 +149,7 @@ export function registerJobRoutes(ctx) {
         actorUsername: request.auth?.username || null,
         action: "job.attio_sync",
         entityType: "job_run",
-        entityId: String(job.id),
+        entityId: String((job as any).id),
         status: "ok",
         requestId: request.requestId,
         payload: result,
@@ -133,15 +157,15 @@ export function registerJobRoutes(ctx) {
       });
       return sendOk(reply, request.requestId, { result });
     } catch (error) {
-      const errMsg = String(error?.message || error);
-      await finishJob(pool, job.id, { status: "failed", error: errMsg });
+      const errMsg = String((error as Error)?.message || error);
+      await finishJob(pool, (job as any).id, { status: "failed", error: errMsg });
       await writeAuditEvent(pool, {
         projectId: scope.projectId,
         accountScopeId: scope.accountScopeId,
         actorUsername: request.auth?.username || null,
         action: "job.attio_sync",
         entityType: "job_run",
-        entityId: String(job.id),
+        entityId: String((job as any).id),
         status: "failed",
         requestId: request.requestId,
         payload: { error: errMsg },
@@ -159,12 +183,12 @@ export function registerJobRoutes(ctx) {
   });
 
   registerPost("/jobs/linear/sync", async (request, reply) => {
-    const scope = requireProjectScope(request);
+    const scope = requireProjectScope(request as any);
     const job = await startJob(pool, "linear_sync", scope);
     try {
-      const sync = await runConnectorSync(pool, scope, "linear", request.log);
-      const result = sync.result;
-      await finishJob(pool, job.id, {
+      const sync = await runConnectorSync(pool, scope, "linear", request.log as any);
+      const result = (sync as any).result;
+      await finishJob(pool, (job as any).id, {
         status: "ok",
         processedCount: Number(result.touched_projects || 0) + Number(result.touched_issues || 0),
         meta: result,
@@ -175,7 +199,7 @@ export function registerJobRoutes(ctx) {
         actorUsername: request.auth?.username || null,
         action: "job.linear_sync",
         entityType: "job_run",
-        entityId: String(job.id),
+        entityId: String((job as any).id),
         status: "ok",
         requestId: request.requestId,
         payload: result,
@@ -183,15 +207,15 @@ export function registerJobRoutes(ctx) {
       });
       return sendOk(reply, request.requestId, { result });
     } catch (error) {
-      const errMsg = String(error?.message || error);
-      await finishJob(pool, job.id, { status: "failed", error: errMsg });
+      const errMsg = String((error as Error)?.message || error);
+      await finishJob(pool, (job as any).id, { status: "failed", error: errMsg });
       await writeAuditEvent(pool, {
         projectId: scope.projectId,
         accountScopeId: scope.accountScopeId,
         actorUsername: request.auth?.username || null,
         action: "job.linear_sync",
         entityType: "job_run",
-        entityId: String(job.id),
+        entityId: String((job as any).id),
         status: "failed",
         requestId: request.requestId,
         payload: { error: errMsg },
@@ -209,21 +233,21 @@ export function registerJobRoutes(ctx) {
   });
 
   registerGet("/jobs/status", async (request, reply) => {
-    const scope = requireProjectScope(request);
+    const scope = requireProjectScope(request as any);
     const status = await getJobsStatus(pool, scope);
-    return sendOk(reply, request.requestId, status);
+    return sendOk(reply, request.requestId, status as any);
   });
 
   registerGet("/jobs/scheduler", async (request, reply) => {
-    const scope = requireProjectScope(request);
+    const scope = requireProjectScope(request as any);
     const jobs = await listScheduledJobs(pool, scope);
     return sendOk(reply, request.requestId, { jobs });
   });
 
   registerPost("/jobs/scheduler/tick", async (request, reply) => {
-    const scope = requireProjectScope(request);
+    const scope = requireProjectScope(request as any);
     const limit = parseLimit(request.query?.limit, 10, 100);
-    const result = await runSchedulerTick(pool, scope, { limit, logger: request.log });
+    const result = await runSchedulerTick(pool, scope, { limit, logger: request.log as any });
     await writeAuditEvent(pool, {
       projectId: scope.projectId,
       accountScopeId: scope.accountScopeId,
@@ -231,9 +255,9 @@ export function registerJobRoutes(ctx) {
       action: "job.scheduler_tick",
       entityType: "scheduler",
       entityId: scope.projectId,
-      status: result.failed > 0 ? "partial" : "ok",
+      status: (result as any).failed > 0 ? "partial" : "ok",
       requestId: request.requestId,
-      payload: result,
+      payload: result as any,
       evidenceRefs: [],
     });
     return sendOk(reply, request.requestId, { result });

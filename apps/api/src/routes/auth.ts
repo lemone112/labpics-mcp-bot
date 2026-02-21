@@ -1,41 +1,86 @@
 import { ApiError, sendError, sendOk } from "../infra/api-contract.js";
 import { writeAuditEvent } from "../domains/core/audit.js";
+import type { Pool, FastifyReply, FastifyRequest } from "../types/index.js";
 
-/**
- * @param {object} ctx
- * @param {Function} ctx.registerGet
- * @param {Function} ctx.registerPost
- * @param {object} ctx.pool
- * @param {object} ctx.cache
- * @param {Function} ctx.parseBody
- * @param {object} ctx.LoginSchema
- * @param {Function} ctx.normalizeAccountUsername
- * @param {Function} ctx.assertLoginRateLimit
- * @param {Function} ctx.recordLoginFailure
- * @param {Function} ctx.clearLoginFailures
- * @param {Function} ctx.timingSafeStringEqual
- * @param {object} ctx.auth
- * @param {Function} ctx.createSession
- * @param {Function} ctx.loadSessionWithProjectScope
- * @param {Function} ctx.hydrateSessionScope
- * @param {Function} ctx.parseProjectIdsFromUrl
- * @param {string} ctx.cookieName
- * @param {string} ctx.csrfCookieName
- * @param {object} ctx.cookieOptions
- * @param {object} ctx.csrfCookieOptions
- * @param {object} ctx.bcrypt
- */
-export function registerAuthRoutes(ctx) {
+type RequestLike = FastifyRequest & {
+  requestId: string;
+  auth?: {
+    username?: string | null;
+    user_id?: string | null;
+  };
+  cookies?: Record<string, string | undefined>;
+};
+
+type ReplyLike = FastifyReply;
+type RegisterFn = (
+  path: string,
+  handler: (request: RequestLike, reply: ReplyLike) => Promise<unknown> | unknown
+) => void;
+
+interface RouteCtx {
+  registerGet: RegisterFn;
+  registerPost: RegisterFn;
+  pool: Pool;
+  cache: {
+    del: (key: string) => Promise<void> | void;
+  };
+  parseBody: <T>(schema: unknown, input: unknown) => T;
+  LoginSchema: unknown;
+  normalizeAccountUsername: (value: unknown) => string;
+  assertLoginRateLimit: (ip: string, username: string) => void;
+  recordLoginFailure: (ip: string, username: string) => void;
+  clearLoginFailures: (ip: string, username: string) => void;
+  timingSafeStringEqual: (a: string, b: string) => boolean;
+  auth: {
+    username: string;
+    password: string;
+    hashed?: boolean;
+  };
+  createSession: (username: string, userId: string | null) => Promise<{ sid: string; csrfToken: string }>;
+  loadSessionWithProjectScope: (sid: string) => Promise<any>;
+  hydrateSessionScope: (
+    pool: Pool,
+    sid: string,
+    sessionRow: any,
+    preferredProjectIds: string[]
+  ) => Promise<any>;
+  parseProjectIdsFromUrl: (url: string) => string[];
+  cookieName: string;
+  csrfCookieName: string;
+  cookieOptions: Record<string, unknown>;
+  csrfCookieOptions: Record<string, unknown>;
+  bcrypt: {
+    compare: (plain: string, hash: string) => Promise<boolean>;
+  };
+}
+
+export function registerAuthRoutes(ctx: RouteCtx) {
   const {
-    registerGet, registerPost, pool, cache, parseBody, LoginSchema,
-    normalizeAccountUsername, assertLoginRateLimit, recordLoginFailure,
-    clearLoginFailures, timingSafeStringEqual, auth, createSession,
-    loadSessionWithProjectScope, hydrateSessionScope, parseProjectIdsFromUrl,
-    cookieName, csrfCookieName, cookieOptions, csrfCookieOptions, bcrypt,
+    registerGet,
+    registerPost,
+    pool,
+    cache,
+    parseBody,
+    LoginSchema,
+    normalizeAccountUsername,
+    assertLoginRateLimit,
+    recordLoginFailure,
+    clearLoginFailures,
+    timingSafeStringEqual,
+    auth,
+    createSession,
+    loadSessionWithProjectScope,
+    hydrateSessionScope,
+    parseProjectIdsFromUrl,
+    cookieName,
+    csrfCookieName,
+    cookieOptions,
+    csrfCookieOptions,
+    bcrypt,
   } = ctx;
 
   registerPost("/auth/login", async (request, reply) => {
-    const body = parseBody(LoginSchema, request.body);
+    const body = parseBody<{ username: string; password: string }>(LoginSchema, request.body);
     const username = normalizeAccountUsername(body.username);
     const password = body.password;
     if (!username) {
@@ -46,19 +91,24 @@ export function registerAuthRoutes(ctx) {
 
     const DUMMY_BCRYPT_HASH = "$2b$10$abcdefghijklmnopqrstuuABCDEFGHIJKLMNOPQRSTUVWXYZ012345";
 
-    // Phase 1: Try multi-user auth against app_users table
-    let sessionUsername = null;
-    let sessionUserId = null;
-    let sessionUserRole = null;
+    let sessionUsername: string | null = null;
+    let sessionUserId: string | null = null;
+    let sessionUserRole: string | null = null;
 
     const { rows: dbUsers } = await pool.query(
       "SELECT id, username, password_hash, role FROM app_users WHERE lower(username) = $1 LIMIT 1",
       [username]
     );
-    const dbUser = dbUsers[0] || null;
+    const dbUser = (dbUsers[0] as
+      | {
+          id: string;
+          username: string;
+          password_hash: string;
+          role: string;
+        }
+      | undefined) || null;
 
     if (dbUser) {
-      // User found in database — authenticate against stored hash
       const passwordMatch = await bcrypt.compare(password, dbUser.password_hash);
       if (passwordMatch) {
         sessionUsername = dbUser.username;
@@ -66,8 +116,6 @@ export function registerAuthRoutes(ctx) {
         sessionUserRole = dbUser.role;
       }
     } else {
-      // Phase 2: Fallback to env var auth (backward compatibility)
-      // Only used when the username matches the env var credentials
       const authUsername = normalizeAccountUsername(auth.username);
       const usernameMatches = timingSafeStringEqual(username, authUsername);
       if (auth.hashed) {
@@ -75,42 +123,54 @@ export function registerAuthRoutes(ctx) {
         const passwordMatch = await bcrypt.compare(password, hashToCompare);
         if (usernameMatches && passwordMatch) {
           sessionUsername = auth.username;
-          sessionUserRole = "owner"; // env var user is always owner
-        }
-      } else {
-        if (usernameMatches && timingSafeStringEqual(password, auth.password)) {
-          sessionUsername = auth.username;
           sessionUserRole = "owner";
         }
+      } else if (usernameMatches && timingSafeStringEqual(password, auth.password)) {
+        sessionUsername = auth.username;
+        sessionUserRole = "owner";
       }
     }
 
     if (!sessionUsername) {
       recordLoginFailure(request.ip, username);
-      writeAuditEvent(pool, {
-        projectId: null, accountScopeId: null,
-        actorUsername: username, actorUserId: null,
+      void writeAuditEvent(pool, {
+        projectId: null,
+        accountScopeId: null,
+        actorUsername: username,
+        actorUserId: null,
         action: "auth.login_failed",
-        entityType: "session", entityId: null, status: "failed",
+        entityType: "session",
+        entityId: null,
+        status: "failed",
         requestId: request.requestId,
-        payload: { ip: request.ip }, evidenceRefs: [],
-      }).catch((err) => console.error({ action: "audit_write_failed", error: String(err?.message || err) }, "auth audit event failed"));
+        payload: { ip: request.ip },
+        evidenceRefs: [],
+      }).catch((err) =>
+        console.error({ action: "audit_write_failed", error: String((err as Error)?.message || err) }, "auth audit event failed")
+      );
       return sendError(reply, request.requestId, new ApiError(401, "invalid_credentials", "Invalid credentials"));
     }
 
     clearLoginFailures(request.ip, username);
     const { sid, csrfToken } = await createSession(sessionUsername, sessionUserId);
-    writeAuditEvent(pool, {
-      projectId: null, accountScopeId: null,
-      actorUsername: sessionUsername, actorUserId: sessionUserId,
+    void writeAuditEvent(pool, {
+      projectId: null,
+      accountScopeId: null,
+      actorUsername: sessionUsername,
+      actorUserId: sessionUserId,
       action: "auth.login",
-      entityType: "session", entityId: sid, status: "ok",
+      entityType: "session",
+      entityId: sid,
+      status: "ok",
       requestId: request.requestId,
-      payload: { ip: request.ip, role: sessionUserRole }, evidenceRefs: [],
-    }).catch((err) => console.error({ action: "audit_write_failed", error: String(err?.message || err) }, "auth audit event failed"));
+      payload: { ip: request.ip, role: sessionUserRole },
+      evidenceRefs: [],
+    }).catch((err) =>
+      console.error({ action: "audit_write_failed", error: String((err as Error)?.message || err) }, "auth audit event failed")
+    );
 
-    reply.setCookie(cookieName, sid, cookieOptions);
-    reply.setCookie(csrfCookieName, csrfToken, csrfCookieOptions);
+    reply.setCookie(cookieName, sid, cookieOptions as any);
+    reply.setCookie(csrfCookieName, csrfToken, csrfCookieOptions as any);
     return sendOk(reply, request.requestId, {
       username: sessionUsername,
       user_id: sessionUserId,
@@ -147,18 +207,24 @@ export function registerAuthRoutes(ctx) {
     if (sid) {
       await pool.query("DELETE FROM sessions WHERE session_id = $1", [sid]);
       await cache.del(`session:${sid}`);
-      writeAuditEvent(pool, {
-        projectId: null, accountScopeId: null,
+      void writeAuditEvent(pool, {
+        projectId: null,
+        accountScopeId: null,
         actorUsername: request.auth?.username || null,
         actorUserId: request.auth?.user_id || null,
         action: "auth.logout",
-        entityType: "session", entityId: sid, status: "ok",
+        entityType: "session",
+        entityId: sid,
+        status: "ok",
         requestId: request.requestId,
-        payload: { ip: request.ip }, evidenceRefs: [],
-      }).catch((err) => console.error({ action: "audit_write_failed", error: String(err?.message || err) }, "auth audit event failed"));
+        payload: { ip: request.ip },
+        evidenceRefs: [],
+      }).catch((err) =>
+        console.error({ action: "audit_write_failed", error: String((err as Error)?.message || err) }, "auth audit event failed")
+      );
     }
-    reply.clearCookie(cookieName, cookieOptions);
-    reply.clearCookie(csrfCookieName, csrfCookieOptions);
+    reply.clearCookie(cookieName, cookieOptions as any);
+    reply.clearCookie(csrfCookieName, csrfCookieOptions as any);
     return sendOk(reply, request.requestId);
   });
 
@@ -168,8 +234,8 @@ export function registerAuthRoutes(ctx) {
 
     const sessionRow = await loadSessionWithProjectScope(sid);
     if (!sessionRow) {
-      reply.clearCookie(cookieName, cookieOptions);
-      reply.clearCookie(csrfCookieName, csrfCookieOptions);
+      reply.clearCookie(cookieName, cookieOptions as any);
+      reply.clearCookie(csrfCookieName, csrfCookieOptions as any);
       return sendOk(reply, request.requestId, { authenticated: false });
     }
 
