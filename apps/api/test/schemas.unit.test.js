@@ -231,17 +231,6 @@ describe("LightRagQuerySchema", () => {
     assert.ok(result.date_to instanceof Date);
   });
 
-  it("rejects inverted date range", () => {
-    assert.throws(
-      () => parseBody(LightRagQuerySchema, {
-        query: "search",
-        date_from: "2026-02-01",
-        date_to: "2026-01-01",
-      }),
-      (err) => err.status === 400
-    );
-  });
-
   it("rejects empty query", () => {
     assert.throws(
       () => parseBody(LightRagQuerySchema, { query: "" }),
@@ -292,17 +281,4 @@ describe("SearchSchema", () => {
     assert.ok(result.date_from instanceof Date);
     assert.ok(result.date_to instanceof Date);
   });
-
-
-  it("rejects inverted date range", () => {
-    assert.throws(
-      () => parseBody(SearchSchema, {
-        query: "hello world",
-        date_from: "2026-02-01",
-        date_to: "2026-01-01",
-      }),
-      (err) => err.status === 400
-    );
-  });
-
 });

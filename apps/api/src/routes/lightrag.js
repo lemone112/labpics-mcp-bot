@@ -6,6 +6,17 @@ import { getLightRagStatus, queryLightRag, refreshLightRag, submitLightRagFeedba
 import { rankSearchResults, computeRankingStats } from "../domains/rag/search-ranking.js";
 import { trackSearchEvent, getSearchAnalyticsSummary } from "../domains/rag/search-analytics.js";
 
+
+export function assertDateRange(dateFrom, dateTo) {
+  if (!dateFrom || !dateTo) return;
+  const from = dateFrom instanceof Date ? dateFrom : new Date(dateFrom);
+  const to = dateTo instanceof Date ? dateTo : new Date(dateTo);
+  if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime())) return;
+  if (from > to) {
+    throw new ApiError(400, "invalid_date_range", "date_from must be less than or equal to date_to");
+  }
+}
+
 /**
  * @param {object} ctx
  */
@@ -15,6 +26,7 @@ export function registerLightragRoutes(ctx) {
   registerPost("/search", async (request, reply) => {
     const scope = requireProjectScope(request);
     const body = parseBody(SearchSchema, request.body);
+    assertDateRange(body.date_from, body.date_to);
     const result = await queryLightRag(
       pool,
       scope,
@@ -37,6 +49,7 @@ export function registerLightragRoutes(ctx) {
   registerPost("/lightrag/query", async (request, reply) => {
     const scope = requireProjectScope(request);
     const body = parseBody(LightRagQuerySchema, request.body);
+    assertDateRange(body.date_from, body.date_to);
 
     const ragCacheKey = `lightrag:${scope.projectId}:${cacheKeyHash(body.query, String(body.topK), JSON.stringify(body.sourceFilter || []), String(body.date_from || ''), String(body.date_to || ''))}`;
     const cached = await cache.get(ragCacheKey);

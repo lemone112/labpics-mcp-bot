@@ -126,14 +126,6 @@ export const LightRagQuerySchema = z.object({
   sourceFilter: z.array(z.string()).optional().nullable().default(null),
   date_from: z.coerce.date().optional().nullable().default(null),
   date_to: z.coerce.date().optional().nullable().default(null),
-}).superRefine((value, ctx) => {
-  if (value.date_from && value.date_to && value.date_from > value.date_to) {
-    ctx.addIssue({
-      code: "custom",
-      message: "date_from must be less than or equal to date_to",
-      path: ["date_from"],
-    });
-  }
 });
 
 export const LightRagFeedbackSchema = z.object({
@@ -148,14 +140,6 @@ export const SearchSchema = z.object({
   sourceLimit: z.coerce.number().int().min(1).max(25).optional(),
   date_from: z.coerce.date().optional().nullable().default(null),
   date_to: z.coerce.date().optional().nullable().default(null),
-}).superRefine((value, ctx) => {
-  if (value.date_from && value.date_to && value.date_from > value.date_to) {
-    ctx.addIssue({
-      code: "custom",
-      message: "date_from must be less than or equal to date_to",
-      path: ["date_from"],
-    });
-  }
 });
 
 // ---------------------------------------------------------------------------
