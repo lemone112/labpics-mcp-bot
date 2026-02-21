@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import pg from "pg";
 
 import { applyMigrations } from "../db/migrate-lib.js";
+import { evaluateCriteriaAndStoreRun } from "../src/domains/analytics/metrics-contract.js";
 import { seedWorkforceFixtures } from "./fixtures/workforce-fixtures.js";
 
 const { Pool } = pg;
@@ -352,6 +353,151 @@ if (!integrationEnabled) {
             `,
             [bridgeMetricId, fixture.projectA, fixture.scopeB]
           )
+      );
+    });
+
+    it("resolves criteria thresholds from DB by scope + segment with fallback", async () => {
+      const criteriaKey = `criteria.latency.${Date.now()}`;
+      const { rows: criteriaRows } = await pool.query(
+        `
+          INSERT INTO criteria_definitions(
+            criteria_key, version, is_current, name, severity, owner_domain, rule_spec, enabled
+          )
+          VALUES (
+            $1,
+            1,
+            true,
+            'Latency SLA',
+            'high',
+            'analytics',
+            '{"type":"metric_threshold","metric_key":"p95_latency_ms","op":"<=","threshold_ref":"target_ms"}'::jsonb,
+            true
+          )
+          RETURNING id::text AS id
+        `,
+        [criteriaKey]
+      );
+      const criteriaId = criteriaRows[0]?.id;
+      assert.ok(criteriaId);
+
+      await pool.query(
+        `
+          INSERT INTO criteria_thresholds(
+            criteria_id, project_id, account_scope_id, segment_key, threshold_spec, effective_from
+          )
+          VALUES
+            ($1, NULL, NULL, 'default', '{"target_ms":90}'::jsonb, '2026-01-01T00:00:00Z'),
+            ($1, $2, $3, 'default', '{"target_ms":80}'::jsonb, '2026-02-01T00:00:00Z'),
+            ($1, $2, $3, 'enterprise', '{"target_ms":75}'::jsonb, '2026-02-10T00:00:00Z'),
+            ($1, $2, $3, 'enterprise', '{"target_ms":70}'::jsonb, '2026-02-15T00:00:00Z')
+        `,
+        [criteriaId, fixture.projectA, fixture.scopeA]
+      );
+
+      const enterpriseResult = await evaluateCriteriaAndStoreRun(
+        pool,
+        { projectId: fixture.projectA, accountScopeId: fixture.scopeA },
+        null,
+        {
+          schema_version: 1,
+          trigger_source: "integration-test",
+          run_key: `criteria-enterprise-${Date.now()}`,
+          evaluations: [
+            {
+              criteria_key: criteriaKey,
+              segment_key: "enterprise",
+              subject_type: "project",
+              subject_id: fixture.projectA,
+              metric_values: { p95_latency_ms: 72 },
+              thresholds: {},
+              evidence_refs: [],
+            },
+          ],
+        }
+      );
+      assert.equal(enterpriseResult.summary.total, 1);
+      assert.equal(enterpriseResult.summary.fail, 1);
+      assert.equal(enterpriseResult.evaluations[0]?.status, "fail");
+      assert.deepStrictEqual(enterpriseResult.evaluations[0]?.threshold_snapshot, { target_ms: 70 });
+
+      const fallbackResult = await evaluateCriteriaAndStoreRun(
+        pool,
+        { projectId: fixture.projectA, accountScopeId: fixture.scopeA },
+        null,
+        {
+          schema_version: 1,
+          trigger_source: "integration-test",
+          run_key: `criteria-fallback-${Date.now()}`,
+          evaluations: [
+            {
+              criteria_key: criteriaKey,
+              segment_key: "smb",
+              subject_type: "project",
+              subject_id: fixture.projectA,
+              metric_values: { p95_latency_ms: 79 },
+              thresholds: {},
+              evidence_refs: [],
+            },
+          ],
+        }
+      );
+      assert.equal(fallbackResult.summary.total, 1);
+      assert.equal(fallbackResult.summary.pass, 1);
+      assert.equal(fallbackResult.evaluations[0]?.status, "pass");
+      assert.deepStrictEqual(fallbackResult.evaluations[0]?.threshold_snapshot, { target_ms: 80 });
+    });
+
+    it("rejects duplicate criteria + subject tuples in one evaluation run payload", async () => {
+      const criteriaKey = `criteria.duplicate.${Date.now()}`;
+      await pool.query(
+        `
+          INSERT INTO criteria_definitions(
+            criteria_key, version, is_current, name, severity, owner_domain, rule_spec, enabled
+          )
+          VALUES (
+            $1,
+            1,
+            true,
+            'Duplicate tuple criterion',
+            'medium',
+            'analytics',
+            '{"type":"constant","value":true}'::jsonb,
+            true
+          )
+        `,
+        [criteriaKey]
+      );
+
+      await assert.rejects(
+        () =>
+          evaluateCriteriaAndStoreRun(
+            pool,
+            { projectId: fixture.projectA, accountScopeId: fixture.scopeA },
+            null,
+            {
+              schema_version: 1,
+              run_key: `criteria-dup-${Date.now()}`,
+              evaluations: [
+                {
+                  criteria_key: criteriaKey,
+                  subject_type: "project",
+                  subject_id: fixture.projectA,
+                  metric_values: {},
+                  thresholds: {},
+                  evidence_refs: [],
+                },
+                {
+                  criteria_key: criteriaKey,
+                  subject_type: "project",
+                  subject_id: fixture.projectA,
+                  metric_values: {},
+                  thresholds: {},
+                  evidence_refs: [],
+                },
+              ],
+            }
+          ),
+        (err) => err?.code === "criteria_evaluation_duplicate_subject"
       );
     });
   });

@@ -71,6 +71,15 @@ interface CriteriaEvaluationRow {
   evaluated_at: string;
 }
 
+interface CriteriaThresholdRow {
+  id: number;
+  threshold_spec: unknown;
+  segment_key: string;
+  project_id: string | null;
+  account_scope_id: string | null;
+  effective_from: string;
+}
+
 interface MetricsCriteriaRuntimeMetrics {
   ingest_batches_success_total: number;
   ingest_batches_failed_total: number;
@@ -191,6 +200,84 @@ function parsePgError(error: unknown): Error & { code?: string } {
   return (error || {}) as Error & { code?: string };
 }
 
+function normalizeSegmentKey(value: string | null | undefined): string {
+  const segment = String(value || "default").trim();
+  return segment || "default";
+}
+
+function toObjectRecord(value: unknown): Record<string, unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  return value as Record<string, unknown>;
+}
+
+function assertNoDuplicateEvaluationSubjects(input: CriteriaEvaluateInput) {
+  const seen = new Set<string>();
+  for (const item of input.evaluations || []) {
+    const key = `${item.criteria_key}|${item.subject_type}|${item.subject_id}`;
+    if (seen.has(key)) {
+      throw new ApiError(
+        409,
+        "criteria_evaluation_duplicate_subject",
+        `Duplicate criteria/subject tuple in request: ${item.criteria_key} ${item.subject_type} ${item.subject_id}`
+      );
+    }
+    seen.add(key);
+  }
+}
+
+async function resolveEffectiveThresholds(
+  client: PoolClient,
+  scope: ProjectScope,
+  criteriaId: string,
+  segmentKeyRaw: string | null | undefined,
+  evaluatedAtIso: string
+): Promise<Record<string, unknown>> {
+  const segmentKey = normalizeSegmentKey(segmentKeyRaw);
+  const segmentCandidates = segmentKey === "default" ? ["default"] : [segmentKey, "default"];
+  const { rows } = await client.query<CriteriaThresholdRow>(
+    `
+      SELECT
+        id,
+        threshold_spec,
+        segment_key,
+        project_id::text,
+        account_scope_id::text,
+        effective_from::text
+      FROM criteria_thresholds
+      WHERE criteria_id = $1::uuid
+        AND (
+          (project_id = $2::uuid AND account_scope_id = $3::uuid)
+          OR (project_id IS NULL AND account_scope_id IS NULL)
+        )
+        AND segment_key = ANY($4::text[])
+        AND effective_from <= $5::timestamptz
+        AND (effective_to IS NULL OR effective_to > $5::timestamptz)
+      ORDER BY
+        CASE WHEN project_id IS NOT NULL THEN 0 ELSE 1 END,
+        CASE WHEN segment_key = $6 THEN 0 ELSE 1 END,
+        effective_from DESC,
+        id DESC
+      LIMIT 1
+    `,
+    [criteriaId, scope.projectId, scope.accountScopeId, segmentCandidates, evaluatedAtIso, segmentKey]
+  );
+  const chosen = rows[0];
+  if (!chosen) return {};
+
+  if (
+    !chosen.threshold_spec ||
+    typeof chosen.threshold_spec !== "object" ||
+    Array.isArray(chosen.threshold_spec)
+  ) {
+    throw new ApiError(
+      500,
+      "criteria_threshold_invalid",
+      `criteria_thresholds.threshold_spec must be a JSON object (criteria_id=${criteriaId})`
+    );
+  }
+  return chosen.threshold_spec as Record<string, unknown>;
+}
+
 function mapContractError(error: unknown): unknown {
   if (error instanceof ApiError) return error;
   const pgError = parsePgError(error);
@@ -206,6 +293,9 @@ function mapContractError(error: unknown): unknown {
   }
   if (pgError.code === "22P02") {
     return new ApiError(400, "invalid_input_syntax", message);
+  }
+  if (pgError.code === "23505") {
+    return new ApiError(409, "unique_constraint_violation", message);
   }
   if (pgError.code === "P0001") {
     if (message.toLowerCase().includes("scope")) {
@@ -649,7 +739,9 @@ export async function evaluateCriteriaAndStoreRun(
   evaluations: CriteriaEvaluationRow[];
 }> {
   assertSchemaVersion(input.schema_version, "criteria/evaluate");
+  assertNoDuplicateEvaluationSubjects(input);
   const startedAt = Date.now();
+  const evaluatedAtIso = new Date(startedAt).toISOString();
 
   try {
     const result = await inTransaction(pool, async (client) => {
@@ -710,9 +802,19 @@ export async function evaluateCriteriaAndStoreRun(
       const definition = definitionsByKey.get(item.criteria_key)!;
       versionSnapshot[item.criteria_key] = definition.version;
 
+      const dbThresholds = await resolveEffectiveThresholds(
+        client,
+        scope,
+        definition.id,
+        item.segment_key,
+        evaluatedAtIso
+      );
+      const requestThresholds = toObjectRecord(item.thresholds);
+      const mergedThresholds = { ...dbThresholds, ...requestThresholds };
+
       const evaluated = evaluateCriteriaDefinition(definition, {
         metricValues: item.metric_values || {},
-        thresholds: item.thresholds || {},
+        thresholds: mergedThresholds,
         evidence_refs: item.evidence_refs || [],
       });
 

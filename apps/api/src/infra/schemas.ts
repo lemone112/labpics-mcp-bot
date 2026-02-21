@@ -260,6 +260,7 @@ export const MetricsExportSchema = z.object({
 
 export const CriteriaEvaluateItemSchema = z.object({
   criteria_key: trimmedString(1, 150),
+  segment_key: optionalTrimmedString(120).default("default"),
   subject_type: metricSubjectTypeEnum,
   subject_id: z.string().uuid(),
   metric_values: z.object({}).passthrough().optional().default({}),

@@ -358,6 +358,7 @@ test("CriteriaEvaluateSchema validates evaluation batch payload", () => {
   assert.equal(payload.schema_version, 1);
   assert.equal(payload.trigger_source, "api");
   assert.equal(payload.evaluations.length, 1);
+  assert.equal(payload.evaluations[0].segment_key, "default");
   assert.deepEqual(payload.evaluations[0].thresholds, {});
 });
 
@@ -371,6 +372,35 @@ test("CriteriaEvaluateSchema rejects invalid subject_id", () => {
             subject_type: "project",
             subject_id: "not-a-uuid",
             metric_values: {},
+          },
+        ],
+      }),
+    (err) => err.code === "validation_error"
+  );
+});
+
+test("CriteriaEvaluateSchema accepts explicit segment_key and rejects blank values", () => {
+  const payload = parseBody(CriteriaEvaluateSchema, {
+    evaluations: [
+      {
+        criteria_key: "quality.delivery",
+        segment_key: "enterprise",
+        subject_type: "project",
+        subject_id: "00000000-0000-4000-8000-000000000001",
+      },
+    ],
+  });
+  assert.equal(payload.evaluations[0].segment_key, "enterprise");
+
+  assert.throws(
+    () =>
+      parseBody(CriteriaEvaluateSchema, {
+        evaluations: [
+          {
+            criteria_key: "quality.delivery",
+            segment_key: "   ",
+            subject_type: "project",
+            subject_id: "00000000-0000-4000-8000-000000000001",
           },
         ],
       }),
