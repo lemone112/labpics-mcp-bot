@@ -231,32 +231,47 @@ export const MetricsIngestSchema = z.object({
   observations: z.array(MetricsIngestObservationSchema).min(1).max(2000),
 });
 
-export const MetricsQuerySchema = z.object({
-  schema_version: z.coerce.number().int().optional().default(1),
-  metric_key: optionalTrimmedString(150),
-  subject_type: metricSubjectTypeEnum.optional().nullable().default(null),
-  subject_id: z.string().uuid().optional().nullable().default(null),
-  date_from: isoDateTimeString.optional().nullable().default(null),
-  date_to: isoDateTimeString.optional().nullable().default(null),
-  limit: z.coerce.number().int().min(1).max(500).optional().default(100),
-  offset: z.coerce.number().int().min(0).optional().default(0),
-  sort_by: z.enum(["observed_at", "ingested_at", "created_at"]).optional().default("observed_at"),
-  sort_order: sortOrderEnum.optional().default("desc"),
-});
+function validateDateWindow(value: { date_from?: string | null; date_to?: string | null }, ctx: z.RefinementCtx) {
+  if (!value.date_from || !value.date_to) return;
+  if (Date.parse(value.date_from) > Date.parse(value.date_to)) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["date_to"],
+      message: "date_to must be greater than or equal to date_from",
+    });
+  }
+}
 
-export const MetricsExportSchema = z.object({
-  schema_version: z.coerce.number().int().optional().default(1),
-  format: z.enum(["json", "csv"]).optional().default("json"),
-  metric_key: optionalTrimmedString(150),
-  subject_type: metricSubjectTypeEnum.optional().nullable().default(null),
-  subject_id: z.string().uuid().optional().nullable().default(null),
-  date_from: isoDateTimeString.optional().nullable().default(null),
-  date_to: isoDateTimeString.optional().nullable().default(null),
-  limit: z.coerce.number().int().min(1).max(5000).optional().default(1000),
-  offset: z.coerce.number().int().min(0).optional().default(0),
-  sort_by: z.enum(["observed_at", "ingested_at", "created_at"]).optional().default("observed_at"),
-  sort_order: sortOrderEnum.optional().default("desc"),
-});
+export const MetricsQuerySchema = z
+  .object({
+    schema_version: z.coerce.number().int().optional().default(1),
+    metric_key: optionalTrimmedString(150),
+    subject_type: metricSubjectTypeEnum.optional().nullable().default(null),
+    subject_id: z.string().uuid().optional().nullable().default(null),
+    date_from: isoDateTimeString.optional().nullable().default(null),
+    date_to: isoDateTimeString.optional().nullable().default(null),
+    limit: z.coerce.number().int().min(1).max(500).optional().default(100),
+    offset: z.coerce.number().int().min(0).optional().default(0),
+    sort_by: z.enum(["observed_at", "ingested_at", "created_at"]).optional().default("observed_at"),
+    sort_order: sortOrderEnum.optional().default("desc"),
+  })
+  .superRefine(validateDateWindow);
+
+export const MetricsExportSchema = z
+  .object({
+    schema_version: z.coerce.number().int().optional().default(1),
+    format: z.enum(["json", "csv"]).optional().default("json"),
+    metric_key: optionalTrimmedString(150),
+    subject_type: metricSubjectTypeEnum.optional().nullable().default(null),
+    subject_id: z.string().uuid().optional().nullable().default(null),
+    date_from: isoDateTimeString.optional().nullable().default(null),
+    date_to: isoDateTimeString.optional().nullable().default(null),
+    limit: z.coerce.number().int().min(1).max(5000).optional().default(1000),
+    offset: z.coerce.number().int().min(0).optional().default(0),
+    sort_by: z.enum(["observed_at", "ingested_at", "created_at"]).optional().default("observed_at"),
+    sort_order: sortOrderEnum.optional().default("desc"),
+  })
+  .superRefine(validateDateWindow);
 
 export const CriteriaEvaluateItemSchema = z.object({
   criteria_key: trimmedString(1, 150),

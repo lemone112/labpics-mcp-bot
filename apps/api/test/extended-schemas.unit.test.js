@@ -343,6 +343,26 @@ test("MetricsQuerySchema rejects invalid ISO date filters", () => {
   );
 });
 
+test("MetricsQuerySchema and MetricsExportSchema reject inverted date window", () => {
+  assert.throws(
+    () =>
+      parseBody(MetricsQuerySchema, {
+        date_from: "2026-03-10T00:00:00.000Z",
+        date_to: "2026-03-01T00:00:00.000Z",
+      }),
+    (err) => err.code === "validation_error"
+  );
+
+  assert.throws(
+    () =>
+      parseBody(MetricsExportSchema, {
+        date_from: "2026-03-10T00:00:00.000Z",
+        date_to: "2026-03-01T00:00:00.000Z",
+      }),
+    (err) => err.code === "validation_error"
+  );
+});
+
 test("CriteriaEvaluateSchema validates evaluation batch payload", () => {
   const payload = parseBody(CriteriaEvaluateSchema, {
     idempotency_key: "criteria-run-1",
