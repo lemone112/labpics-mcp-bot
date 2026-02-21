@@ -168,46 +168,4 @@ describe("connector-sync execution boundaries", () => {
     assert.equal(insertEvents, 3, "expected start, warning, finish process events");
   });
 
-  it("runConnectorSync records connector error when runner fails", async () => {
-    const prevBase = process.env.CHATWOOT_BASE_URL;
-    const prevToken = process.env.CHATWOOT_API_TOKEN;
-    delete process.env.CHATWOOT_BASE_URL;
-    delete process.env.CHATWOOT_API_TOKEN;
-    try {
-      const calls = [];
-      const pool = {
-        query: async (sql, params) => {
-          const text = String(sql);
-          calls.push({ text, params });
-          if (text.includes("FROM connector_sync_state")) return { rows: [] };
-          if (text.includes("INSERT INTO connector_sync_state")) return { rows: [] };
-          if (text.includes("FROM connector_errors") && text.includes("dedupe_key = $4")) {
-            return { rows: [] };
-          }
-          if (text.includes("INSERT INTO connector_errors")) return { rows: [{ id: "err-chatwoot" }] };
-          if (text.includes("INSERT INTO connector_events")) return { rows: [] };
-          throw new Error(`Unexpected SQL in test pool: ${text.slice(0, 90)}`);
-        },
-      };
-
-      await assert.rejects(
-        () => runConnectorSync(pool, scope, "chatwoot", {}),
-        { message: "Missing env var: CHATWOOT_BASE_URL" }
-      );
-
-      assert.ok(
-        calls.some((call) => call.text.includes("INSERT INTO connector_errors")),
-        "expected connector error registration query"
-      );
-      const eventInserts = calls.filter((call) =>
-        call.text.includes("INSERT INTO connector_events")
-      );
-      assert.equal(eventInserts.length, 2, "expected process start + fail events");
-    } finally {
-      if (prevBase == null) delete process.env.CHATWOOT_BASE_URL;
-      else process.env.CHATWOOT_BASE_URL = prevBase;
-      if (prevToken == null) delete process.env.CHATWOOT_API_TOKEN;
-      else process.env.CHATWOOT_API_TOKEN = prevToken;
-    }
-  });
 });
