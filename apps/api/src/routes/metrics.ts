@@ -139,13 +139,11 @@ export function registerMetricsRoutes(ctx: RouteCtx) {
     try {
       const exported = await exportMetricObservations(pool, scope, query);
       if (exported.format === "csv") {
-        return sendOk(reply, requestIdOf(request), {
-          schema_version: 1,
-          format: "csv",
-          filename: exported.filename,
-          row_count: exported.row_count,
-          content: exported.content,
-        });
+        return reply
+          .code(200)
+          .header("content-type", "text/csv; charset=utf-8")
+          .header("content-disposition", `attachment; filename="${exported.filename}"`)
+          .send(exported.content);
       }
       return sendOk(reply, requestIdOf(request), {
         schema_version: 1,
