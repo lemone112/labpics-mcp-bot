@@ -239,3 +239,56 @@ test("applyContinuityActions creates linear issue, updates status, and filters r
   assert.equal(result.actions[0].id, actionId);
   assert.ok(calls.length >= 5);
 });
+
+test("applyContinuityActions uses linked linear project and preview suggested title when present", async () => {
+  const actionId = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
+  const pool = {
+    query: async (sql, params) => {
+      const text = String(sql);
+      if (text.includes("FROM continuity_actions") && text.includes("id = ANY")) {
+        return {
+          rows: [
+            {
+              id: actionId,
+              title: "Fallback title",
+              description: "Follow-up details",
+              preview_payload: { suggested_linear_title: "From preview title" },
+              status: "failed",
+            },
+          ],
+        };
+      }
+      if (text.includes("FROM linear_projects_raw")) {
+        return { rows: [{ external_id: "lin-proj-main" }] };
+      }
+      if (text.includes("INSERT INTO linear_issues_raw")) {
+        assert.equal(params[4], "lin-proj-main");
+        assert.equal(params[5], "From preview title");
+        return { rows: [] };
+      }
+      if (text.includes("UPDATE continuity_actions")) {
+        return { rows: [] };
+      }
+      if (
+        text.includes("FROM continuity_actions") &&
+        text.includes("AND ($3 = '' OR status = $3)")
+      ) {
+        return {
+          rows: [
+            makeContinuityAction({
+              id: actionId,
+              status: "applied",
+              linear_issue_external_id: `continuity:${actionId}`,
+            }),
+          ],
+        };
+      }
+      throw new Error(`Unexpected SQL in test pool: ${text.slice(0, 60)}`);
+    },
+  };
+
+  const result = await applyContinuityActions(pool, scope, [actionId], "owner");
+  assert.equal(result.applied, 1);
+  assert.equal(result.actions.length, 1);
+  assert.equal(result.actions[0].id, actionId);
+});

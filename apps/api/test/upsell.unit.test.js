@@ -199,3 +199,67 @@ test("updateUpsellStatus normalizes valid status and returns row or null", async
   const second = await updateUpsellStatus(pool, scope, "up-missing", "dismissed");
   assert.equal(second, null);
 });
+
+test("refreshUpsellRadar applies opportunity score tiers and multilingual triggers", async () => {
+  const pool = {
+    query: async (sql, params) => {
+      const text = String(sql);
+      if (text.includes("FROM cw_messages")) {
+        return {
+          rows: [
+            {
+              id: "msg-ru",
+              conversation_global_id: "conv-ru",
+              content: "Нужно масштабировать проект и добавить новый модуль",
+            },
+            {
+              id: "msg-empty",
+              conversation_global_id: null,
+              content: null,
+            },
+          ],
+        };
+      }
+      if (text.includes("FROM attio_opportunities_raw")) {
+        return {
+          rows: [
+            {
+              id: "opp-mid",
+              account_external_id: "acc-mid",
+              title: "Mid tier",
+              stage: "proposal",
+              amount: 12000,
+            },
+            {
+              id: "opp-low",
+              account_external_id: "acc-low",
+              title: "Low tier",
+              stage: "negotiation",
+              amount: 6000,
+            },
+            {
+              id: "opp-min",
+              account_external_id: "acc-min",
+              title: "Min tier",
+              stage: "qualified",
+              amount: 1000,
+            },
+          ],
+        };
+      }
+      if (text.includes("INSERT INTO upsell_opportunities")) {
+        const payload = JSON.parse(params[0]);
+        const byRef = Object.fromEntries(payload.map((row) => [row.source_ref, row]));
+        assert.equal(byRef["msg-ru"].score, 0.72);
+        assert.equal(byRef["opp-mid"].score, 0.78);
+        assert.equal(byRef["opp-low"].score, 0.7);
+        assert.equal(byRef["opp-min"].score, 0.6);
+        return { rowCount: payload.length, rows: [] };
+      }
+      throw new Error(`Unexpected SQL in test pool: ${text.slice(0, 60)}`);
+    },
+  };
+
+  const result = await refreshUpsellRadar(pool, scope);
+  assert.deepStrictEqual(result, { generated_candidates: 4, touched: 4 });
+});
