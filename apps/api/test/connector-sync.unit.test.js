@@ -9,6 +9,7 @@ import {
   normalizeInt,
   normalizeStatusFilter,
   retryConnectorErrors,
+  runAllConnectorsSync,
   runConnectorSync,
 } from "../src/domains/connectors/connector-sync.js";
 
@@ -166,6 +167,44 @@ describe("connector-sync execution boundaries", () => {
     assert.equal(result.retried[0].status, "failed");
     assert.match(String(result.retried[0].error || ""), /unsupported_connector/);
     assert.equal(insertEvents, 3, "expected start, warning, finish process events");
+  });
+
+  it("runAllConnectorsSync completes cycle when all connector modes are invalid", async () => {
+    const prevMode = process.env.CONNECTOR_MODE;
+    process.env.CONNECTOR_MODE = "invalid";
+    try {
+      let errorInserts = 0;
+      const pool = {
+        query: async (sql) => {
+          const text = String(sql);
+          if (text.includes("FROM connector_sync_state")) return { rows: [] };
+          if (text.includes("INSERT INTO connector_sync_state")) return { rows: [] };
+          if (text.includes("FROM connector_errors") && text.includes("dedupe_key = $4")) {
+            return { rows: [] };
+          }
+          if (text.includes("INSERT INTO connector_errors")) {
+            errorInserts += 1;
+            return { rows: [{ id: `err-${errorInserts}` }] };
+          }
+          if (text.includes("INSERT INTO connector_events")) return { rows: [] };
+          if (text.includes("REFRESH MATERIALIZED VIEW CONCURRENTLY")) {
+            throw new Error("matview unavailable");
+          }
+          throw new Error(`forced failure: ${text.slice(0, 80)}`);
+        },
+      };
+
+      const result = await runAllConnectorsSync(pool, scope, {}, {});
+      assert.equal(result.total, 3);
+      assert.equal(result.ok, 0);
+      assert.equal(result.failed, 3);
+      assert.equal(result.results.length, 3);
+      assert.ok(result.results.every((row) => row.status === "failed"));
+      assert.equal(errorInserts, 3);
+    } finally {
+      if (prevMode == null) delete process.env.CONNECTOR_MODE;
+      else process.env.CONNECTOR_MODE = prevMode;
+    }
   });
 
 });
