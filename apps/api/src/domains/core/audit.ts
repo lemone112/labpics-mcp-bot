@@ -13,16 +13,16 @@ interface NormalizedEvidenceRef {
 }
 
 interface AuditEventInput {
-  projectId: string;
-  accountScopeId: string;
-  actorUsername?: string | null;
-  actorUserId?: string | null;
-  action?: string | null;
-  entityType?: string | null;
-  entityId?: string | null;
-  status?: string | null;
-  requestId?: string | null;
-  idempotencyKey?: string | null;
+  projectId: unknown;
+  accountScopeId: unknown;
+  actorUsername?: unknown;
+  actorUserId?: unknown;
+  action?: unknown;
+  entityType?: unknown;
+  entityId?: unknown;
+  status?: unknown;
+  requestId?: unknown;
+  idempotencyKey?: unknown;
   payload?: unknown;
   evidenceRefs?: unknown;
 }
@@ -33,9 +33,21 @@ interface AuditListOptions {
   action?: string | null;
 }
 
+interface LooseProjectScope {
+  projectId: string | null;
+  accountScopeId: string | null;
+}
+
 function asObject(value: unknown): JsonObject | null {
   if (!value || typeof value !== "object") return null;
   return value as JsonObject;
+}
+
+function toNullableText(value: unknown, max = 1_000): string | null {
+  if (value == null) return null;
+  const text = String(value).trim();
+  if (!text) return null;
+  return text.slice(0, max);
 }
 
 function inferSourceTable(ref: string): string {
@@ -97,10 +109,11 @@ export function normalizeEvidenceRefs(input: unknown): NormalizedEvidenceRef[] {
 
 export async function indexEvidenceRefs(
   pool: Pool,
-  scope: ProjectScope,
+  scope: LooseProjectScope,
   refs: NormalizedEvidenceRef[]
 ): Promise<number> {
   if (!refs.length) return 0;
+  if (!scope.projectId || !scope.accountScopeId) return 0;
   const payload = refs.map((row) => ({
     project_id: scope.projectId,
     account_scope_id: scope.accountScopeId,
@@ -169,6 +182,8 @@ export async function writeAuditEvent(
   const evidenceRefs = normalizeEvidenceRefs(event?.evidenceRefs);
   const payload = event?.payload && typeof event.payload === "object" ? event.payload : {};
   const status = String(event?.status || "ok");
+  const projectId = toNullableText(event.projectId, 64);
+  const accountScopeId = toNullableText(event.accountScopeId, 64);
   const { rows } = await pool.query<{ id: string; created_at: string }>(
     `
       INSERT INTO audit_events(
@@ -189,26 +204,25 @@ export async function writeAuditEvent(
       RETURNING id, created_at::text
     `,
     [
-      event.projectId,
-      event.accountScopeId,
-      event.actorUsername || null,
-      event.actorUserId || null,
+      projectId,
+      accountScopeId,
+      toNullableText(event.actorUsername, 200),
+      toNullableText(event.actorUserId, 64),
       String(event.action || "unknown_action").slice(0, 200),
-      event.entityType || null,
-      event.entityId || null,
+      toNullableText(event.entityType, 200),
+      toNullableText(event.entityId, 200),
       status.slice(0, 50),
-      event.requestId || null,
-      event.idempotencyKey || null,
+      toNullableText(event.requestId, 200),
+      toNullableText(event.idempotencyKey, 200),
       JSON.stringify(payload),
       JSON.stringify(evidenceRefs),
     ]
   );
 
-  await indexEvidenceRefs(
-    pool,
-    { projectId: event.projectId, accountScopeId: event.accountScopeId },
-    evidenceRefs
-  );
+  await indexEvidenceRefs(pool, { projectId, accountScopeId }, evidenceRefs);
+  if (!rows[0]) {
+    fail(500, "audit_write_failed", "Failed to write audit event");
+  }
   return rows[0];
 }
 
