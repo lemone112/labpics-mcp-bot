@@ -21,7 +21,8 @@ export async function ensureTelegramUser(env: Env, tgUser: TelegramUser | undefi
       .maybeSingle();
 
     return (data as { id: string } | null)?.id ?? null;
-  } catch {
+  } catch (err) {
+    console.error("[telegram-user] failed to upsert telegram user", { telegramUserId: tgUser.id }, err);
     return null;
   }
 }

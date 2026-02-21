@@ -1,8 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { apiFetch } from "@/lib/api";
+import { readStorageValue, writeStorageValue } from "@/lib/safe-storage";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 
 const STORAGE_SCOPE_KEY = "labpics:portfolio:selected-scope";
@@ -28,16 +29,6 @@ function humanizeProjectError(rawError, fallbackMessage) {
   if (normalized.includes("account_scope_mismatch")) return "Выбранные проекты относятся к разным рабочим областям.";
   if (normalized.includes("project_not_found")) return "Проект больше не доступен. Обновим список автоматически.";
   return message;
-}
-
-function readStorageValue(key, fallback = null) {
-  if (typeof window === "undefined") return fallback;
-  try {
-    const value = window.localStorage.getItem(key);
-    return value == null ? fallback : value;
-  } catch {
-    return fallback;
-  }
 }
 
 /**
@@ -150,17 +141,15 @@ export function usePortfolioData({ canSelectAll }) {
 
   // Persist scope to localStorage
   useEffect(() => {
-    if (typeof window === "undefined") return;
     if (selectedScopeId) {
-      window.localStorage.setItem(STORAGE_SCOPE_KEY, selectedScopeId);
+      writeStorageValue(STORAGE_SCOPE_KEY, selectedScopeId);
     }
   }, [selectedScopeId]);
 
   // Persist last concrete project to localStorage
   useEffect(() => {
-    if (typeof window === "undefined") return;
     if (lastConcreteProjectId) {
-      window.localStorage.setItem(STORAGE_LAST_PROJECT_KEY, lastConcreteProjectId);
+      writeStorageValue(STORAGE_LAST_PROJECT_KEY, lastConcreteProjectId);
     }
   }, [lastConcreteProjectId]);
 

@@ -32,8 +32,9 @@ export async function buildLinearUserPicker(env: Env): Promise<PickerItem[]> {
         subtitle: r.email ? String(r.email) : undefined,
       }));
     }
-  } catch {
-    // cache table may not exist yet
+  } catch (err) {
+    // cache table may not exist yet in early environments
+    console.warn("[picker] linear users cache unavailable", err);
   }
   return [];
 }

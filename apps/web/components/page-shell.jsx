@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { PanelLeft } from "lucide-react";
 
 import { MobileControlTowerTabbar } from "@/components/mobile-control-tower-tabbar";
@@ -16,6 +16,7 @@ import {
   BreadcrumbSeparator,
 } from "@/components/ui/breadcrumb";
 import { Button } from "@/components/ui/button";
+import { readStorageBool, writeStorageBool } from "@/lib/safe-storage";
 import { Separator } from "@/components/ui/separator";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 
@@ -34,10 +35,25 @@ const PAGE_TITLES_RU = {
   Signals: "Сигналы",
 };
 
+const STORAGE_DESKTOP_SIDEBAR_OPEN = "labpics:ui:desktop-project-sidebar-open";
+const STORAGE_MOBILE_SHEET_OPEN = "labpics:ui:mobile-projects-sheet-open";
+
 export function PageShell({ title, subtitle, children }) {
   const pageTitle = PAGE_TITLES_RU[title] ?? title;
-  const [projectsSidebarOpen, setProjectsSidebarOpen] = useState(true);
-  const [mobileProjectsSheetOpen, setMobileProjectsSheetOpen] = useState(false);
+  const [projectsSidebarOpen, setProjectsSidebarOpen] = useState(() =>
+    readStorageBool(STORAGE_DESKTOP_SIDEBAR_OPEN, true)
+  );
+  const [mobileProjectsSheetOpen, setMobileProjectsSheetOpen] = useState(() =>
+    readStorageBool(STORAGE_MOBILE_SHEET_OPEN, false)
+  );
+
+  useEffect(() => {
+    writeStorageBool(STORAGE_DESKTOP_SIDEBAR_OPEN, projectsSidebarOpen);
+  }, [projectsSidebarOpen]);
+
+  useEffect(() => {
+    writeStorageBool(STORAGE_MOBILE_SHEET_OPEN, mobileProjectsSheetOpen);
+  }, [mobileProjectsSheetOpen]);
 
   return (
     <div className="flex h-svh w-full overflow-hidden bg-background">

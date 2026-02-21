@@ -49,7 +49,8 @@ export async function tgAnswerCallbackQuery(env: Env, callbackQueryId: string): 
     await tgCall(env, "answerCallbackQuery", {
       callback_query_id: callbackQueryId,
     });
-  } catch {
-    // Telegram requires answering within 30s; ignore late failures
+  } catch (err) {
+    // Telegram requires answering within 30s; this can fail on network jitter / late callbacks
+    console.warn("[telegram] answerCallbackQuery failed", { callbackQueryId }, err);
   }
 }
