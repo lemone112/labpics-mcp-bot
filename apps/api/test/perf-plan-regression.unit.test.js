@@ -28,6 +28,27 @@ test("flattenExplainNodes flattens nested EXPLAIN tree", () => {
   assert.equal(nodes[1].index_name, "employees_scope_status_updated_cover_idx");
 });
 
+test("flattenExplainNodes handles object input and missing Plan safely", () => {
+  assert.deepEqual(flattenExplainNodes({}), []);
+  assert.deepEqual(flattenExplainNodes(null), []);
+});
+
+test("flattenExplainNodes falls back to unknown node type", () => {
+  const nodes = flattenExplainNodes([
+    {
+      Plan: {
+        "Relation Name": "employees",
+        "Plan Rows": "NaN",
+        Plans: null,
+      },
+    },
+  ]);
+
+  assert.equal(nodes.length, 1);
+  assert.equal(nodes[0].node_type, "unknown");
+  assert.equal(nodes[0].plan_rows, 0);
+});
+
 test("evaluatePlanShape validates required node and index prefix", () => {
   const planNodes = [
     { node_type: "Limit", relation_name: null, index_name: null, plan_rows: 50 },
@@ -118,6 +139,28 @@ test("evaluatePlanShape fails when required index prefix is missing", () => {
   assert.equal(result.ok, false);
   assert.equal(result.failures.length, 1);
   assert.match(result.failures[0], /missing required index prefix/);
+});
+
+test("evaluatePlanShape tolerates non-array inputs and null relation fallback", () => {
+  const result = evaluatePlanShape("null-shape", null, {
+    required_any_node_types: "Index Scan",
+    required_index_name_prefixes: null,
+    forbidden_seq_scan_relations: [""],
+    seq_scan_min_plan_rows: "bad",
+  });
+  assert.equal(result.ok, true);
+  assert.deepEqual(result.failures, []);
+
+  const seqScanWithNullRelation = evaluatePlanShape(
+    "null-relation",
+    [{ node_type: "Seq Scan", relation_name: null, index_name: null, plan_rows: 1200 }],
+    {
+      forbidden_seq_scan_relations: [""],
+      seq_scan_min_plan_rows: 1000,
+    }
+  );
+  assert.equal(seqScanWithNullRelation.ok, false);
+  assert.equal(seqScanWithNullRelation.failures.length, 1);
 });
 
 test("index pack migration and perf plan-shapes config are present", async () => {
