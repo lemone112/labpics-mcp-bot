@@ -35,12 +35,17 @@ export function useAutoRefresh(
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const tickRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const fetchRef = useRef(fetchFn);
+  const onErrorRef = useRef(onError);
   const fetchingRef = useRef(false);
   const lastRefreshedAtRef = useRef<Date | null>(null);
 
   useEffect(() => {
     fetchRef.current = fetchFn;
   }, [fetchFn]);
+
+  useEffect(() => {
+    onErrorRef.current = onError;
+  }, [onError]);
 
   useEffect(() => {
     if (!enabled || paused || effectiveInterval <= 0) {
@@ -59,7 +64,7 @@ export function useAutoRefresh(
         setLastRefreshedAt(now);
         lastRefreshedAtRef.current = now;
       } catch (error) {
-        onError?.(error);
+        onErrorRef.current?.(error);
       } finally {
         fetchingRef.current = false;
       }
@@ -69,7 +74,7 @@ export function useAutoRefresh(
       if (intervalRef.current) clearInterval(intervalRef.current);
       intervalRef.current = null;
     };
-  }, [enabled, paused, effectiveInterval, onError]);
+  }, [enabled, paused, effectiveInterval]);
 
   // 5-second ticker to compute secondsAgo display (reduced from 1s to cut re-renders 5x)
   useEffect(() => {
@@ -101,7 +106,7 @@ export function useAutoRefresh(
             lastRefreshedAtRef.current = now;
           })
           .catch((error) => {
-            onError?.(error);
+            onErrorRef.current?.(error);
           })
           .finally(() => {
             fetchingRef.current = false;
@@ -110,7 +115,7 @@ export function useAutoRefresh(
     };
     document.addEventListener("visibilitychange", onVisibilityChange);
     return () => document.removeEventListener("visibilitychange", onVisibilityChange);
-  }, [enabled, intervalMs, onError]);
+  }, [enabled, intervalMs]);
 
   const pause = useCallback(() => setPaused(true), []);
   const resume = useCallback(() => setPaused(false), []);
