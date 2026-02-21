@@ -53,45 +53,6 @@ export default function SearchFeaturePage() {
   const totalEvidence = Number(meta?.evidenceTotal || 0);
   const totalPages = Math.max(1, Math.ceil(totalEvidence / pageSize));
 
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [query, filters, pageSize]);
-
-
-
-  useEffect(() => {
-    if (currentPage > totalPages) {
-      setCurrentPage(totalPages);
-    }
-  }, [currentPage, totalPages]);
-
-  useEffect(() => {
-    if (!hasSearched) return;
-
-    if (skipDebouncedSearchRef.current) {
-      skipDebouncedSearchRef.current = false;
-      setDebouncePending(false);
-      return;
-    }
-
-    const trimmedQuery = query.trim();
-    if (!trimmedQuery) {
-      setDebouncePending(false);
-      return;
-    }
-
-    setDebouncePending(true);
-    const timeoutId = setTimeout(() => {
-      executeSearch(trimmedQuery, filters, { offset: 0, limit: pageSize, silentToast: true, saveHistory: false });
-      setDebouncePending(false);
-    }, 300);
-
-    return () => {
-      clearTimeout(timeoutId);
-      setDebouncePending(false);
-    };
-  }, [query, filters, hasSearched, executeSearch, pageSize]);
-
   /**
    * Execute search with current query and filters.
    */
@@ -177,6 +138,43 @@ export default function SearchFeaturePage() {
       setBusy(false);
     }
   }, [query, topK, addToast, pageSize]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [query, filters, pageSize]);
+
+  useEffect(() => {
+    if (currentPage > totalPages) {
+      setCurrentPage(totalPages);
+    }
+  }, [currentPage, totalPages]);
+
+  useEffect(() => {
+    if (!hasSearched) return;
+
+    if (skipDebouncedSearchRef.current) {
+      skipDebouncedSearchRef.current = false;
+      setDebouncePending(false);
+      return;
+    }
+
+    const trimmedQuery = query.trim();
+    if (!trimmedQuery) {
+      setDebouncePending(false);
+      return;
+    }
+
+    setDebouncePending(true);
+    const timeoutId = setTimeout(() => {
+      executeSearch(trimmedQuery, filters, { offset: 0, limit: pageSize, silentToast: true, saveHistory: false });
+      setDebouncePending(false);
+    }, 300);
+
+    return () => {
+      clearTimeout(timeoutId);
+      setDebouncePending(false);
+    };
+  }, [query, filters, hasSearched, executeSearch, pageSize]);
 
   /**
    * Form submission handler.
