@@ -11,6 +11,8 @@
     "worker:loop": "tsx src/worker-loop.ts",
     "test": "tsx --test test/**/*.test.js",
     "test:coverage": "c8 --reporter=text --reporter=lcov tsx --test test/**/*.test.js",
+    "test:coverage:ci": "c8 --reporter=text --reporter=lcov --reporter=json-summary tsx --test test/**/*.test.js && node scripts/check-coverage-gates.mjs",
+    "test:migrations:idempotency": "node scripts/check-migrations-idempotency.mjs",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

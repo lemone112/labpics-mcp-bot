@@ -1,6 +1,23 @@
 const { defineConfig } = require("@playwright/test");
 
 const baseURL = process.env.PLAYWRIGHT_BASE_URL || "http://localhost:3100";
+const outputDir = process.env.PLAYWRIGHT_OUTPUT_DIR || "test-results";
+
+function resolveReporter(defaultReporter = "list") {
+  if (process.env.PLAYWRIGHT_REPORTER !== "ci") {
+    return defaultReporter;
+  }
+
+  return [
+    ["list"],
+    [
+      "junit",
+      {
+        outputFile: process.env.PLAYWRIGHT_JUNIT_OUTPUT_FILE || "test-results/junit.xml",
+      },
+    ],
+  ];
+}
 
 module.exports = defineConfig({
   testDir: "./e2e",
@@ -11,7 +28,8 @@ module.exports = defineConfig({
   },
   retries: process.env.CI ? 2 : 0,
   workers: process.env.CI ? 1 : undefined,
-  reporter: "list",
+  reporter: resolveReporter("list"),
+  outputDir,
   use: {
     baseURL,
     trace: "on-first-retry",

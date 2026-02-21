@@ -6,6 +6,23 @@ const baseURL = process.env.PLAYWRIGHT_BASE_URL || `http://localhost:${webPort}`
 const apiBaseUrl = process.env.PLAYWRIGHT_API_BASE_URL || `http://localhost:${apiPort}`;
 const databaseUrl = process.env.PLAYWRIGHT_DATABASE_URL || "";
 const authCredentials = process.env.PLAYWRIGHT_AUTH_CREDENTIALS || "admin:admin";
+const outputDir = process.env.PLAYWRIGHT_OUTPUT_DIR || "test-results";
+
+function resolveReporter(defaultReporter = "list") {
+  if (process.env.PLAYWRIGHT_REPORTER !== "ci") {
+    return defaultReporter;
+  }
+
+  return [
+    ["list"],
+    [
+      "junit",
+      {
+        outputFile: process.env.PLAYWRIGHT_JUNIT_OUTPUT_FILE || "test-results/junit.xml",
+      },
+    ],
+  ];
+}
 
 module.exports = defineConfig({
   testDir: "./e2e-integration",
@@ -16,7 +33,8 @@ module.exports = defineConfig({
   },
   retries: process.env.CI ? 1 : 0,
   workers: 1,
-  reporter: "list",
+  reporter: resolveReporter("list"),
+  outputDir,
   use: {
     baseURL,
     trace: "on-first-retry",
