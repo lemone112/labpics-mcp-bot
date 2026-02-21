@@ -28,9 +28,9 @@ interface AuditEventInput {
 }
 
 interface AuditListOptions {
-  limit?: number | string;
-  offset?: number | string;
-  action?: string | null;
+  limit?: unknown;
+  offset?: unknown;
+  action?: unknown;
 }
 
 interface LooseProjectScope {
