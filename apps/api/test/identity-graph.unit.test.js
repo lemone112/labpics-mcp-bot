@@ -146,6 +146,33 @@ test("listIdentitySuggestions normalizes status and clamps limit", async () => {
   assert.equal(calls[1].params[3], 1);
 });
 
+test("listIdentitySuggestions defaults status and fallback limit when inputs are invalid/missing", async () => {
+  const calls = [];
+  const pool = {
+    query: async (_sql, params) => {
+      calls.push(params);
+      return { rows: [] };
+    },
+  };
+
+  await listIdentitySuggestions(pool, scope, {});
+  await listIdentitySuggestions(pool, scope, { limit: "bad-limit" });
+
+  assert.equal(calls.length, 2);
+  assert.deepStrictEqual(calls[0], [
+    scope.projectId,
+    scope.accountScopeId,
+    "proposed",
+    50,
+  ]);
+  assert.deepStrictEqual(calls[1], [
+    scope.projectId,
+    scope.accountScopeId,
+    "proposed",
+    50,
+  ]);
+});
+
 test("applyIdentitySuggestions returns early for empty ids and for no selected rows", async () => {
   let calls = 0;
   const pool = {
@@ -212,6 +239,43 @@ test("applyIdentitySuggestions inserts links and marks source suggestions as app
   assert.equal(calls.length, 3);
 });
 
+test("applyIdentitySuggestions handles empty evidence refs and missing rowCount safely", async () => {
+  const suggestionId = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+  const selected = [
+    {
+      id: suggestionId,
+      left_entity_type: "cw_contact",
+      left_entity_id: "ct-2",
+      right_entity_type: "attio_account",
+      right_entity_id: "acc-2",
+      confidence: 0.71,
+      evidence_refs: null,
+    },
+  ];
+  const pool = {
+    query: async (sql, params) => {
+      const text = String(sql);
+      if (text.includes("FROM identity_link_suggestions") && text.includes("status = 'proposed'")) {
+        return { rows: selected };
+      }
+      if (text.includes("INSERT INTO identity_links")) {
+        const payload = JSON.parse(params[0]);
+        assert.deepStrictEqual(payload[0].evidence_refs, []);
+        // rowCount intentionally omitted to cover fallback branch.
+        return { rows: [makeIdentityLinkRow({ id: "lnk-x" })] };
+      }
+      if (text.includes("UPDATE identity_link_suggestions")) {
+        return { rows: [] };
+      }
+      throw new Error(`Unexpected SQL in test pool: ${text.slice(0, 60)}`);
+    },
+  };
+
+  const result = await applyIdentitySuggestions(pool, scope, [suggestionId], "owner");
+  assert.equal(result.applied, 0);
+  assert.equal(result.links.length, 1);
+});
+
 test("listIdentityLinks normalizes status and clamps limit", async () => {
   const calls = [];
   const pool = {
@@ -233,4 +297,31 @@ test("listIdentityLinks normalizes status and clamps limit", async () => {
     400,
   ]);
   assert.equal(calls[1].params[3], 1);
+});
+
+test("listIdentityLinks defaults status and fallback limit", async () => {
+  const calls = [];
+  const pool = {
+    query: async (_sql, params) => {
+      calls.push(params);
+      return { rows: [] };
+    },
+  };
+
+  await listIdentityLinks(pool, scope, {});
+  await listIdentityLinks(pool, scope, { limit: "bad-limit" });
+
+  assert.equal(calls.length, 2);
+  assert.deepStrictEqual(calls[0], [
+    scope.projectId,
+    scope.accountScopeId,
+    "active",
+    100,
+  ]);
+  assert.deepStrictEqual(calls[1], [
+    scope.projectId,
+    scope.accountScopeId,
+    "active",
+    100,
+  ]);
 });
