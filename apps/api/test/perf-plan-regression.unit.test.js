@@ -89,6 +89,37 @@ test("evaluatePlanShape ignores small seq scan below threshold", () => {
   assert.deepEqual(result.failures, []);
 });
 
+test("evaluatePlanShape fails when required node type is missing", () => {
+  const planNodes = [{ node_type: "Seq Scan", relation_name: "employees", index_name: null, plan_rows: 50 }];
+
+  const result = evaluatePlanShape("workforce_employee_lookup", planNodes, {
+    required_any_node_types: ["Index Scan", "Index Only Scan"],
+  });
+
+  assert.equal(result.ok, false);
+  assert.equal(result.failures.length, 1);
+  assert.match(result.failures[0], /missing required node type/);
+});
+
+test("evaluatePlanShape fails when required index prefix is missing", () => {
+  const planNodes = [
+    {
+      node_type: "Index Scan",
+      relation_name: "employee_conditions",
+      index_name: "employee_conditions_employee_effective_idx",
+      plan_rows: 80,
+    },
+  ];
+
+  const result = evaluatePlanShape("workforce_conditions_timeline", planNodes, {
+    required_index_name_prefixes: ["employee_conditions_employee_effective_cover_idx"],
+  });
+
+  assert.equal(result.ok, false);
+  assert.equal(result.failures.length, 1);
+  assert.match(result.failures[0], /missing required index prefix/);
+});
+
 test("index pack migration and perf plan-shapes config are present", async () => {
   const { readFileSync } = await import("node:fs");
   const { join, dirname } = await import("node:path");
