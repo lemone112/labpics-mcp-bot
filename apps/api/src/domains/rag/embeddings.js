@@ -1,6 +1,7 @@
 import { toPositiveInt } from "../../infra/chunking.js";
 import { vectorLiteral } from "../../infra/db.js";
 import { createEmbeddings } from "./openai.js";
+import { buildUtcDayRange } from "./date-range.js";
 
 function truncateError(error, maxLen = 400) {
   const message = String(error?.message || error || "embedding_error");
@@ -302,9 +303,10 @@ export async function runEmbeddings(pool, scope, logger = console) {
   }
 }
 
-export async function searchChunks(pool, scope, query, topK, logger = console) {
+export async function searchChunks(pool, scope, query, topK, logger = console, options = {}) {
   const safeTopK = toPositiveInt(topK, 10, 1, 50);
   const normalizedQuery = String(query || "").trim().slice(0, 4_000);
+  const { dateFrom: safeDateFrom, dateToExclusive } = buildUtcDayRange(options?.dateFrom, options?.dateTo);
   if (!normalizedQuery) return { query: "", topK: safeTopK, results: [] };
 
   const { model, embeddings } = await createEmbeddings([normalizedQuery], logger);
@@ -336,10 +338,12 @@ export async function searchChunks(pool, scope, query, topK, logger = console) {
           AND embedding IS NOT NULL
           AND project_id = $2
           AND account_scope_id = $3
+          AND ($4::timestamptz IS NULL OR created_at >= $4::timestamptz)
+          AND ($5::timestamptz IS NULL OR created_at < $5::timestamptz)
         ORDER BY embedding <=> $1::vector
-        LIMIT $4
+        LIMIT $6
       `,
-      [vectorText, scope.projectId, scope.accountScopeId, safeTopK]
+      [vectorText, scope.projectId, scope.accountScopeId, safeDateFrom, dateToExclusive, safeTopK]
     );
     await client.query("COMMIT");
 

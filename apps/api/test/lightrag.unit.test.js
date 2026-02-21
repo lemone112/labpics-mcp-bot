@@ -29,13 +29,17 @@ function tokenizeQuery(query) {
   return deduped;
 }
 
+function sanitizeLike(text) {
+  return String(text || "").replace(/[%\\_]/g, "");
+}
+
 function buildLikePatterns(query) {
   const tokens = tokenizeQuery(query);
   if (!tokens.length) {
-    const fallback = asText(query, 300);
+    const fallback = sanitizeLike(asText(query, 300));
     return fallback ? [`%${fallback}%`] : [];
   }
-  return tokens.map((token) => `%${token}%`);
+  return tokens.map((token) => `%${sanitizeLike(token)}%`);
 }
 
 function lightragAnswer(query, chunkCount, messageCount, issueCount, opportunityCount) {
@@ -128,6 +132,17 @@ describe("buildLikePatterns", () => {
   it("returns empty for empty query", () => {
     assert.deepStrictEqual(buildLikePatterns(""), []);
     assert.deepStrictEqual(buildLikePatterns(null), []);
+  });
+
+  it("strips wildcard characters from token patterns", () => {
+    const result = buildLikePatterns("100%_match");
+    assert.deepStrictEqual(result, ["%100%", "%match%"]);
+    assert.equal(result.some((item) => item.includes("%_")), false);
+  });
+
+  it("strips wildcard characters in fallback mode", () => {
+    const result = buildLikePatterns("%_");
+    assert.deepStrictEqual(result, []);
   });
 });
 
