@@ -153,9 +153,9 @@ test("evaluatePlanShape tolerates non-array inputs and null relation fallback", 
 
   const seqScanWithNullRelation = evaluatePlanShape(
     "null-relation",
-    [{ node_type: "Seq Scan", relation_name: null, index_name: null, plan_rows: 1200 }],
+    [{ node_type: "Seq Scan", relation_name: "unknown_rel", index_name: null, plan_rows: 1200 }],
     {
-      forbidden_seq_scan_relations: [""],
+      forbidden_seq_scan_relations: ["unknown_rel"],
       seq_scan_min_plan_rows: 1000,
     }
   );
