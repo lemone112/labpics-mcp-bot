@@ -27,6 +27,18 @@ test("cronMatches rejects invalid expressions and out-of-range values", () => {
   assert.equal(cronMatches("5-1 * * * *", date), false);
 });
 
+test("cronMatches covers additional step/range rejection branches", () => {
+  const date = new Date("2026-02-16T12:30:00.000Z");
+  assert.equal(cronMatches("foo/5 * * * *", date), false); // unsupported step format
+  assert.equal(cronMatches("a-b/5 * * * *", date), false); // invalid range numbers in step
+  assert.equal(cronMatches("70-80/5 * * * *", date), false); // step range out of bounds
+  assert.equal(cronMatches("20-10/5 * * * *", date), false); // reversed step range
+  assert.equal(cronMatches("10-20/5 * * * *", date), false); // value outside step range
+  assert.equal(cronMatches("a-b * * * *", date), false); // invalid simple range
+  assert.equal(cronMatches("70-80 * * * *", date), false); // simple range out of bounds
+  assert.equal(cronMatches("not-a-number * * * *", date), false); // invalid exact numeric token
+});
+
 test("runScheduledReports handles success, recent-skip, cron-skip, and failure paths", async () => {
   const scope = {
     projectId: "11111111-1111-4111-8111-111111111111",
@@ -109,5 +121,45 @@ test("createReportGenerationHandler delegates to runScheduledReports with inject
 
   assert.equal(generateCalled, 1);
   assert.equal(result.generated, 1);
+  assert.equal(result.errors, 0);
+});
+
+test("runScheduledReports works with logger object missing info/error methods", async () => {
+  const scope = {
+    projectId: "11111111-1111-4111-8111-111111111111",
+    accountScopeId: "22222222-2222-4222-8222-222222222222",
+  };
+  const pool = { query: async () => ({ rows: [] }) };
+
+  const result = await runScheduledReports(pool, scope, {
+    logger: {},
+    listTemplates: async () => [],
+  });
+
+  assert.equal(result.generated, 0);
+  assert.equal(result.errors, 0);
+  assert.deepStrictEqual(result.details, []);
+});
+
+test("createReportGenerationHandler uses default dependencies safely", async () => {
+  const scope = {
+    projectId: "11111111-1111-4111-8111-111111111111",
+    accountScopeId: "22222222-2222-4222-8222-222222222222",
+  };
+  const pool = {
+    query: async (sql) => {
+      const text = String(sql);
+      if (text.includes("FROM report_templates")) return { rows: [] };
+      throw new Error(`Unexpected SQL in test pool: ${text.slice(0, 50)}`);
+    },
+  };
+  const handler = createReportGenerationHandler();
+  const result = await handler({
+    pool,
+    scope,
+    logger: { info: () => undefined, error: () => undefined },
+  });
+
+  assert.equal(result.generated, 0);
   assert.equal(result.errors, 0);
 });
