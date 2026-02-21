@@ -4,8 +4,22 @@ import {
   addSeconds,
   clampInt,
   dedupeKeyForError,
+  listDeadLetterErrors,
+  listDueConnectorErrors,
+  markConnectorSyncFailure,
+  markConnectorSyncRunning,
+  markConnectorSyncSuccess,
   nextBackoffSeconds,
+  registerConnectorError,
+  resolveConnectorErrorById,
+  resolveConnectorErrors,
+  retryDeadLetterError,
 } from "../src/domains/connectors/connector-state.js";
+
+const scope = {
+  projectId: "11111111-1111-4111-8111-111111111111",
+  accountScopeId: "22222222-2222-4222-8222-222222222222",
+};
 
 describe("nextBackoffSeconds", () => {
   it("returns base seconds for attempt 1", () => {
@@ -143,5 +157,187 @@ describe("clampInt (connector-state)", () => {
   it("clamps to bounds", () => {
     assert.equal(clampInt("200", 5, 0, 100), 100);
     assert.equal(clampInt("-10", 5, 0, 100), 0);
+  });
+});
+
+describe("registerConnectorError", () => {
+  it("inserts a pending error row on first attempt", async () => {
+    const prevMax = process.env.CONNECTOR_MAX_RETRIES;
+    const prevBase = process.env.CONNECTOR_RETRY_BASE_SECONDS;
+    process.env.CONNECTOR_MAX_RETRIES = "5";
+    process.env.CONNECTOR_RETRY_BASE_SECONDS = "30";
+    try {
+      const calls = [];
+      const pool = {
+        query: async (sql, params) => {
+          const text = String(sql);
+          calls.push({ sql: text, params });
+          if (text.includes("FROM connector_errors")) {
+            return { rows: [] };
+          }
+          if (text.includes("INSERT INTO connector_errors")) {
+            assert.equal(params[2], "chatwoot");
+            assert.equal(params[3], "http");
+            assert.equal(params[4], "sync");
+            assert.equal(params[12], "custom-dedupe");
+            return { rows: [{ id: "err-1" }] };
+          }
+          throw new Error(`Unexpected SQL in test pool: ${text.slice(0, 60)}`);
+        },
+      };
+
+      const before = Date.now();
+      const result = await registerConnectorError(pool, scope, {
+        connector: " Chatwoot ",
+        mode: "HTTP",
+        operation: "sync",
+        error_message: "timeout",
+        dedupe_key: " custom-dedupe ",
+      });
+      const retryAt = Date.parse(result.next_retry_at);
+
+      assert.equal(result.id, "err-1");
+      assert.equal(result.attempt, 1);
+      assert.equal(result.status, "pending");
+      assert.ok(retryAt >= before + 25_000);
+      assert.ok(calls.length >= 2);
+      assert.equal(calls[0].params[3], "custom-dedupe");
+    } finally {
+      if (prevMax == null) delete process.env.CONNECTOR_MAX_RETRIES;
+      else process.env.CONNECTOR_MAX_RETRIES = prevMax;
+      if (prevBase == null) delete process.env.CONNECTOR_RETRY_BASE_SECONDS;
+      else process.env.CONNECTOR_RETRY_BASE_SECONDS = prevBase;
+    }
+  });
+
+  it("updates existing row and transitions to dead_letter at max attempts", async () => {
+    const prevMax = process.env.CONNECTOR_MAX_RETRIES;
+    const prevBase = process.env.CONNECTOR_RETRY_BASE_SECONDS;
+    process.env.CONNECTOR_MAX_RETRIES = "2";
+    process.env.CONNECTOR_RETRY_BASE_SECONDS = "30";
+    try {
+      let updateParams = null;
+      const pool = {
+        query: async (sql, params) => {
+          const text = String(sql);
+          if (text.includes("FROM connector_errors")) {
+            return { rows: [{ id: "err-existing", attempt: 1 }] };
+          }
+          if (text.includes("UPDATE connector_errors")) {
+            updateParams = params;
+            return { rows: [] };
+          }
+          throw new Error(`Unexpected SQL in test pool: ${text.slice(0, 60)}`);
+        },
+      };
+
+      const result = await registerConnectorError(pool, scope, {
+        connector: "linear",
+        mode: "http",
+        operation: "sync",
+        source_ref: "lin-1",
+        error_kind: "sync_failed",
+        error_message: "boom",
+      });
+
+      assert.equal(result.id, "err-existing");
+      assert.equal(result.attempt, 2);
+      assert.equal(result.status, "dead_letter");
+      assert.equal(updateParams[10], 2);
+      assert.equal(updateParams[12], "dead_letter");
+    } finally {
+      if (prevMax == null) delete process.env.CONNECTOR_MAX_RETRIES;
+      else process.env.CONNECTOR_MAX_RETRIES = prevMax;
+      if (prevBase == null) delete process.env.CONNECTOR_RETRY_BASE_SECONDS;
+      else process.env.CONNECTOR_RETRY_BASE_SECONDS = prevBase;
+    }
+  });
+});
+
+describe("connector error helpers", () => {
+  it("resolveConnectorErrors returns affected row count", async () => {
+    const pool = {
+      query: async (sql, params) => {
+        assert.match(String(sql), /UPDATE connector_errors/);
+        assert.deepStrictEqual(params, [scope.projectId, scope.accountScopeId, "chatwoot"]);
+        return { rowCount: 3 };
+      },
+    };
+    const count = await resolveConnectorErrors(pool, scope, "chatwoot");
+    assert.equal(count, 3);
+  });
+
+  it("listDueConnectorErrors and listDeadLetterErrors clamp limits", async () => {
+    const calls = [];
+    const pool = {
+      query: async (_sql, params) => {
+        calls.push(params);
+        return { rows: [] };
+      },
+    };
+
+    await listDueConnectorErrors(pool, scope, 9999);
+    await listDueConnectorErrors(pool, scope, "bad");
+    await listDeadLetterErrors(pool, scope, 9999);
+    await listDeadLetterErrors(pool, scope, "bad");
+
+    assert.deepStrictEqual(calls[0], [scope.projectId, scope.accountScopeId, 500]);
+    assert.deepStrictEqual(calls[1], [scope.projectId, scope.accountScopeId, 20]);
+    assert.deepStrictEqual(calls[2], [scope.projectId, scope.accountScopeId, 500]);
+    assert.deepStrictEqual(calls[3], [scope.projectId, scope.accountScopeId, 50]);
+  });
+
+  it("retryDeadLetterError and resolveConnectorErrorById return row identifiers or null", async () => {
+    let step = 0;
+    const pool = {
+      query: async (_sql) => {
+        step += 1;
+        if (step === 1) return { rows: [{ id: "err-1", status: "pending" }] };
+        if (step === 2) return { rows: [] };
+        if (step === 3) return { rows: [{ id: "err-2" }] };
+        return { rows: [] };
+      },
+    };
+
+    const retried = await retryDeadLetterError(pool, scope, "err-1");
+    assert.equal(retried.id, "err-1");
+    const missingRetry = await retryDeadLetterError(pool, scope, "err-missing");
+    assert.equal(missingRetry, null);
+    const resolved = await resolveConnectorErrorById(pool, scope, "err-2");
+    assert.equal(resolved, "err-2");
+    const missingResolved = await resolveConnectorErrorById(pool, scope, "err-x");
+    assert.equal(missingResolved, null);
+  });
+});
+
+describe("connector sync state updates", () => {
+  it("markConnectorSyncRunning/Failure/Success issue expected parameters", async () => {
+    const calls = [];
+    const pool = {
+      query: async (sql, params) => {
+        calls.push({ sql: String(sql), params });
+        return { rows: [] };
+      },
+    };
+
+    await markConnectorSyncRunning(pool, scope, "chatwoot", "http", { retry_count: "7" });
+    await markConnectorSyncFailure(pool, scope, "chatwoot", "http", "sync failed", {
+      retry_count: "7",
+    });
+    await markConnectorSyncSuccess(pool, scope, "chatwoot", "http", {
+      cursor_ts: "2026-01-01T00:00:00.000Z",
+      cursor_id: "cursor-1",
+      page_cursor: "p-1",
+      meta: { synced: true },
+    });
+
+    assert.equal(calls.length, 3);
+    assert.equal(calls[0].params[4], 7);
+    assert.equal(calls[1].params[4], 8);
+    assert.equal(calls[1].params[5], "sync failed");
+    assert.equal(calls[2].params[4], "2026-01-01T00:00:00.000Z");
+    assert.equal(calls[2].params[5], "cursor-1");
+    assert.equal(calls[2].params[6], "p-1");
+    assert.equal(calls[2].params[7], JSON.stringify({ synced: true }));
   });
 });

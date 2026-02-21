@@ -174,6 +174,8 @@ export async function runScheduledReports(
   const stats: ScheduledReportStats = { generated: 0, errors: 0, details: [] };
 
   for (const template of activeWithSchedule) {
+    const templateId = String(template.id || "").trim();
+    if (!templateId) continue;
     if (!cronMatches(template.schedule, now)) continue;
 
     // Check if we already generated a report for this template in the last hour
@@ -187,7 +189,7 @@ export async function runScheduledReports(
           AND created_at > now() - interval '55 minutes'
         LIMIT 1
       `,
-      [template.id, scope.projectId, scope.accountScopeId]
+      [templateId, scope.projectId, scope.accountScopeId]
     );
     if (recent.length > 0) continue;
 
@@ -198,26 +200,26 @@ export async function runScheduledReports(
       const reportId = String(report?.id || "");
       stats.generated += 1;
       stats.details.push({
-        template_id: template.id,
+        template_id: templateId,
         template_name: template.name || "",
         report_id: reportId,
         status: "completed",
       });
       logger.info?.(
-        { template_id: template.id, template_name: template.name, report_id: reportId },
+        { template_id: templateId, template_name: template.name, report_id: reportId },
         "scheduled report generated"
       );
     } catch (error) {
       stats.errors += 1;
       const errMsg = String((error as Error)?.message || error).slice(0, 500);
       stats.details.push({
-        template_id: template.id,
+        template_id: templateId,
         template_name: template.name || "",
         status: "failed",
         error: errMsg,
       });
       logger.error?.(
-        { template_id: template.id, template_name: template.name, error: errMsg },
+        { template_id: templateId, template_name: template.name, error: errMsg },
         "scheduled report generation failed"
       );
     }
