@@ -31,7 +31,7 @@ export function createSseBroadcaster(logger: Logger | Console = console): SseBro
         { project_id: projectId, count: projectCount, max: MAX_CONNECTIONS_PER_PROJECT },
         "sse connection limit reached for project"
       );
-      return () => {};
+      throw Object.assign(new Error("sse_project_limit_reached"), { code: "sse_project_limit_reached" });
     }
 
     if (totalConnections >= MAX_CONNECTIONS_GLOBAL) {
@@ -39,7 +39,7 @@ export function createSseBroadcaster(logger: Logger | Console = console): SseBro
         { total: totalConnections, max: MAX_CONNECTIONS_GLOBAL },
         "sse global connection limit reached"
       );
-      return () => {};
+      throw Object.assign(new Error("sse_global_limit_reached"), { code: "sse_global_limit_reached" });
     }
 
     if (!clients.has(projectId)) {

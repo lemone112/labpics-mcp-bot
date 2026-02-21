@@ -17,6 +17,8 @@ function createMockReply() {
   const chunks = [];
   return {
     raw: {
+      destroyed: false,
+      writable: true,
       write(data) {
         chunks.push(data);
         return true;
@@ -176,5 +178,23 @@ test("cleanup function is idempotent (double-call safe)", () => {
 
   // Second call should not throw or go negative
   cleanup();
-  // totalConnections may go to -1 currently — this is a known minor issue
+  assert.strictEqual(broadcaster.getStats().total_connections, 0);
+});
+
+
+test("enforces per-project connection limit", () => {
+  const logger = createMockLogger();
+  const broadcaster = createSseBroadcaster(logger);
+
+  const cleanups = [];
+  for (let i = 0; i < 20; i++) {
+    cleanups.push(broadcaster.addClient("proj-limit", createMockReply(), null));
+  }
+
+  assert.throws(
+    () => broadcaster.addClient("proj-limit", createMockReply(), null),
+    (err) => err?.code === "sse_project_limit_reached"
+  );
+
+  for (const cleanup of cleanups) cleanup();
 });

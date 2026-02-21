@@ -310,6 +310,23 @@ export async function createOutboundDraft(pool, scope, input, actorUsername, req
 
 export async function approveOutbound(pool, scope, outboundId, actorUsername, requestId, evidenceRefsInput = []) {
   const evidenceRefs = normalizeEvidenceRefs(evidenceRefsInput);
+
+  const existing = await pool.query(
+    `
+      SELECT id, status, evidence_refs
+      FROM outbound_messages
+      WHERE id = $1
+        AND project_id = $2
+        AND account_scope_id = $3
+      LIMIT 1
+    `,
+    [outboundId, scope.projectId, scope.accountScopeId]
+  );
+  const before = existing.rows[0];
+  if (!before) {
+    fail(404, "outbound_not_found", "Outbound message not found");
+  }
+
   const { rows } = await pool.query(
     `
       UPDATE outbound_messages
@@ -333,9 +350,6 @@ export async function approveOutbound(pool, scope, outboundId, actorUsername, re
     [outboundId, scope.projectId, scope.accountScopeId, actorUsername || null, JSON.stringify(evidenceRefs)]
   );
   const outbound = rows[0];
-  if (!outbound) {
-    fail(404, "outbound_not_found", "Outbound message not found");
-  }
   if (outbound.status !== "approved" && outbound.status !== "sent") {
     fail(409, "outbound_invalid_state", `Cannot approve from state: ${outbound.status}`);
   }
@@ -349,34 +363,64 @@ export async function approveOutbound(pool, scope, outboundId, actorUsername, re
     entityId: outbound.id,
     status: "ok",
     requestId,
-    payload: { previous_status: outbound.status },
+    payload: { previous_status: before.status },
     evidenceRefs: evidenceRefs.length ? evidenceRefs : outbound.evidence_refs,
   });
   return outbound;
 }
 
 export async function sendOutbound(pool, scope, outboundId, actorUsername, requestId) {
-  const { rows } = await pool.query(
+  const claimed = await pool.query(
     `
-      SELECT *
-      FROM outbound_messages
+      UPDATE outbound_messages
+      SET status = 'sending', updated_at = now()
       WHERE id = $1
         AND project_id = $2
         AND account_scope_id = $3
-      LIMIT 1
+        AND status IN ('approved', 'failed')
+      RETURNING *
     `,
     [outboundId, scope.projectId, scope.accountScopeId]
   );
-  const outbound = rows[0];
-  if (!outbound) fail(404, "outbound_not_found", "Outbound message not found");
-  if (outbound.status !== "approved" && outbound.status !== "failed") {
-    fail(409, "outbound_invalid_state", `Cannot send from state: ${outbound.status}`);
+  const outbound = claimed.rows[0];
+  if (!outbound) {
+    const existing = await pool.query(
+      `
+        SELECT status
+        FROM outbound_messages
+        WHERE id = $1
+          AND project_id = $2
+          AND account_scope_id = $3
+        LIMIT 1
+      `,
+      [outboundId, scope.projectId, scope.accountScopeId]
+    );
+    if (!existing.rows[0]) fail(404, "outbound_not_found", "Outbound message not found");
+    fail(409, "outbound_invalid_state", `Cannot send from state: ${existing.rows[0].status}`);
   }
 
-  await enforcePolicyForSend(pool, scope, outbound, actorUsername, requestId);
-  const forceFail = Boolean(outbound?.payload?.force_fail);
-  if (forceFail) {
-    await markAttempt(pool, scope, outbound, "failed", { error: "simulated_provider_failure" });
+  try {
+    await enforcePolicyForSend(pool, scope, outbound, actorUsername, requestId);
+    const forceFail = Boolean(outbound?.payload?.force_fail);
+    if (forceFail) {
+      await markAttempt(pool, scope, outbound, "failed", { error: "simulated_provider_failure" });
+      await writeAuditEvent(pool, {
+        projectId: scope.projectId,
+        accountScopeId: scope.accountScopeId,
+        actorUsername,
+        action: "outbound.send",
+        entityType: "outbound_message",
+        entityId: outbound.id,
+        status: "failed",
+        requestId,
+        payload: { reason: "simulated_provider_failure" },
+        evidenceRefs: outbound.evidence_refs,
+      });
+      fail(502, "outbound_send_failed", "Outbound send failed");
+    }
+
+    const providerMessageId = `sim:${Date.now()}:${crypto.randomBytes(4).toString("hex")}`;
+    await markAttempt(pool, scope, outbound, "sent", { providerMessageId });
     await writeAuditEvent(pool, {
       projectId: scope.projectId,
       accountScopeId: scope.accountScopeId,
@@ -384,41 +428,40 @@ export async function sendOutbound(pool, scope, outboundId, actorUsername, reque
       action: "outbound.send",
       entityType: "outbound_message",
       entityId: outbound.id,
-      status: "failed",
+      status: "ok",
       requestId,
-      payload: { reason: "simulated_provider_failure" },
+      payload: { provider_message_id: providerMessageId },
       evidenceRefs: outbound.evidence_refs,
     });
-    fail(502, "outbound_send_failed", "Outbound send failed");
+
+    const result = await pool.query(
+      `
+        SELECT *
+        FROM outbound_messages
+        WHERE id = $1
+          AND project_id = $2
+          AND account_scope_id = $3
+        LIMIT 1
+      `,
+      [outbound.id, scope.projectId, scope.accountScopeId]
+    );
+    return result.rows[0];
+  } catch (error) {
+    await pool.query(
+      `
+        UPDATE outbound_messages
+        SET status = 'failed',
+            updated_at = now(),
+            last_error = COALESCE(last_error, $2)
+        WHERE id = $1
+          AND project_id = $3
+          AND account_scope_id = $4
+          AND status = 'sending'
+      `,
+      [outbound.id, String(error?.message || error || 'send_failed'), scope.projectId, scope.accountScopeId]
+    ).catch(() => {});
+    throw error;
   }
-
-  const providerMessageId = `sim:${Date.now()}:${crypto.randomBytes(4).toString("hex")}`;
-  await markAttempt(pool, scope, outbound, "sent", { providerMessageId });
-  await writeAuditEvent(pool, {
-    projectId: scope.projectId,
-    accountScopeId: scope.accountScopeId,
-    actorUsername,
-    action: "outbound.send",
-    entityType: "outbound_message",
-    entityId: outbound.id,
-    status: "ok",
-    requestId,
-    payload: { provider_message_id: providerMessageId },
-    evidenceRefs: outbound.evidence_refs,
-  });
-
-  const result = await pool.query(
-    `
-      SELECT *
-      FROM outbound_messages
-      WHERE id = $1
-        AND project_id = $2
-        AND account_scope_id = $3
-      LIMIT 1
-    `,
-    [outbound.id, scope.projectId, scope.accountScopeId]
-  );
-  return result.rows[0];
 }
 
 export async function setOptOut(pool, scope, input, actorUsername, requestId) {
@@ -548,7 +591,7 @@ export async function cleanupOldOutboundMessages(pool, scope, logger = console) 
   return { deleted: rowCount, retention_days: retentionDays };
 }
 
-export async function processDueOutbounds(pool, scope, actorUsername = "scheduler", requestId = null, limit = 20) {
+export async function processDueOutbounds(pool, scope, actorUsername = "scheduler", requestId = null, limit = 20, logger = console) {
   const safeLimit = toPositiveInt(limit, 20, 1, 200);
   const claimDelaySeconds = toPositiveInt(process.env.OUTBOUND_CLAIM_DELAY_SECONDS, 120, 10, 3600);
   const { rows } = await pool.query(
@@ -582,8 +625,9 @@ export async function processDueOutbounds(pool, scope, actorUsername = "schedule
     try {
       await sendOutbound(pool, scope, outbound.id, actorUsername, requestId || `scheduler_${nowTs()}`);
       sent++;
-    } catch {
+    } catch (error) {
       failed++;
+      logger.warn?.({ outbound_id: outbound.id, err: String(error?.message || error || "send_failed") }, "process due outbound failed");
     }
   }
   return {

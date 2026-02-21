@@ -129,6 +129,16 @@ export function registerHealthRoutes(ctx) {
       return;
     }
 
+    let cleanup = () => {};
+    try {
+      cleanup = sseBroadcaster.addClient(projectId, reply, request.auth?.session_id || null);
+    } catch (error) {
+      const code = String(error?.code || "");
+      const isLimit = code === "sse_project_limit_reached" || code === "sse_global_limit_reached";
+      reply.code(isLimit ? 429 : 503).send({ ok: false, error: code || "sse_unavailable" });
+      return;
+    }
+
     reply.raw.writeHead(200, {
       "Content-Type": "text/event-stream",
       "Cache-Control": "no-cache",
@@ -137,32 +147,8 @@ export function registerHealthRoutes(ctx) {
     });
     reply.raw.write(`event: connected\ndata: ${JSON.stringify({ project_id: projectId })}\n\n`);
 
-    const cleanup = sseBroadcaster.addClient(projectId, reply, request.auth?.session_id || null);
-
-    // Heartbeat every 25s to keep connection alive (below common 30s proxy timeouts)
-    const heartbeat = setInterval(() => {
-      try {
-        if (reply.raw.destroyed || !reply.raw.writable) {
-          clearInterval(heartbeat);
-          cleanup();
-          return;
-        }
-        reply.raw.write(": heartbeat\n\n");
-      } catch {
-        clearInterval(heartbeat);
-        cleanup();
-      }
-    }, 25_000);
-
-    request.raw.on("close", () => {
-      clearInterval(heartbeat);
-      cleanup();
-    });
-
-    request.raw.on("error", () => {
-      clearInterval(heartbeat);
-      cleanup();
-    });
+    request.raw.on("close", cleanup);
+    request.raw.on("error", cleanup);
 
     // Prevent Fastify from closing the response
     reply.hijack();
