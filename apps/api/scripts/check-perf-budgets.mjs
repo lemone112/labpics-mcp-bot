@@ -310,6 +310,127 @@ async function seedPerfData(pool, runTag) {
     [projectA, scopeA]
   );
 
+  await pool.query(
+    `
+      INSERT INTO generated_reports(
+        template_id,
+        project_id,
+        account_scope_id,
+        template_name,
+        date_range_start,
+        date_range_end,
+        data,
+        format,
+        status,
+        error,
+        created_at
+      )
+      SELECT
+        NULL::uuid,
+        $1::uuid,
+        $2::uuid,
+        'Perf synthetic report',
+        (current_date - ((gs % 120) + 30))::date,
+        (current_date - (gs % 30))::date,
+        jsonb_build_object('seed', gs),
+        'json',
+        CASE WHEN gs % 6 = 0 THEN 'failed' ELSE 'completed' END,
+        CASE WHEN gs % 6 = 0 THEN 'synthetic_failure' ELSE NULL END,
+        now() - make_interval(days => (gs % 120))
+      FROM generate_series(1, 800) AS gs
+    `,
+    [projectA, scopeA]
+  );
+
+  await pool.query(
+    `
+      INSERT INTO metric_definitions(
+        metric_key,
+        version,
+        is_current,
+        name,
+        description,
+        unit,
+        value_type,
+        aggregation_type,
+        source,
+        enabled,
+        metadata
+      )
+      VALUES (
+        'perf.ingest_latency',
+        1,
+        true,
+        'Perf ingest latency',
+        'Synthetic metric for perf budget checks',
+        'ms',
+        'numeric',
+        'avg',
+        'perf-budget-script',
+        true,
+        '{"seed":"perf"}'::jsonb
+      )
+      ON CONFLICT (metric_key, version) DO NOTHING
+    `
+  );
+
+  const { rows: metricRows } = await pool.query(
+    `
+      SELECT id::text AS id
+      FROM metric_definitions
+      WHERE metric_key = 'perf.ingest_latency'
+        AND is_current = true
+      LIMIT 1
+    `
+  );
+  const perfMetricId = metricRows[0]?.id;
+  if (!perfMetricId) throw new Error("Failed to create perf.ingest_latency metric definition");
+
+  await pool.query(
+    `
+      INSERT INTO metric_observations(
+        metric_id,
+        project_id,
+        account_scope_id,
+        subject_type,
+        subject_id,
+        observed_at,
+        value_numeric,
+        value_text,
+        dimensions,
+        quality_flags,
+        source,
+        source_event_id,
+        is_backfill
+      )
+      SELECT
+        $1::uuid,
+        $2::uuid,
+        $3::uuid,
+        'project',
+        $2::uuid,
+        now() - make_interval(hours => gs),
+        50 + (gs % 20),
+        NULL::text,
+        '{}'::jsonb,
+        '{}'::jsonb,
+        'perf-seed',
+        concat('seed-observation-', gs),
+        true
+      FROM generate_series(1, 1400) AS gs
+      ON CONFLICT (
+        metric_id,
+        project_id,
+        account_scope_id,
+        subject_type,
+        subject_id,
+        observed_at,
+        dimension_hash
+      ) DO NOTHING
+    `,
+    [perfMetricId, projectA, scopeA]
+  );
+
   // Add high-cardinality rows to make plan-shape checks meaningful.
   await pool.query(
     `
@@ -456,6 +577,8 @@ async function seedPerfData(pool, runTag) {
     opportunityA,
     ownerLink,
     reviewerLink,
+    perfMetricId,
+    perfMetricKey: "perf.ingest_latency",
   };
 }
 
@@ -525,6 +648,32 @@ async function runQueryBenchmarks(pool, fixture, sampleSize) {
       `,
       params: [fixture.scopeA],
     },
+    {
+      key: "metrics_observations_scope_recent",
+      sql: `
+        SELECT o.observed_at, o.value_numeric
+        FROM metric_observations AS o
+        JOIN metric_definitions AS d ON d.id = o.metric_id
+        WHERE o.account_scope_id = $1
+          AND o.project_id = $2
+          AND d.metric_key = $3
+        ORDER BY o.observed_at DESC
+        LIMIT 200
+      `,
+      params: [fixture.scopeA, fixture.projectA, fixture.perfMetricKey],
+    },
+    {
+      key: "generated_reports_scope_status_recent",
+      sql: `
+        SELECT id, status, template_name, created_at
+        FROM generated_reports
+        WHERE account_scope_id = $1
+          AND status IN ('completed', 'failed')
+        ORDER BY created_at DESC
+        LIMIT 200
+      `,
+      params: [fixture.scopeA],
+    },
   ];
 
   const results = [];
@@ -546,7 +695,7 @@ async function runQueryBenchmarks(pool, fixture, sampleSize) {
   return results;
 }
 
-async function runWriteIngestBenchmark(pool, fixture, iterations) {
+async function runSearchAnalyticsWriteIngestBenchmark(pool, fixture, iterations) {
   return measureIterations(iterations, (idx) =>
     pool.query(
       `
@@ -562,6 +711,62 @@ async function runWriteIngestBenchmark(pool, fixture, iterations) {
         fixture.projectA,
         fixture.scopeA,
         40 + (idx % 60),
+      ]
+    )
+  );
+}
+
+async function runMetricObservationWriteIngestBenchmark(pool, fixture, iterations) {
+  return measureIterations(iterations, (idx) =>
+    pool.query(
+      `
+        INSERT INTO metric_observations(
+          metric_id,
+          project_id,
+          account_scope_id,
+          subject_type,
+          subject_id,
+          observed_at,
+          value_numeric,
+          value_text,
+          dimensions,
+          quality_flags,
+          source,
+          source_event_id,
+          is_backfill
+        )
+        VALUES (
+          $1,
+          $2,
+          $3,
+          'project',
+          $2,
+          now() + make_interval(seconds => $4::int),
+          $5,
+          NULL,
+          '{}'::jsonb,
+          '{}'::jsonb,
+          'perf-write',
+          $6,
+          false
+        )
+        ON CONFLICT (
+          metric_id,
+          project_id,
+          account_scope_id,
+          subject_type,
+          subject_id,
+          observed_at,
+          dimension_hash
+        ) DO NOTHING
+      `,
+      [
+        fixture.perfMetricId,
+        fixture.projectA,
+        fixture.scopeA,
+        idx + 20_000,
+        100 + (idx % 40),
+        `metric-write-${idx}`,
       ]
     )
   );
@@ -701,7 +906,8 @@ async function main() {
     const fixture = await seedPerfData(pool, runTag);
 
     const queryResults = await runQueryBenchmarks(pool, fixture, sampleSize);
-    const writeIngest = await runWriteIngestBenchmark(pool, fixture, writeIterations);
+    const writeIngest = await runSearchAnalyticsWriteIngestBenchmark(pool, fixture, writeIterations);
+    const metricWriteIngest = await runMetricObservationWriteIngestBenchmark(pool, fixture, writeIterations);
     const redisPubSub = await runRedisPubSubBenchmark(redisUrl, pubsubMessageCount);
     const cacheInvalidation = await runCacheInvalidationBenchmark(redisUrl);
 
@@ -755,6 +961,21 @@ async function main() {
       else warnings.push(msg);
     }
 
+    const metricWriteBudgetMs = Number(budgets?.metric_observations_write_ingest_p95_ms);
+    if (Number.isFinite(metricWriteBudgetMs) && metricWriteIngest.p95_ms > metricWriteBudgetMs) {
+      failures.push(
+        `[budget] metric observations write ingest p95 ${metricWriteIngest.p95_ms}ms exceeds budget ${metricWriteBudgetMs}ms`
+      );
+    }
+
+    const baselineMetricWriteMs = Number(baselines?.metric_observations_write_ingest_p95_ms);
+    const metricWriteRegression = regressionPctHigherIsWorse(metricWriteIngest.p95_ms, baselineMetricWriteMs);
+    if (metricWriteRegression !== null && metricWriteRegression > regressionThresholdPct) {
+      const msg = `[regression] metric observations write ingest degraded by ${metricWriteRegression}% (baseline=${baselineMetricWriteMs}ms, current=${metricWriteIngest.p95_ms}ms)`;
+      if (failOnRegression) failures.push(msg);
+      else warnings.push(msg);
+    }
+
     const minPubSubBudget = Number(budgets?.redis_pubsub_min_ops_sec);
     if (Number.isFinite(minPubSubBudget) && redisPubSub.throughput_min_ops_sec < minPubSubBudget) {
       failures.push(
@@ -799,6 +1020,7 @@ async function main() {
       pubsub_message_count: pubsubMessageCount,
       metrics: {
         write_ingest,
+        metric_observations_write_ingest: metricWriteIngest,
         redis_pubsub: redisPubSub,
         cache_invalidation: cacheInvalidation,
         queries: queryResults,
@@ -816,6 +1038,7 @@ async function main() {
         baselines: {
           ...(configFile.baselines || {}),
           write_ingest_p95_ms: writeIngest.p95_ms,
+          metric_observations_write_ingest_p95_ms: metricWriteIngest.p95_ms,
           redis_pubsub_ops_sec: redisPubSub.throughput_avg_ops_sec,
           cache_invalidation_p95_ms: cacheInvalidation.p95_ms,
           queries: Object.fromEntries(queryResults.map((q) => [q.key, q.p95_ms])),
