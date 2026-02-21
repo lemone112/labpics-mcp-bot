@@ -74,6 +74,12 @@ function errorMessage(error: unknown, fallback = "connector_sync_failed"): strin
   return String((error as Error)?.message || error || fallback);
 }
 
+function asNullableText(value: unknown, max = 2000): string | null {
+  const text = String(value ?? "").trim();
+  if (!text) return null;
+  return text.slice(0, max);
+}
+
 export function normalizeInt(
   value: unknown,
   fallback: number,
@@ -146,7 +152,7 @@ export async function runConnectorSync(
   }
   const connectorRunner = createConnector({
     name: normalizedConnector,
-    mode,
+    mode: mode as "http" | "mcp",
     httpRunner: async () => httpRunner(pool, scope, logger),
     mcpRunner: createComposioMcpRunner({
       connector: normalizedConnector,
@@ -196,10 +202,13 @@ export async function runConnectorSync(
     }
     let eventSync: unknown = null;
     try {
+      const stateCursorTs = asNullableText(state?.cursor_ts);
+      const resultSince = asNullableText(result?.since);
+      const resultCursorTs = asNullableText(result?.cursor_ts);
       eventSync = await syncConnectorEventLog(pool, scope, {
         connector: normalizedConnector,
-        since_ts: state?.cursor_ts || result?.since || null,
-        until_ts: result?.cursor_ts || new Date().toISOString(),
+        since_ts: stateCursorTs || resultSince || null,
+        until_ts: resultCursorTs || new Date().toISOString(),
       });
     } catch (eventLogErr) {
       const eventLogMsg = errorMessage(eventLogErr, "event_log_sync_failed");
@@ -220,8 +229,8 @@ export async function runConnectorSync(
     const resolvedErrors = await withTransaction(pool, async (client) => {
       const txClient = client as unknown as Pool;
       await markConnectorSyncSuccess(txClient, scope, normalizedConnector, mode, {
-        cursor_ts: result?.cursor_ts || null,
-        cursor_id: result?.cursor_id || null,
+        cursor_ts: asNullableText(result?.cursor_ts),
+        cursor_id: asNullableText(result?.cursor_id),
         page_cursor: null,
         meta: {
           ...result,
