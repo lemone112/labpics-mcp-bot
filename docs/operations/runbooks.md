@@ -1,5 +1,9 @@
 # Runbooks (эксплуатация, LightRAG-only)
 
+См. также:
+
+- `docs/operations/data-lifecycle-retention.md` — lifecycle-политики (retention, cleanup job, partitioning strategy).
+
 ## 1) Быстрый operational checklist
 
 1. `GET /health` и `GET /metrics` отвечают.

@@ -3,6 +3,7 @@ import { runEmbeddings } from "../rag/embeddings.js";
 import { extractSignalsAndNba } from "../analytics/signals.js";
 import { refreshUpsellRadar } from "../analytics/upsell.js";
 import { generateDailyDigest, generateWeeklyDigest, refreshAnalytics, refreshRiskAndHealth } from "../analytics/intelligence.js";
+import { runAnalyticsRetentionCleanup } from "../analytics/data-lifecycle.js";
 import { syncLoopsContacts } from "../outbound/loops.js";
 import { retryConnectorErrors, runAllConnectorsSync, runConnectorSync } from "../connectors/connector-sync.js";
 import { runSyncReconciliation } from "../connectors/reconciliation.js";
@@ -313,6 +314,8 @@ function createHandlers(customHandlers = {}, options = {}) {
       ),
     outbound_retention_cleanup: async ({ pool, scope, logger }) =>
       cleanupOldOutboundMessages(pool, scope, logger),
+    analytics_retention_cleanup: async ({ pool, scope, logger }) =>
+      runAnalyticsRetentionCleanup(pool, scope, logger),
     report_generation: createReportGenerationHandler(),
   };
   return { ...handlers, ...customHandlers };
@@ -343,6 +346,7 @@ export async function ensureDefaultScheduledJobs(pool, scope) {
     { jobType: "analytics_aggregates", cadenceSeconds: 1800 },
     { jobType: "loops_contacts_sync", cadenceSeconds: 3600 },
     { jobType: "outbound_retention_cleanup", cadenceSeconds: 86400 },
+    { jobType: "analytics_retention_cleanup", cadenceSeconds: 43200 },
     { jobType: "report_generation", cadenceSeconds: 3600 },
   ];
   for (const item of defaults) {
