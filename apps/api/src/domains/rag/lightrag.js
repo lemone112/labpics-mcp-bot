@@ -211,7 +211,7 @@ export async function queryLightRag(pool, scope, options = {}, logger = console)
 
   const emptyResult = { rows: [] };
   const [chunkSearch, messageRows, issueRows, opportunityRows] = await Promise.all([
-    includeChunks ? searchChunks(pool, scope, query, topK, logger) : { results: [], embedding_model: null, search_config: null },
+    includeChunks ? searchChunks(pool, scope, query, topK, logger, { dateFrom, dateTo }) : { results: [], embedding_model: null, search_config: null },
     includeMessages ? pool.query(
       `
         SELECT
