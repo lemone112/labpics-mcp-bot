@@ -500,5 +500,52 @@ if (!integrationEnabled) {
         (err) => err?.code === "criteria_evaluation_duplicate_subject"
       );
     });
+
+    it("stores run error_summary when evaluation contains rule errors", async () => {
+      const criteriaKey = `criteria.error-summary.${Date.now()}`;
+      await pool.query(
+        `
+          INSERT INTO criteria_definitions(
+            criteria_key, version, is_current, name, severity, owner_domain, rule_spec, enabled
+          )
+          VALUES (
+            $1,
+            1,
+            true,
+            'Error summary criterion',
+            'critical',
+            'analytics',
+            '{"type":"metric_threshold","metric_key":"risk_score","op":"><","value":50}'::jsonb,
+            true
+          )
+        `,
+        [criteriaKey]
+      );
+
+      const result = await evaluateCriteriaAndStoreRun(
+        pool,
+        { projectId: fixture.projectA, accountScopeId: fixture.scopeA },
+        null,
+        {
+          schema_version: 1,
+          run_key: `criteria-error-summary-${Date.now()}`,
+          evaluations: [
+            {
+              criteria_key: criteriaKey,
+              subject_type: "project",
+              subject_id: fixture.projectA,
+              metric_values: { risk_score: 70 },
+              thresholds: {},
+              evidence_refs: [],
+            },
+          ],
+        }
+      );
+
+      assert.equal(result.summary.error, 1);
+      assert.equal(result.run.status, "failed");
+      assert.match(result.run.error_summary || "", /criteria_errors=1/);
+      assert.match(result.run.error_summary || "", /unsupported_operator/);
+    });
   });
 }

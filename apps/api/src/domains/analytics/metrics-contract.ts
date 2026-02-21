@@ -210,6 +210,22 @@ function toObjectRecord(value: unknown): Record<string, unknown> {
   return value as Record<string, unknown>;
 }
 
+function buildCriteriaRunErrorSummary(evaluations: CriteriaEvaluationRow[]): string | null {
+  const errors = (evaluations || []).filter((item) => item.status === "error");
+  if (!errors.length) return null;
+
+  const preview = errors
+    .slice(0, 3)
+    .map((row) => {
+      const payload = toObjectRecord(row.error_payload);
+      const message = String(payload.message || row.reason || "evaluation_error");
+      return `${row.criteria_key}:${message}`;
+    })
+    .join("; ");
+
+  return `criteria_errors=${errors.length}; ${preview}`;
+}
+
 function assertNoDuplicateEvaluationSubjects(input: CriteriaEvaluateInput) {
   const seen = new Set<string>();
   for (const item of input.evaluations || []) {
@@ -900,6 +916,7 @@ export async function evaluateCriteriaAndStoreRun(
     };
 
     const finalStatus = summary.error > 0 ? "failed" : "completed";
+    const errorSummary = buildCriteriaRunErrorSummary(persisted);
     await client.query(
       `
         UPDATE criteria_evaluation_runs
@@ -907,10 +924,11 @@ export async function evaluateCriteriaAndStoreRun(
           status = $2,
           finished_at = now(),
           criteria_version_snapshot = $3::jsonb,
+          error_summary = $4,
           updated_at = now()
         WHERE id = $1
       `,
-      [runId, finalStatus, JSON.stringify(versionSnapshot)]
+      [runId, finalStatus, JSON.stringify(versionSnapshot), errorSummary]
     );
 
     const runResult = await client.query<CriteriaRunRow>(
