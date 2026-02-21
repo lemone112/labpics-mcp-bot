@@ -6,34 +6,83 @@ import { extractSignalsAndNba, listNba, listSignals, updateNbaStatus, updateSign
 import { listUpsellRadar, refreshUpsellRadar, updateUpsellStatus } from "../domains/analytics/upsell.js";
 import { applyContinuityActions, buildContinuityPreview, listContinuityActions } from "../domains/outbound/continuity.js";
 import { applyIdentitySuggestions, listIdentityLinks, listIdentitySuggestions, previewIdentitySuggestions } from "../domains/identity/identity-graph.js";
+import type { Pool } from "../types/index.js";
+import type { ZodTypeAny } from "zod";
+
+type RequestLike = {
+  auth?: { username?: string | null };
+  params?: Record<string, unknown>;
+  query?: Record<string, unknown>;
+  body?: unknown;
+  requestId?: string;
+};
+
+type ReplyLike = {
+  code: (statusCode: number) => ReplyLike;
+  send: (payload: unknown) => unknown;
+};
+
+type RegisterFn = (
+  path: string,
+  handler: (request: RequestLike, reply: ReplyLike) => Promise<unknown> | unknown
+) => void;
+
+type Scope = { projectId: string; accountScopeId: string };
+
+interface RouteCtx {
+  registerGet: RegisterFn;
+  registerPost: RegisterFn;
+  pool: Pool;
+  SignalStatusSchema: ZodTypeAny;
+  NbaStatusSchema: ZodTypeAny;
+  UpsellStatusSchema: ZodTypeAny;
+  IdentityPreviewSchema: ZodTypeAny;
+  IdentitySuggestionApplySchema: ZodTypeAny;
+  ContinuityApplySchema: ZodTypeAny;
+}
+
+async function recordScopedAudit(
+  pool: Pool,
+  request: RequestLike,
+  scope: Scope,
+  payload: Omit<Parameters<typeof writeAuditEvent>[1], "projectId" | "accountScopeId" | "actorUsername" | "requestId">
+) {
+  await writeAuditEvent(pool, {
+    ...payload,
+    projectId: scope.projectId,
+    accountScopeId: scope.accountScopeId,
+    actorUsername: request.auth?.username || null,
+    requestId: request.requestId,
+  });
+}
 
 /**
  * Signals, NBA, upsell, continuity, identity routes.
- * @param {object} ctx
  */
-export function registerSignalRoutes(ctx) {
+export function registerSignalRoutes(ctx: RouteCtx) {
   const {
-    registerGet, registerPost, pool,
-    SignalStatusSchema, NbaStatusSchema, UpsellStatusSchema,
-    IdentityPreviewSchema, IdentitySuggestionApplySchema,
+    registerGet,
+    registerPost,
+    pool,
+    SignalStatusSchema,
+    NbaStatusSchema,
+    UpsellStatusSchema,
+    IdentityPreviewSchema,
+    IdentitySuggestionApplySchema,
     ContinuityApplySchema,
   } = ctx;
 
   // --- Identity ---
   registerPost("/identity/suggestions/preview", async (request, reply) => {
     const scope = requireProjectScope(request);
-    const body = parseBody(IdentityPreviewSchema, request.body);
-    const limit = body.limit;
-    const result = await previewIdentitySuggestions(pool, scope, limit);
-    await writeAuditEvent(pool, {
-      projectId: scope.projectId,
-      accountScopeId: scope.accountScopeId,
-      actorUsername: request.auth?.username || null,
+    const body = parseBody(IdentityPreviewSchema, request.body) as { limit: number };
+    const result = await previewIdentitySuggestions(pool, scope, body.limit);
+
+    await recordScopedAudit(pool, request, scope, {
       action: "identity.preview",
       entityType: "identity_link_suggestion",
       entityId: scope.projectId,
       status: "ok",
-      requestId: request.requestId,
       payload: { generated: result.generated, stored: result.stored },
       evidenceRefs: [],
     });
@@ -51,17 +100,14 @@ export function registerSignalRoutes(ctx) {
 
   registerPost("/identity/suggestions/apply", async (request, reply) => {
     const scope = requireProjectScope(request);
-    const body = parseBody(IdentitySuggestionApplySchema, request.body);
+    const body = parseBody(IdentitySuggestionApplySchema, request.body) as { suggestion_ids: string[] };
     const result = await applyIdentitySuggestions(pool, scope, body.suggestion_ids, request.auth?.username || null);
-    await writeAuditEvent(pool, {
-      projectId: scope.projectId,
-      accountScopeId: scope.accountScopeId,
-      actorUsername: request.auth?.username || null,
+
+    await recordScopedAudit(pool, request, scope, {
       action: "identity.apply",
       entityType: "identity_link",
       entityId: scope.projectId,
       status: "ok",
-      requestId: request.requestId,
       payload: { applied: result.applied },
       evidenceRefs: result.links.flatMap((row) => row.evidence_refs || []),
     });
@@ -81,15 +127,12 @@ export function registerSignalRoutes(ctx) {
   registerPost("/signals/extract", async (request, reply) => {
     const scope = requireProjectScope(request);
     const result = await extractSignalsAndNba(pool, scope);
-    await writeAuditEvent(pool, {
-      projectId: scope.projectId,
-      accountScopeId: scope.accountScopeId,
-      actorUsername: request.auth?.username || null,
+
+    await recordScopedAudit(pool, request, scope, {
       action: "signals.extract",
       entityType: "signal",
       entityId: scope.projectId,
       status: "ok",
-      requestId: request.requestId,
       payload: result,
       evidenceRefs: [],
     });
@@ -108,21 +151,18 @@ export function registerSignalRoutes(ctx) {
 
   registerPost("/signals/:id/status", async (request, reply) => {
     const scope = requireProjectScope(request);
-    const body = parseBody(SignalStatusSchema, request.body);
+    const body = parseBody(SignalStatusSchema, request.body) as { status: string };
     const signalId = assertUuid(request.params?.id, "signal_id");
     const signal = await updateSignalStatus(pool, scope, signalId, body.status);
     if (!signal) {
       return sendError(reply, request.requestId, new ApiError(404, "signal_not_found", "Signal not found"));
     }
-    await writeAuditEvent(pool, {
-      projectId: scope.projectId,
-      accountScopeId: scope.accountScopeId,
-      actorUsername: request.auth?.username || null,
+
+    await recordScopedAudit(pool, request, scope, {
       action: "signals.status_update",
       entityType: "signal",
       entityId: signal.id,
       status: "ok",
-      requestId: request.requestId,
       payload: { status: signal.status },
       evidenceRefs: signal.evidence_refs || [],
     });
@@ -141,21 +181,18 @@ export function registerSignalRoutes(ctx) {
 
   registerPost("/nba/:id/status", async (request, reply) => {
     const scope = requireProjectScope(request);
-    const body = parseBody(NbaStatusSchema, request.body);
+    const body = parseBody(NbaStatusSchema, request.body) as { status: string };
     const nbaId = assertUuid(request.params?.id, "nba_id");
     const item = await updateNbaStatus(pool, scope, nbaId, body.status);
     if (!item) {
       return sendError(reply, request.requestId, new ApiError(404, "nba_not_found", "NBA item not found"));
     }
-    await writeAuditEvent(pool, {
-      projectId: scope.projectId,
-      accountScopeId: scope.accountScopeId,
-      actorUsername: request.auth?.username || null,
+
+    await recordScopedAudit(pool, request, scope, {
       action: "nba.status_update",
       entityType: "next_best_action",
       entityId: item.id,
       status: "ok",
-      requestId: request.requestId,
       payload: { status: item.status },
       evidenceRefs: item.evidence_refs || [],
     });
@@ -166,15 +203,12 @@ export function registerSignalRoutes(ctx) {
   registerPost("/upsell/radar/refresh", async (request, reply) => {
     const scope = requireProjectScope(request);
     const result = await refreshUpsellRadar(pool, scope);
-    await writeAuditEvent(pool, {
-      projectId: scope.projectId,
-      accountScopeId: scope.accountScopeId,
-      actorUsername: request.auth?.username || null,
+
+    await recordScopedAudit(pool, request, scope, {
       action: "upsell.refresh",
       entityType: "upsell_opportunity",
       entityId: scope.projectId,
       status: "ok",
-      requestId: request.requestId,
       payload: result,
       evidenceRefs: [],
     });
@@ -192,21 +226,18 @@ export function registerSignalRoutes(ctx) {
 
   registerPost("/upsell/:id/status", async (request, reply) => {
     const scope = requireProjectScope(request);
-    const body = parseBody(UpsellStatusSchema, request.body);
+    const body = parseBody(UpsellStatusSchema, request.body) as { status: string };
     const upsellId = assertUuid(request.params?.id, "upsell_id");
     const item = await updateUpsellStatus(pool, scope, upsellId, body.status);
     if (!item) {
       return sendError(reply, request.requestId, new ApiError(404, "upsell_not_found", "Upsell opportunity not found"));
     }
-    await writeAuditEvent(pool, {
-      projectId: scope.projectId,
-      accountScopeId: scope.accountScopeId,
-      actorUsername: request.auth?.username || null,
+
+    await recordScopedAudit(pool, request, scope, {
       action: "upsell.status_update",
       entityType: "upsell_opportunity",
       entityId: item.id,
       status: "ok",
-      requestId: request.requestId,
       payload: { status: item.status },
       evidenceRefs: item.evidence_refs || [],
     });
@@ -217,15 +248,12 @@ export function registerSignalRoutes(ctx) {
   registerPost("/continuity/preview", async (request, reply) => {
     const scope = requireProjectScope(request);
     const result = await buildContinuityPreview(pool, scope, request.auth?.username || null);
-    await writeAuditEvent(pool, {
-      projectId: scope.projectId,
-      accountScopeId: scope.accountScopeId,
-      actorUsername: request.auth?.username || null,
+
+    await recordScopedAudit(pool, request, scope, {
       action: "continuity.preview",
       entityType: "continuity_action",
       entityId: scope.projectId,
       status: "ok",
-      requestId: request.requestId,
       payload: { touched: result.touched },
       evidenceRefs: result.rows.flatMap((row) => row.evidence_refs || []),
     });
@@ -243,17 +271,14 @@ export function registerSignalRoutes(ctx) {
 
   registerPost("/continuity/apply", async (request, reply) => {
     const scope = requireProjectScope(request);
-    const body = parseBody(ContinuityApplySchema, request.body);
+    const body = parseBody(ContinuityApplySchema, request.body) as { action_ids: string[] };
     const result = await applyContinuityActions(pool, scope, body.action_ids, request.auth?.username || null);
-    await writeAuditEvent(pool, {
-      projectId: scope.projectId,
-      accountScopeId: scope.accountScopeId,
-      actorUsername: request.auth?.username || null,
+
+    await recordScopedAudit(pool, request, scope, {
       action: "continuity.apply",
       entityType: "continuity_action",
       entityId: scope.projectId,
       status: "ok",
-      requestId: request.requestId,
       payload: { applied: result.applied },
       evidenceRefs: result.actions.flatMap((row) => row.evidence_refs || []),
     });

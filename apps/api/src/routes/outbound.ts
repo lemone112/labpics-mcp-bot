@@ -5,16 +5,56 @@ import { listAuditEvents } from "../domains/core/audit.js";
 import { approveOutbound, createOutboundDraft, listOutbound, processDueOutbounds, sendOutbound, setOptOut } from "../domains/outbound/outbox.js";
 import { findCachedResponse, getIdempotencyKey, storeCachedResponse } from "../infra/idempotency.js";
 import { syncLoopsContacts } from "../domains/outbound/loops.js";
+import type { Pool } from "../types/index.js";
+import type { ZodTypeAny } from "zod";
+
+type RequestLike = {
+  auth?: {
+    account_scope_id?: string | null;
+    username?: string | null;
+  };
+  params?: Record<string, unknown>;
+  query?: Record<string, unknown>;
+  body?: unknown;
+  requestId?: string;
+  headers?: Record<string, unknown>;
+};
+
+type ReplyLike = {
+  code: (statusCode: number) => ReplyLike;
+  send: (payload: unknown) => unknown;
+};
+
+type RegisterFn = (
+  path: string,
+  handler: (request: RequestLike, reply: ReplyLike) => Promise<unknown> | unknown
+) => void;
+
+interface RouteCtx {
+  registerGet: RegisterFn;
+  registerPost: RegisterFn;
+  pool: Pool;
+  CreateOutboundDraftSchema: ZodTypeAny;
+  OutboundApproveSchema: ZodTypeAny;
+  OptOutSchema: ZodTypeAny;
+  OutboundProcessSchema: ZodTypeAny;
+  LoopsSyncSchema: ZodTypeAny;
+  parseProjectIdsInput: (input: unknown, max?: number) => string[];
+}
 
 /**
  * Outbound, audit, evidence, loops routes.
- * @param {object} ctx
  */
-export function registerOutboundRoutes(ctx) {
+export function registerOutboundRoutes(ctx: RouteCtx) {
   const {
-    registerGet, registerPost, pool,
-    CreateOutboundDraftSchema, OutboundApproveSchema,
-    OptOutSchema, OutboundProcessSchema, LoopsSyncSchema,
+    registerGet,
+    registerPost,
+    pool,
+    CreateOutboundDraftSchema,
+    OutboundApproveSchema,
+    OptOutSchema,
+    OutboundProcessSchema,
+    LoopsSyncSchema,
     parseProjectIdsInput,
   } = ctx;
 
@@ -77,10 +117,11 @@ export function registerOutboundRoutes(ctx) {
 
   registerPost("/outbound/:id/approve", async (request, reply) => {
     const scope = requireProjectScope(request);
-    const body = parseBody(OutboundApproveSchema, request.body);
+    const body = parseBody(OutboundApproveSchema, request.body) as { evidence_refs: unknown[] };
     const outboundId = assertUuid(request.params?.id, "outbound_id");
     const outbound = await approveOutbound(
-      pool, scope,
+      pool,
+      scope,
       outboundId,
       request.auth?.username || null,
       request.requestId,
@@ -93,7 +134,8 @@ export function registerOutboundRoutes(ctx) {
     const scope = requireProjectScope(request);
     const outboundId = assertUuid(request.params?.id, "outbound_id");
     const outbound = await sendOutbound(
-      pool, scope,
+      pool,
+      scope,
       outboundId,
       request.auth?.username || null,
       request.requestId
@@ -110,9 +152,10 @@ export function registerOutboundRoutes(ctx) {
 
   registerPost("/outbound/process", async (request, reply) => {
     const scope = requireProjectScope(request);
-    const body = parseBody(OutboundProcessSchema, request.body);
+    const body = parseBody(OutboundProcessSchema, request.body) as { limit: number };
     const result = await processDueOutbounds(
-      pool, scope,
+      pool,
+      scope,
       request.auth?.username || "manual_runner",
       request.requestId,
       body.limit
@@ -125,7 +168,7 @@ export function registerOutboundRoutes(ctx) {
     if (!accountScopeId) {
       fail(409, "account_scope_required", "Account scope is required");
     }
-    const body = parseBody(LoopsSyncSchema, request.body);
+    const body = parseBody(LoopsSyncSchema, request.body) as { project_ids?: string[]; limit?: number };
     const result = await syncLoopsContacts(
       pool,
       {

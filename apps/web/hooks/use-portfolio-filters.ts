@@ -4,6 +4,23 @@ import { useEffect, useMemo } from "react";
 
 import { ALL_PROJECTS_SCOPE, normalizeProjectId } from "@/hooks/use-portfolio-data";
 
+type ProjectLike = {
+  id: string | number;
+  [key: string]: unknown;
+};
+
+type UsePortfolioFiltersParams = {
+  projects: ProjectLike[];
+  projectIds: string[];
+  projectIdSet: Set<string>;
+  selectedScopeId: string | null;
+  setSelectedScopeId: (value: string | null) => void;
+  lastConcreteProjectId: string | null;
+  setLastConcreteProjectId: (value: string | null) => void;
+  canSelectAll: boolean;
+  ensureConcreteSelection: (candidateId: unknown) => string | null;
+};
+
 /**
  * usePortfolioFilters — filter/sort state and derived selections.
  * Extracted from use-project-portfolio.js for maintainability.
@@ -18,8 +35,8 @@ export function usePortfolioFilters({
   setLastConcreteProjectId,
   canSelectAll,
   ensureConcreteSelection,
-}) {
-  // Reconcile selection when project list changes
+}: UsePortfolioFiltersParams) {
+  // Reconcile selection when project list changes.
   useEffect(() => {
     if (!projectIds.length) return;
 

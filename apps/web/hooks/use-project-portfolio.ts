@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useMemo } from "react";
+import { createContext, useContext, useMemo, type ReactNode } from "react";
 import { usePathname } from "next/navigation";
 
 import { parsePortfolioSectionFromPath, sectionAllowsAllProjects } from "@/lib/portfolio-sections";
@@ -8,9 +8,48 @@ import { usePortfolioData } from "@/hooks/use-portfolio-data";
 import { usePortfolioActions } from "@/hooks/use-portfolio-actions";
 import { usePortfolioFilters } from "@/hooks/use-portfolio-filters";
 
-const ProjectPortfolioContext = createContext(null);
+type ProjectLike = {
+  id: string | number;
+  name?: string;
+  [key: string]: unknown;
+};
 
-export function ProjectPortfolioProvider({ children }) {
+type AutoRefreshState = {
+  lastRefreshedAt: Date | null;
+  secondsAgo: number | null;
+  paused: boolean;
+  pause: () => void;
+  resume: () => void;
+  markRefreshed: () => void;
+};
+
+type ProjectPortfolioContextValue = {
+  projects: ProjectLike[];
+  projectIds: string[];
+  projectIdSet: Set<string>;
+  inPortfolio: boolean;
+  currentSection: string;
+  canSelectAll: boolean;
+  isAllProjects: boolean;
+  selectedScopeId: string | null;
+  selectedProjectIds: string[];
+  selectedProjects: ProjectLike[];
+  selectedProject: ProjectLike | null;
+  lastConcreteProjectId: string | null;
+  activeProjectId: string | null;
+  activatingProjectId: string;
+  activationError: string;
+  loadingProjects: boolean;
+  error: string;
+  refreshProjects: (options?: { silent?: boolean }) => Promise<void>;
+  autoRefresh: AutoRefreshState;
+  activateProject: (projectId: unknown) => Promise<void>;
+  selectAllProjects: () => void;
+};
+
+const ProjectPortfolioContext = createContext<ProjectPortfolioContextValue | null>(null);
+
+export function ProjectPortfolioProvider({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const currentSection = parsePortfolioSectionFromPath(pathname);
   const inPortfolio = String(pathname || "").startsWith("/control-tower");
@@ -42,7 +81,7 @@ export function ProjectPortfolioProvider({ children }) {
     ensureConcreteSelection: data.ensureConcreteSelection,
   });
 
-  const contextValue = useMemo(
+  const contextValue = useMemo<ProjectPortfolioContextValue>(
     () => ({
       projects: data.projects,
       projectIds: data.projectIds,
@@ -94,7 +133,7 @@ export function ProjectPortfolioProvider({ children }) {
   return <ProjectPortfolioContext.Provider value={contextValue}>{children}</ProjectPortfolioContext.Provider>;
 }
 
-export function useProjectPortfolio() {
+export function useProjectPortfolio(): ProjectPortfolioContextValue {
   const context = useContext(ProjectPortfolioContext);
   if (!context) {
     throw new Error("useProjectPortfolio must be used within ProjectPortfolioProvider");

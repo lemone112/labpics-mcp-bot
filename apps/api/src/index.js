@@ -42,7 +42,7 @@ import {
   SearchAnalyticsTrackSchema,
   SearchAnalyticsSummarySchema,
 } from "./infra/schemas.js";
-import { rateLimitHook } from "./infra/rate-limit.js";
+import { checkRateLimit, rateLimitHook } from "./infra/rate-limit.js";
 import { applyMigrations } from "../db/migrate-lib.js";
 import { createRedisPubSub } from "./infra/redis-pubsub.js";
 import { createSseBroadcaster } from "./infra/sse-broadcaster.js";
@@ -600,32 +600,13 @@ async function main() {
   loginAttemptsCleanupTimer.unref();
 
   // --- General API rate limiting (per session + per IP for unauthenticated) ---
-  const apiRateBuckets = new Map();
   const API_RATE_WINDOW_MS = 60_000;
   const API_RATE_LIMIT_SESSION = 200;   // 200 req/min per session
   const API_RATE_LIMIT_IP = 60;         // 60 req/min per IP (unauthenticated)
 
   function checkApiRateLimit(key, limit) {
-    const now = Date.now();
-    let bucket = apiRateBuckets.get(key);
-    if (!bucket || now - bucket.windowStart > API_RATE_WINDOW_MS) {
-      bucket = { count: 0, windowStart: now };
-      apiRateBuckets.set(key, bucket);
-    }
-    bucket.count += 1;
-    if (bucket.count > limit) {
-      return false;
-    }
-    return true;
+    return checkRateLimit(`api:${key}`, limit, API_RATE_WINDOW_MS).allowed;
   }
-
-  // Cleanup stale buckets every 2 minutes
-  setInterval(() => {
-    const cutoff = Date.now() - API_RATE_WINDOW_MS * 2;
-    for (const [key, bucket] of apiRateBuckets) {
-      if (bucket.windowStart < cutoff) apiRateBuckets.delete(key);
-    }
-  }, 120_000).unref();
 
   async function createSession(username, userId = null) {
     const sid = crypto.randomBytes(32).toString("hex");

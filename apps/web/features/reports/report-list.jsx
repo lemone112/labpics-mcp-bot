@@ -3,11 +3,14 @@
 import { useCallback, useEffect, useState } from "react";
 
 import { PageShell } from "@/components/page-shell";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { PageLoadingSkeleton } from "@/components/ui/page-loading-skeleton";
 import { ProjectScopeRequired } from "@/components/project-scope-required";
 import { StatusChip } from "@/components/ui/status-chip";
+import { EmptyState } from "@/components/ui/empty-state";
+import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/components/ui/toast";
 import {
   Table,
@@ -64,9 +67,12 @@ export default function ReportListPage() {
   const [templates, setTemplates] = useState([]);
   const [reports, setReports] = useState([]);
   const [total, setTotal] = useState(0);
+  const [loadingTemplates, setLoadingTemplates] = useState(false);
   const [busy, setBusy] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [selectedReport, setSelectedReport] = useState(null);
+  const [templatesError, setTemplatesError] = useState("");
+  const [reportsError, setReportsError] = useState("");
 
   // Filters
   const [filterTemplate, setFilterTemplate] = useState("all");
@@ -74,11 +80,17 @@ export default function ReportListPage() {
 
   const loadTemplates = useCallback(async () => {
     if (!hasProject) return;
+    setLoadingTemplates(true);
     try {
       const data = await apiFetch("/reports/templates");
       setTemplates(Array.isArray(data?.templates) ? data.templates : []);
+      setTemplatesError("");
     } catch (error) {
-      addToast({ type: "error", message: error?.message || "Ошибка загрузки шаблонов" });
+      const message = error?.message || "Ошибка загрузки шаблонов";
+      setTemplatesError(message);
+      addToast({ type: "error", message });
+    } finally {
+      setLoadingTemplates(false);
     }
   }, [hasProject]);
 
@@ -94,8 +106,11 @@ export default function ReportListPage() {
       const data = await apiFetch(`/reports?${params.toString()}`);
       setReports(Array.isArray(data?.reports) ? data.reports : []);
       setTotal(Number(data?.total || 0));
+      setReportsError("");
     } catch (error) {
-      addToast({ type: "error", message: error?.message || "Ошибка загрузки отчётов" });
+      const message = error?.message || "Ошибка загрузки отчётов";
+      setReportsError(message);
+      addToast({ type: "error", message });
     } finally {
       setBusy(false);
     }
@@ -160,11 +175,18 @@ export default function ReportListPage() {
         <Card data-motion-item>
           <CardHeader className="flex-row items-center justify-between">
             <CardTitle>Шаблоны отчётов</CardTitle>
-            <Button variant="outline" size="sm" onClick={loadTemplates}>
+            <Button variant="outline" size="sm" onClick={loadTemplates} loading={loadingTemplates}>
               Обновить
             </Button>
           </CardHeader>
           <CardContent>
+            {templatesError ? (
+              <Alert variant="destructive" className="mb-4">
+                <AlertTitle>Не удалось загрузить шаблоны</AlertTitle>
+                <AlertDescription>{templatesError}</AlertDescription>
+              </Alert>
+            ) : null}
+
             <Table aria-label="Report templates">
               <TableHeader>
                 <TableRow>
@@ -177,6 +199,17 @@ export default function ReportListPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
+                {loadingTemplates && !templates.length ? (
+                  <TableRow>
+                    <TableCell colSpan={6}>
+                      <div className="space-y-2 py-2">
+                        <Skeleton className="h-4 w-[28%]" />
+                        <Skeleton className="h-4 w-[56%]" />
+                        <Skeleton className="h-4 w-[34%]" />
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ) : null}
                 {templates.map((tpl) => (
                   <TableRow key={tpl.id}>
                     <TableCell className="font-medium">{tpl.name}</TableCell>
@@ -207,10 +240,13 @@ export default function ReportListPage() {
                     </TableCell>
                   </TableRow>
                 ))}
-                {!templates.length ? (
+                {!busy && !templates.length ? (
                   <TableRow>
-                    <TableCell colSpan={6} className="text-muted-foreground">
-                      Шаблонов пока нет.
+                    <TableCell colSpan={6}>
+                      <EmptyState
+                        title="Шаблонов пока нет"
+                        description="Создайте первый шаблон отчёта, чтобы запускать генерацию по расписанию или вручную."
+                      />
                     </TableCell>
                   </TableRow>
                 ) : null}
@@ -235,33 +271,46 @@ export default function ReportListPage() {
             </Button>
           </CardHeader>
           <CardContent>
-            <div className="mb-4 flex flex-wrap items-center gap-3">
-              <Select value={filterTemplate} onValueChange={setFilterTemplate}>
-                <SelectTrigger className="w-[200px]">
-                  <SelectValue placeholder="Шаблон" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Все шаблоны</SelectItem>
-                  {templates.map((tpl) => (
-                    <SelectItem key={tpl.id} value={tpl.id}>
-                      {tpl.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+            {reportsError ? (
+              <Alert variant="destructive" className="mb-4">
+                <AlertTitle>Ошибка загрузки отчётов</AlertTitle>
+                <AlertDescription>{reportsError}</AlertDescription>
+              </Alert>
+            ) : null}
 
-              <Select value={filterStatus} onValueChange={setFilterStatus}>
-                <SelectTrigger className="w-[160px]">
-                  <SelectValue placeholder="Статус" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Все статусы</SelectItem>
-                  <SelectItem value="completed">Завершён</SelectItem>
-                  <SelectItem value="generating">Генерация</SelectItem>
-                  <SelectItem value="failed">Ошибка</SelectItem>
-                  <SelectItem value="pending">Ожидание</SelectItem>
-                </SelectContent>
-              </Select>
+            <div className="mb-4 grid gap-3 sm:grid-cols-2">
+              <div className="space-y-1">
+                <p className="text-xs font-medium text-muted-foreground">Фильтр по шаблону</p>
+                <Select value={filterTemplate} onValueChange={setFilterTemplate}>
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="Шаблон" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Все шаблоны</SelectItem>
+                    {templates.map((tpl) => (
+                      <SelectItem key={tpl.id} value={tpl.id}>
+                        {tpl.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-1">
+                <p className="text-xs font-medium text-muted-foreground">Фильтр по статусу</p>
+                <Select value={filterStatus} onValueChange={setFilterStatus}>
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="Статус" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Все статусы</SelectItem>
+                    <SelectItem value="completed">Завершён</SelectItem>
+                    <SelectItem value="generating">Генерация</SelectItem>
+                    <SelectItem value="failed">Ошибка</SelectItem>
+                    <SelectItem value="pending">Ожидание</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
 
             <Table aria-label="Generated reports">
@@ -276,6 +325,17 @@ export default function ReportListPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
+                {busy && !reports.length ? (
+                  <TableRow>
+                    <TableCell colSpan={6}>
+                      <div className="space-y-2 py-2">
+                        <Skeleton className="h-4 w-[34%]" />
+                        <Skeleton className="h-4 w-[52%]" />
+                        <Skeleton className="h-4 w-[26%]" />
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ) : null}
                 {reports.map((report) => (
                   <TableRow key={report.id}>
                     <TableCell className="font-medium">
@@ -315,10 +375,18 @@ export default function ReportListPage() {
                     </TableCell>
                   </TableRow>
                 ))}
-                {!reports.length ? (
+                {!busy && !reports.length ? (
                   <TableRow>
-                    <TableCell colSpan={6} className="text-muted-foreground">
-                      Отчётов пока нет.
+                    <TableCell colSpan={6}>
+                      <EmptyState
+                        title="Отчётов пока нет"
+                        description="Сгенерируйте отчёт по шаблону — после этого он появится в списке."
+                        actions={
+                          <Button variant="outline" size="sm" onClick={loadReports}>
+                            Проверить снова
+                          </Button>
+                        }
+                      />
                     </TableCell>
                   </TableRow>
                 ) : null}
