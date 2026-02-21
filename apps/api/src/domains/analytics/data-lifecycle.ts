@@ -24,10 +24,40 @@ interface DeletedRowsByTable {
   total: number;
 }
 
+interface AnalyticsRetentionRuntimeMetrics {
+  runs_total: number;
+  deleted_rows_total: number;
+  last_deleted_rows: number;
+  saturation_warnings_total: number;
+  last_run_at: string | null;
+  overdue_lag_days: CleanupLagByTable;
+}
+
 export interface AnalyticsRetentionCleanupResult {
   deleted_rows: DeletedRowsByTable;
   overdue_lag_days: CleanupLagByTable;
   config: RetentionConfig;
+}
+
+const retentionRuntimeMetrics: AnalyticsRetentionRuntimeMetrics = {
+  runs_total: 0,
+  deleted_rows_total: 0,
+  last_deleted_rows: 0,
+  saturation_warnings_total: 0,
+  last_run_at: null,
+  overdue_lag_days: {
+    search_analytics: 0,
+    lightrag_query_runs: 0,
+    generated_reports_completed: 0,
+    generated_reports_failed: 0,
+  },
+};
+
+export function getAnalyticsRetentionMetrics(): AnalyticsRetentionRuntimeMetrics {
+  return {
+    ...retentionRuntimeMetrics,
+    overdue_lag_days: { ...retentionRuntimeMetrics.overdue_lag_days },
+  };
 }
 
 export function resolveRetentionConfig(env: NodeJS.ProcessEnv = process.env): RetentionConfig {
@@ -145,8 +175,8 @@ function logRetentionWindowSaturation(
   table: string,
   deletedRows: number,
   batchSize: number
-) {
-  if (deletedRows < batchSize) return;
+): number {
+  if (deletedRows < batchSize) return 0;
   logger?.warn?.(
     {
       project_id: scope.projectId,
@@ -157,6 +187,7 @@ function logRetentionWindowSaturation(
     },
     "retention cleanup reached batch limit; more stale rows likely remain"
   );
+  return 1;
 }
 
 export async function runAnalyticsRetentionCleanup(
@@ -193,28 +224,29 @@ export async function runAnalyticsRetentionCleanup(
     config.batchSize
   );
 
-  logRetentionWindowSaturation(
+  const saturationWarnings =
+    logRetentionWindowSaturation(
     logger,
     scope,
     "search_analytics",
     deletedSearchAnalytics,
     config.batchSize
-  );
-  logRetentionWindowSaturation(
+  ) +
+    logRetentionWindowSaturation(
     logger,
     scope,
     "lightrag_query_runs",
     deletedLightragRuns,
     config.batchSize
-  );
-  logRetentionWindowSaturation(
+  ) +
+    logRetentionWindowSaturation(
     logger,
     scope,
     "generated_reports.completed",
     deletedGeneratedReportsCompleted,
     config.batchSize
-  );
-  logRetentionWindowSaturation(
+  ) +
+    logRetentionWindowSaturation(
     logger,
     scope,
     "generated_reports.failed",
@@ -252,6 +284,13 @@ export async function runAnalyticsRetentionCleanup(
       deletedGeneratedReportsCompleted +
       deletedGeneratedReportsFailed,
   };
+
+  retentionRuntimeMetrics.runs_total += 1;
+  retentionRuntimeMetrics.deleted_rows_total += deletedRows.total;
+  retentionRuntimeMetrics.last_deleted_rows = deletedRows.total;
+  retentionRuntimeMetrics.saturation_warnings_total += saturationWarnings;
+  retentionRuntimeMetrics.last_run_at = new Date().toISOString();
+  retentionRuntimeMetrics.overdue_lag_days = { ...lagByTable };
 
   logger.info?.(
     {

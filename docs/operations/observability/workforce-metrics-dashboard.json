@@ -1,0 +1,61 @@
+{
+  "dashboard": {
+    "uid": "workforce-metrics-health-v1",
+    "title": "Workforce/Metrics Layer Health",
+    "timezone": "browser",
+    "schemaVersion": 39,
+    "version": 1,
+    "panels": [
+      {
+        "title": "Metrics ingest success vs fail",
+        "type": "timeseries",
+        "queries": [
+          "sum(rate(app_metrics_ingest_batches_success_total[5m]))",
+          "sum(rate(app_metrics_ingest_batches_failed_total[5m]))"
+        ]
+      },
+      {
+        "title": "Criteria runs / error pressure",
+        "type": "timeseries",
+        "queries": [
+          "sum(rate(app_criteria_runs_total[5m]))",
+          "sum(rate(app_criteria_runs_failed_total[5m]))",
+          "sum(rate(app_criteria_evaluations_error_total[5m]))"
+        ]
+      },
+      {
+        "title": "Retention cleanup lag by table (days)",
+        "type": "timeseries",
+        "queries": [
+          "max(app_retention_cleanup_lag_days{table=\"search_analytics\"})",
+          "max(app_retention_cleanup_lag_days{table=\"lightrag_query_runs\"})",
+          "max(app_retention_cleanup_lag_days{table=\"generated_reports_completed\"})",
+          "max(app_retention_cleanup_lag_days{table=\"generated_reports_failed\"})"
+        ]
+      },
+      {
+        "title": "Redis pub/sub delivery health",
+        "type": "timeseries",
+        "queries": [
+          "sum(rate(app_redis_pubsub_publish_total[5m]))",
+          "sum(rate(app_redis_pubsub_publish_failed_total[5m]))",
+          "sum(rate(app_redis_pubsub_callback_errors_total[5m]))"
+        ]
+      },
+      {
+        "title": "Cache hit ratio",
+        "type": "stat",
+        "queries": [
+          "sum(rate(app_cache_hits_total[5m])) / clamp_min(sum(rate(app_cache_hits_total[5m])) + sum(rate(app_cache_misses_total[5m])), 1)"
+        ]
+      },
+      {
+        "title": "Scope violation counter",
+        "type": "timeseries",
+        "queries": [
+          "sum(rate(app_scope_violation_total[5m]))"
+        ]
+      }
+    ]
+  }
+}

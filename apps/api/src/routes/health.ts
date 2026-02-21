@@ -2,6 +2,8 @@ import { sendOk } from "../infra/api-contract.js";
 import { getCircuitBreakerStates } from "../infra/http.js";
 import { requestIdOf } from "../infra/utils.js";
 import { getSchedulerMetrics, getSchedulerState } from "../domains/core/scheduler.js";
+import { getAnalyticsRetentionMetrics } from "../domains/analytics/data-lifecycle.js";
+import { getMetricsCriteriaRuntimeMetrics } from "../domains/analytics/metrics-contract.js";
 import type { Pool } from "../types/index.js";
 import type { FastifyReply, FastifyRequest } from "fastify";
 
@@ -28,6 +30,17 @@ type CacheLayer = {
   };
 };
 
+type RedisPubSub = {
+  getStats: () => {
+    publish_total: number;
+    publish_failed_total: number;
+    published_recipients_total: number;
+    received_messages_total: number;
+    callback_errors_total: number;
+    subscribed_channels: number;
+  };
+};
+
 type RequestLike = FastifyRequest & {
   auth?: {
     active_project_id?: string | null;
@@ -46,11 +59,12 @@ interface RouteCtx {
   metrics: Metrics;
   sseBroadcaster: SseBroadcaster;
   cache: CacheLayer;
+  redisPubSub: RedisPubSub;
   pool: Pool;
 }
 
 export function registerHealthRoutes(ctx: RouteCtx) {
-  const { registerGet, metrics, sseBroadcaster, cache, pool } = ctx;
+  const { registerGet, metrics, sseBroadcaster, cache, pool, redisPubSub } = ctx;
 
   registerGet("/health", async (request, reply) => {
     return sendOk(reply, requestIdOf(request), { service: "server" });
@@ -59,6 +73,9 @@ export function registerHealthRoutes(ctx: RouteCtx) {
   registerGet("/metrics", async (_request, reply) => {
     const sseStats = sseBroadcaster.getStats();
     const cacheStats = cache.getStats();
+    const pubsubStats = redisPubSub.getStats();
+    const retentionStats = getAnalyticsRetentionMetrics();
+    const metricsCriteriaStats = getMetricsCriteriaRuntimeMetrics();
     const mem = process.memoryUsage();
     const cbStates = getCircuitBreakerStates();
     const lines = [
@@ -82,6 +99,18 @@ export function registerHealthRoutes(ctx: RouteCtx) {
       `app_cache_invalidations_total ${cacheStats.invalidations}`,
       "# TYPE app_cache_enabled gauge",
       `app_cache_enabled ${cacheStats.enabled ? 1 : 0}`,
+      "# TYPE app_redis_pubsub_publish_total counter",
+      `app_redis_pubsub_publish_total ${pubsubStats.publish_total}`,
+      "# TYPE app_redis_pubsub_publish_failed_total counter",
+      `app_redis_pubsub_publish_failed_total ${pubsubStats.publish_failed_total}`,
+      "# TYPE app_redis_pubsub_published_recipients_total counter",
+      `app_redis_pubsub_published_recipients_total ${pubsubStats.published_recipients_total}`,
+      "# TYPE app_redis_pubsub_received_messages_total counter",
+      `app_redis_pubsub_received_messages_total ${pubsubStats.received_messages_total}`,
+      "# TYPE app_redis_pubsub_callback_errors_total counter",
+      `app_redis_pubsub_callback_errors_total ${pubsubStats.callback_errors_total}`,
+      "# TYPE app_redis_pubsub_subscribed_channels gauge",
+      `app_redis_pubsub_subscribed_channels ${pubsubStats.subscribed_channels}`,
       "# TYPE app_db_pool_total gauge",
       `app_db_pool_total ${pool.totalCount}`,
       "# TYPE app_db_pool_idle gauge",
@@ -94,6 +123,34 @@ export function registerHealthRoutes(ctx: RouteCtx) {
       `app_process_heap_bytes ${mem.heapUsed}`,
       "# TYPE app_process_rss_bytes gauge",
       `app_process_rss_bytes ${mem.rss}`,
+      "# TYPE app_metrics_ingest_batches_success_total counter",
+      `app_metrics_ingest_batches_success_total ${metricsCriteriaStats.ingest_batches_success_total}`,
+      "# TYPE app_metrics_ingest_batches_failed_total counter",
+      `app_metrics_ingest_batches_failed_total ${metricsCriteriaStats.ingest_batches_failed_total}`,
+      "# TYPE app_metrics_ingest_observations_inserted_total counter",
+      `app_metrics_ingest_observations_inserted_total ${metricsCriteriaStats.ingest_observations_inserted_total}`,
+      "# TYPE app_metrics_ingest_observations_duplicate_total counter",
+      `app_metrics_ingest_observations_duplicate_total ${metricsCriteriaStats.ingest_observations_duplicate_total}`,
+      "# TYPE app_criteria_runs_total counter",
+      `app_criteria_runs_total ${metricsCriteriaStats.criteria_runs_total}`,
+      "# TYPE app_criteria_runs_failed_total counter",
+      `app_criteria_runs_failed_total ${metricsCriteriaStats.criteria_runs_failed_total}`,
+      "# TYPE app_criteria_evaluations_error_total counter",
+      `app_criteria_evaluations_error_total ${metricsCriteriaStats.criteria_evaluations_error_total}`,
+      "# TYPE app_criteria_last_run_duration_ms gauge",
+      `app_criteria_last_run_duration_ms ${metricsCriteriaStats.criteria_last_run_duration_ms}`,
+      "# TYPE app_scope_violation_total counter",
+      `app_scope_violation_total ${metricsCriteriaStats.scope_violation_total}`,
+      "# TYPE app_contract_error_total counter",
+      `app_contract_error_total ${metricsCriteriaStats.contract_error_total}`,
+      "# TYPE app_retention_cleanup_runs_total counter",
+      `app_retention_cleanup_runs_total ${retentionStats.runs_total}`,
+      "# TYPE app_retention_cleanup_deleted_rows_total counter",
+      `app_retention_cleanup_deleted_rows_total ${retentionStats.deleted_rows_total}`,
+      "# TYPE app_retention_cleanup_last_deleted_rows gauge",
+      `app_retention_cleanup_last_deleted_rows ${retentionStats.last_deleted_rows}`,
+      "# TYPE app_retention_cleanup_saturation_warnings_total counter",
+      `app_retention_cleanup_saturation_warnings_total ${retentionStats.saturation_warnings_total}`,
     ];
 
     for (const [statusCode, count] of Object.entries(metrics.status_counts)) {
@@ -115,6 +172,11 @@ export function registerHealthRoutes(ctx: RouteCtx) {
       lines.push(`app_job_runs_ok{job_type="${jobType}"} ${m.ok}`);
       lines.push(`app_job_runs_failed{job_type="${jobType}"} ${m.failed}`);
     }
+
+    lines.push(`app_retention_cleanup_lag_days{table="search_analytics"} ${retentionStats.overdue_lag_days.search_analytics}`);
+    lines.push(`app_retention_cleanup_lag_days{table="lightrag_query_runs"} ${retentionStats.overdue_lag_days.lightrag_query_runs}`);
+    lines.push(`app_retention_cleanup_lag_days{table="generated_reports_completed"} ${retentionStats.overdue_lag_days.generated_reports_completed}`);
+    lines.push(`app_retention_cleanup_lag_days{table="generated_reports_failed"} ${retentionStats.overdue_lag_days.generated_reports_failed}`);
 
     for (const cb of cbStates as Array<{ name: string; state: string; failures: number }>) {
       lines.push(`app_circuit_breaker_state{host="${cb.name}",state="${cb.state}"} ${cb.state === "open" ? 1 : 0}`);

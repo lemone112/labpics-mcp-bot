@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import {
+  getAnalyticsRetentionMetrics,
   resolveRetentionConfig,
   runAnalyticsRetentionCleanup,
 } from "../src/domains/analytics/data-lifecycle.ts";
@@ -105,6 +106,12 @@ test("runAnalyticsRetentionCleanup aggregates deleted rows and lag metrics", asy
       });
       assert.equal(logs.warn.length, 0, "no batch saturation expected");
       assert.equal(logs.info.length, 1, "expected final summary log");
+
+      const runtime = getAnalyticsRetentionMetrics();
+      assert.ok(runtime.runs_total >= 1);
+      assert.ok(runtime.deleted_rows_total >= 31);
+      assert.equal(runtime.last_deleted_rows, 31);
+      assert.equal(runtime.overdue_lag_days.search_analytics, 2.5);
     }
   );
 });
@@ -115,6 +122,7 @@ test("runAnalyticsRetentionCleanup logs saturation warning when batch size is re
       ANALYTICS_RETENTION_BATCH_SIZE: "100",
     },
     async () => {
+      const before = getAnalyticsRetentionMetrics();
       const pool = createMockPool([
         { rowCount: 100, rows: [] },
         { rowCount: 100, rows: [] },
@@ -141,6 +149,10 @@ test("runAnalyticsRetentionCleanup logs saturation warning when batch size is re
       );
 
       assert.equal(logs.warn.length, 4, "expected warning per saturated table window");
+
+      const after = getAnalyticsRetentionMetrics();
+      assert.ok(after.runs_total >= before.runs_total + 1);
+      assert.ok(after.saturation_warnings_total >= before.saturation_warnings_total + 4);
     }
   );
 });

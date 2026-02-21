@@ -71,6 +71,38 @@ interface CriteriaEvaluationRow {
   evaluated_at: string;
 }
 
+interface MetricsCriteriaRuntimeMetrics {
+  ingest_batches_success_total: number;
+  ingest_batches_failed_total: number;
+  ingest_observations_inserted_total: number;
+  ingest_observations_duplicate_total: number;
+  criteria_runs_total: number;
+  criteria_runs_failed_total: number;
+  criteria_evaluations_error_total: number;
+  criteria_last_run_duration_ms: number;
+  scope_violation_total: number;
+  contract_error_total: number;
+  last_error_at: string | null;
+}
+
+const runtimeMetrics: MetricsCriteriaRuntimeMetrics = {
+  ingest_batches_success_total: 0,
+  ingest_batches_failed_total: 0,
+  ingest_observations_inserted_total: 0,
+  ingest_observations_duplicate_total: 0,
+  criteria_runs_total: 0,
+  criteria_runs_failed_total: 0,
+  criteria_evaluations_error_total: 0,
+  criteria_last_run_duration_ms: 0,
+  scope_violation_total: 0,
+  contract_error_total: 0,
+  last_error_at: null,
+};
+
+export function getMetricsCriteriaRuntimeMetrics(): MetricsCriteriaRuntimeMetrics {
+  return { ...runtimeMetrics };
+}
+
 function assertSchemaVersion(version: number | undefined, contractName: string) {
   if ((version || 1) !== 1) {
     throw new ApiError(
@@ -163,6 +195,8 @@ function mapContractError(error: unknown): unknown {
   if (error instanceof ApiError) return error;
   const pgError = parsePgError(error);
   const message = String(pgError.message || "Contract write failed");
+  runtimeMetrics.contract_error_total += 1;
+  runtimeMetrics.last_error_at = new Date().toISOString();
 
   if (pgError.code === "23503") {
     return new ApiError(400, "foreign_key_violation", message);
@@ -174,6 +208,9 @@ function mapContractError(error: unknown): unknown {
     return new ApiError(400, "invalid_input_syntax", message);
   }
   if (pgError.code === "P0001") {
+    if (message.toLowerCase().includes("scope")) {
+      runtimeMetrics.scope_violation_total += 1;
+    }
     return new ApiError(400, "domain_invariant_violation", message);
   }
   return error;
@@ -350,7 +387,7 @@ export async function ingestMetricObservations(
   }
 
   try {
-    return await inTransaction(pool, async (client) => {
+    const result = await inTransaction(pool, async (client) => {
       let inserted = 0;
       let duplicates = 0;
 
@@ -426,7 +463,13 @@ export async function ingestMetricObservations(
         duplicates,
       };
     });
+    runtimeMetrics.ingest_batches_success_total += 1;
+    runtimeMetrics.ingest_observations_inserted_total += result.inserted;
+    runtimeMetrics.ingest_observations_duplicate_total += result.duplicates;
+    return result;
   } catch (error) {
+    runtimeMetrics.ingest_batches_failed_total += 1;
+    runtimeMetrics.last_error_at = new Date().toISOString();
     throw mapContractError(error);
   }
 }
@@ -606,9 +649,10 @@ export async function evaluateCriteriaAndStoreRun(
   evaluations: CriteriaEvaluationRow[];
 }> {
   assertSchemaVersion(input.schema_version, "criteria/evaluate");
+  const startedAt = Date.now();
 
   try {
-    return await inTransaction(pool, async (client) => {
+    const result = await inTransaction(pool, async (client) => {
       const runKey =
         input.run_key ||
         `criteria-${Date.now()}-${Math.random()
@@ -795,7 +839,16 @@ export async function evaluateCriteriaAndStoreRun(
         evaluations: persisted,
       };
     });
+    runtimeMetrics.criteria_runs_total += 1;
+    if (result.summary.error > 0) runtimeMetrics.criteria_runs_failed_total += 1;
+    runtimeMetrics.criteria_evaluations_error_total += result.summary.error;
+    runtimeMetrics.criteria_last_run_duration_ms = Date.now() - startedAt;
+    return result;
   } catch (error) {
+    runtimeMetrics.criteria_runs_total += 1;
+    runtimeMetrics.criteria_runs_failed_total += 1;
+    runtimeMetrics.criteria_last_run_duration_ms = Date.now() - startedAt;
+    runtimeMetrics.last_error_at = new Date().toISOString();
     throw mapContractError(error);
   }
 }
