@@ -201,6 +201,61 @@ jobs:
           REDIS_URL: redis://127.0.0.1:6379
         run: npm run test:integration:lightrag
 
+  invariants-integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_DB: labpics_invariants_ci
+          POSTGRES_USER: app
+          POSTGRES_PASSWORD: app
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U app -d labpics_invariants_ci"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install all dependencies
+        run: npm ci
+
+      - name: DB+Redis invariants integration tests
+        working-directory: apps/api
+        env:
+          INVARIANTS_DB_REDIS_INTEGRATION: "1"
+          DATABASE_URL: postgresql://app:app@127.0.0.1:5432/labpics_invariants_ci
+          REDIS_URL: redis://127.0.0.1:6379
+        run: set -o pipefail && mkdir -p test-results && npm run test:integration:invariants | tee test-results/invariants.tap
+
+      - name: Upload invariants test artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: invariants-integration-artifacts
+          path: apps/api/test-results/invariants.tap
+          if-no-files-found: error
+
   biome:
     runs-on: ubuntu-latest
     timeout-minutes: 5

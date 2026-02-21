@@ -13,6 +13,7 @@
     "test:coverage": "c8 --reporter=text --reporter=lcov tsx --test test/**/*.test.js",
     "test:coverage:ci": "c8 --reporter=text --reporter=lcov --reporter=json-summary tsx --test test/**/*.test.js && node scripts/check-coverage-gates.mjs",
     "test:integration:lightrag": "tsx --test test/lightrag-db-redis.integration.test.js",
+    "test:integration:invariants": "tsx --test test/invariants-db-redis.integration.test.js",
     "test:integration:scope": "tsx --test test/scope-hardening.integration.test.js",
     "test:integration:workforce": "tsx --test test/workforce-schema.integration.test.js",
     "test:integration:client-executor": "tsx --test test/client-executor-graph.integration.test.js",
