@@ -1,7 +1,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 
-import { assertDateRange, normalizeDateKey } from "../src/routes/lightrag.js";
+import { assertDateRange, normalizeDateKey } from "../src/routes/lightrag-date-utils.js";
 
 describe("assertDateRange", () => {
   it("allows empty bounds", () => {

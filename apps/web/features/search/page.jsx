@@ -21,17 +21,7 @@ import { useProjectGate } from "@/hooks/use-project-gate";
 import { SearchFilters, createDefaultFilters } from "./search-filters";
 import { SearchResultCard, SearchResultsEmpty } from "./search-result-card";
 import { SearchSuggestions, addToSearchHistory } from "./search-suggestions";
-
-
-function pad2(num) {
-  return String(num).padStart(2, "0");
-}
-
-function formatDateForApi(value) {
-  if (!(value instanceof Date)) return null;
-  if (Number.isNaN(value.getTime())) return null;
-  return `${value.getFullYear()}-${pad2(value.getMonth() + 1)}-${pad2(value.getDate())}`;
-}
+import { formatDateForApi } from "./date-utils";
 
 export default function SearchFeaturePage() {
   const { loading, session } = useAuthGuard();
