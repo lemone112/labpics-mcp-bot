@@ -1,15 +1,42 @@
 import { parseLimit, sendOk } from "../infra/api-contract.js";
 import { requireProjectScope } from "../infra/scope.js";
+import type { Pool } from "../types/index.js";
+import type { FastifyReply, FastifyRequest } from "fastify";
+
+type RequestLike = FastifyRequest & {
+  auth?: {
+    active_project_id?: string | null;
+    account_scope_id?: string | null;
+    user_id?: string | null;
+    user_role?: "owner" | "pm" | null;
+  };
+  query?: Record<string, unknown>;
+  requestId?: string;
+};
+
+type ReplyLike = FastifyReply;
+type RegisterFn = (
+  path: string,
+  handler: (request: RequestLike, reply: ReplyLike) => Promise<unknown> | unknown
+) => void;
+
+interface RouteCtx {
+  registerGet: RegisterFn;
+  pool: Pool;
+}
+
+function requestIdOf(request: RequestLike): string {
+  return String(request.requestId || request.id);
+}
 
 /**
  * Contacts, conversations, messages routes.
- * @param {object} ctx
  */
-export function registerDataRoutes(ctx) {
+export function registerDataRoutes(ctx: RouteCtx) {
   const { registerGet, pool } = ctx;
 
   registerGet("/contacts", async (request, reply) => {
-    const scope = requireProjectScope(request);
+    const scope = requireProjectScope(request as any);
     const limit = parseLimit(request.query?.limit, 100, 500);
     const q = String(request.query?.q || "").trim();
     const hasFilter = q.length > 0;
@@ -46,11 +73,11 @@ export function registerDataRoutes(ctx) {
           [scope.projectId, scope.accountScopeId, limit]
         );
 
-    return sendOk(reply, request.requestId, { contacts: rows });
+    return sendOk(reply, requestIdOf(request), { contacts: rows });
   });
 
   registerGet("/conversations", async (request, reply) => {
-    const scope = requireProjectScope(request);
+    const scope = requireProjectScope(request as any);
     const limit = parseLimit(request.query?.limit, 100, 500);
     const { rows } = await pool.query(
       `
@@ -72,11 +99,11 @@ export function registerDataRoutes(ctx) {
       `,
       [scope.projectId, scope.accountScopeId, limit]
     );
-    return sendOk(reply, request.requestId, { conversations: rows });
+    return sendOk(reply, requestIdOf(request), { conversations: rows });
   });
 
   registerGet("/messages", async (request, reply) => {
-    const scope = requireProjectScope(request);
+    const scope = requireProjectScope(request as any);
     const limit = parseLimit(request.query?.limit, 100, 500);
     const conversationGlobalId = String(request.query?.conversation_global_id || "").trim();
 
@@ -121,6 +148,6 @@ export function registerDataRoutes(ctx) {
           [scope.projectId, scope.accountScopeId, limit]
         );
 
-    return sendOk(reply, request.requestId, { messages: rows });
+    return sendOk(reply, requestIdOf(request), { messages: rows });
   });
 }

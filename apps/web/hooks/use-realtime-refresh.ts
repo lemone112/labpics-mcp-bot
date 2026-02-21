@@ -2,14 +2,7 @@
 
 import { useEffect, useRef } from "react";
 
-/**
- * Maps job completion events to specific data reload calls.
- *
- * When a `job_completed` event arrives for a matching job type,
- * the reload function is called after a short debounce to batch
- * rapid cascade completions.
- */
-const JOB_TO_DATA_MAP = {
+const JOB_TO_DATA_MAP: Record<string, string[]> = {
   connectors_sync_cycle: ["portfolio", "messages"],
   signals_extraction: ["portfolio", "recommendations"],
   health_scoring: ["portfolio"],
@@ -17,10 +10,16 @@ const JOB_TO_DATA_MAP = {
   embeddings_run: ["portfolio"],
 };
 
+type UseRealtimeRefreshParams = {
+  lastEvent: { status?: string; job_type?: string } | null;
+  reload: () => Promise<unknown> | void;
+  dataType: string;
+};
+
 /**
- * @param {{ lastEvent: object|null, reload: () => Promise<any>, dataType: string }} params
+ * Maps job completion events to specific data reload calls.
  */
-export function useRealtimeRefresh({ lastEvent, reload, dataType }) {
+export function useRealtimeRefresh({ lastEvent, reload, dataType }: UseRealtimeRefreshParams) {
   const reloadRef = useRef(reload);
   useEffect(() => {
     reloadRef.current = reload;
@@ -30,12 +29,11 @@ export function useRealtimeRefresh({ lastEvent, reload, dataType }) {
     if (!lastEvent) return;
     if (lastEvent.status !== "ok") return;
 
-    const relevantDataTypes = JOB_TO_DATA_MAP[lastEvent.job_type] || [];
+    const relevantDataTypes = JOB_TO_DATA_MAP[lastEvent.job_type || ""] || [];
     if (!relevantDataTypes.includes(dataType)) return;
 
-    // Debounce: wait 500ms to batch rapid cascading completions
     const timer = setTimeout(() => {
-      reloadRef.current?.();
+      void reloadRef.current?.();
     }, 500);
 
     return () => clearTimeout(timer);

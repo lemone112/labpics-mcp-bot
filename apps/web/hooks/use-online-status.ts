@@ -5,17 +5,22 @@ import { API_BASE } from "@/lib/api";
 
 const PROBE_INTERVAL_MS = 10_000;
 
+function createTimeoutSignal(timeoutMs: number): AbortSignal {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  controller.signal.addEventListener("abort", () => clearTimeout(timer), { once: true });
+  return controller.signal;
+}
+
 /**
  * Detects online/offline state using navigator.onLine + health endpoint probe.
- * Only probes the server when recovering from offline state to avoid
- * unnecessary traffic (no polling while already online).
  */
 export function useOnlineStatus() {
   const [online, setOnline] = useState(true);
-  const probeTimerRef = useRef(null);
+  const probeTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const stopProbing = useCallback(() => {
-    clearInterval(probeTimerRef.current);
+    if (probeTimerRef.current) clearInterval(probeTimerRef.current);
     probeTimerRef.current = null;
   }, []);
 
@@ -24,7 +29,7 @@ export function useOnlineStatus() {
       const response = await fetch(`${API_BASE}/health`, {
         method: "GET",
         cache: "no-store",
-        signal: AbortSignal.timeout(5000),
+        signal: createTimeoutSignal(5000),
       });
       if (response.ok) {
         setOnline(true);
@@ -39,12 +44,14 @@ export function useOnlineStatus() {
 
   const startProbing = useCallback(() => {
     if (probeTimerRef.current) return;
-    probeTimerRef.current = setInterval(probe, PROBE_INTERVAL_MS);
+    probeTimerRef.current = setInterval(() => {
+      void probe();
+    }, PROBE_INTERVAL_MS);
   }, [probe]);
 
   useEffect(() => {
     function handleOnline() {
-      probe();
+      void probe();
     }
     function handleOffline() {
       setOnline(false);
