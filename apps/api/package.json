@@ -15,6 +15,7 @@
     "test:integration:lightrag": "tsx --test test/lightrag-db-redis.integration.test.js",
     "test:integration:scope": "tsx --test test/scope-hardening.integration.test.js",
     "test:integration:workforce": "tsx --test test/workforce-schema.integration.test.js",
+    "test:integration:client-executor": "tsx --test test/client-executor-graph.integration.test.js",
     "test:migrations:idempotency": "node scripts/check-migrations-idempotency.mjs",
     "typecheck": "tsc --noEmit"
   },
