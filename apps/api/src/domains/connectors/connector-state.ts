@@ -290,8 +290,10 @@ export async function registerConnectorError(
       ? (options.payload_json as Record<string, unknown>)
       : {};
   const maxAttempts = clampInt(process.env.CONNECTOR_MAX_RETRIES, 5, 1, 20);
+  const dedupeKeyInput =
+    typeof options.dedupe_key === "string" ? options.dedupe_key.trim() : "";
   const dedupeKey =
-    options.dedupe_key ||
+    dedupeKeyInput ||
     dedupeKeyForError({ connector, mode, operation, sourceRef, errorKind });
 
   const existing = await pool.query<{ id: string; attempt: number }>(

@@ -70,6 +70,7 @@ test("runScheduledReports handles success, recent-skip, cron-skip, and failure p
       { id: "tpl-ok", name: "Daily", active: true, schedule: "30 12 * * *" },
       { id: "tpl-recent", name: "Already Generated", active: true, schedule: "30 12 * * *" },
       { id: "tpl-fail", name: "Weekly", active: true, schedule: "30 12 * * 1" },
+      { id: "   ", name: "Invalid Id", active: true, schedule: "30 12 * * *" },
       { id: "tpl-skip-cron", name: "No Match", active: true, schedule: "0 1 * * *" },
       { id: "tpl-inactive", name: "Inactive", active: false, schedule: "30 12 * * *" },
     ],
