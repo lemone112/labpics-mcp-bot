@@ -1,8 +1,44 @@
 import { fail } from "../../infra/api-contract.js";
+import type { Pool, ProjectScope } from "../../types/index.js";
 
 const MAX_EVIDENCE_REFS = 50;
 
-function inferSourceTable(ref) {
+type JsonObject = Record<string, unknown>;
+
+interface NormalizedEvidenceRef {
+  source: string;
+  ref: string;
+  snippet: string | null;
+  meta: JsonObject;
+}
+
+interface AuditEventInput {
+  projectId: string;
+  accountScopeId: string;
+  actorUsername?: string | null;
+  actorUserId?: string | null;
+  action?: string | null;
+  entityType?: string | null;
+  entityId?: string | null;
+  status?: string | null;
+  requestId?: string | null;
+  idempotencyKey?: string | null;
+  payload?: unknown;
+  evidenceRefs?: unknown;
+}
+
+interface AuditListOptions {
+  limit?: number | string;
+  offset?: number | string;
+  action?: string | null;
+}
+
+function asObject(value: unknown): JsonObject | null {
+  if (!value || typeof value !== "object") return null;
+  return value as JsonObject;
+}
+
+function inferSourceTable(ref: string): string {
   const value = String(ref || "");
   if (value.startsWith("cwmsg:")) return "cw_messages";
   if (value.startsWith("cw:")) return "cw_conversations";
@@ -11,7 +47,7 @@ function inferSourceTable(ref) {
   return "external";
 }
 
-function normalizeEvidenceRef(value) {
+function normalizeEvidenceRef(value: unknown): NormalizedEvidenceRef | null {
   if (typeof value === "string") {
     return {
       source: inferSourceTable(value),
@@ -20,13 +56,17 @@ function normalizeEvidenceRef(value) {
       meta: {},
     };
   }
-  if (!value || typeof value !== "object") return null;
 
-  const ref = String(value.ref || value.source_ref || value.id || "").trim();
+  const objectValue = asObject(value);
+  if (!objectValue) return null;
+
+  const ref = String(objectValue.ref || objectValue.source_ref || objectValue.id || "").trim();
   if (!ref) return null;
-  const source = String(value.source || value.source_type || inferSourceTable(ref)).trim().toLowerCase();
-  const snippet = value.snippet == null ? null : String(value.snippet).slice(0, 1000);
-  const meta = value.meta && typeof value.meta === "object" ? value.meta : {};
+  const source = String(objectValue.source || objectValue.source_type || inferSourceTable(ref))
+    .trim()
+    .toLowerCase();
+  const snippet = objectValue.snippet == null ? null : String(objectValue.snippet).slice(0, 1000);
+  const meta = asObject(objectValue.meta) || {};
   return {
     source,
     ref,
@@ -35,14 +75,14 @@ function normalizeEvidenceRef(value) {
   };
 }
 
-export function normalizeEvidenceRefs(input) {
+export function normalizeEvidenceRefs(input: unknown): NormalizedEvidenceRef[] {
   if (input == null) return [];
   if (!Array.isArray(input)) {
     fail(400, "invalid_evidence_refs", "evidence_refs must be an array");
   }
 
-  const dedupe = new Set();
-  const out = [];
+  const dedupe = new Set<string>();
+  const out: NormalizedEvidenceRef[] = [];
   for (const item of input) {
     const normalized = normalizeEvidenceRef(item);
     if (!normalized) continue;
@@ -55,7 +95,11 @@ export function normalizeEvidenceRefs(input) {
   return out;
 }
 
-export async function indexEvidenceRefs(pool, scope, refs) {
+export async function indexEvidenceRefs(
+  pool: Pool,
+  scope: ProjectScope,
+  refs: NormalizedEvidenceRef[]
+): Promise<number> {
   if (!refs.length) return 0;
   const payload = refs.map((row) => ({
     project_id: scope.projectId,
@@ -118,11 +162,14 @@ export async function indexEvidenceRefs(pool, scope, refs) {
   return result.rowCount || 0;
 }
 
-export async function writeAuditEvent(pool, event) {
+export async function writeAuditEvent(
+  pool: Pool,
+  event: AuditEventInput
+): Promise<{ id: string; created_at: string }> {
   const evidenceRefs = normalizeEvidenceRefs(event?.evidenceRefs);
   const payload = event?.payload && typeof event.payload === "object" ? event.payload : {};
   const status = String(event?.status || "ok");
-  const { rows } = await pool.query(
+  const { rows } = await pool.query<{ id: string; created_at: string }>(
     `
       INSERT INTO audit_events(
         project_id,
@@ -139,7 +186,7 @@ export async function writeAuditEvent(pool, event) {
         evidence_refs
       )
       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::jsonb, $12::jsonb)
-      RETURNING id, created_at
+      RETURNING id, created_at::text
     `,
     [
       event.projectId,
@@ -165,7 +212,11 @@ export async function writeAuditEvent(pool, event) {
   return rows[0];
 }
 
-export async function listAuditEvents(pool, scope, options = {}) {
+export async function listAuditEvents(
+  pool: Pool,
+  scope: ProjectScope,
+  options: AuditListOptions = {}
+): Promise<Record<string, unknown>[]> {
   const limitRaw = Number.parseInt(String(options.limit || "50"), 10);
   const limit = Number.isFinite(limitRaw) ? Math.max(1, Math.min(limitRaw, 200)) : 50;
   const offsetRaw = Number.parseInt(String(options.offset || "0"), 10);
@@ -197,5 +248,5 @@ export async function listAuditEvents(pool, scope, options = {}) {
     ? [scope.projectId, scope.accountScopeId, action, limit, offset]
     : [scope.projectId, scope.accountScopeId, limit, offset];
   const { rows } = await pool.query(query, values);
-  return rows;
+  return rows as Record<string, unknown>[];
 }
