@@ -12,12 +12,17 @@ import { ApiError } from "./api-contract.js";
 
 /**
  * Returns the effective role for the current request.
- * - If authenticated via API key, returns "owner" (API keys are system-level).
+ * - If authenticated via API key with admin scope, returns "owner".
+ * - If authenticated via API key without admin scope, returns "pm".
  * - If user_role is set from the session JOIN, use that.
  * - If no user_id (legacy env var session), default to "owner".
  */
 export function getEffectiveRole(request) {
-  if (request.apiKey) return "owner";
+  if (request.apiKey) {
+    if (request.auth?.user_role) return request.auth.user_role;
+    const scopes = Array.isArray(request.apiKey?.scopes) ? request.apiKey.scopes : [];
+    return scopes.includes("admin") ? "owner" : "pm";
+  }
   return request.auth?.user_role || "owner";
 }
 

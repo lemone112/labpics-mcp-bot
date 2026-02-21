@@ -429,7 +429,7 @@ async function main() {
   });
 
   const pool = createDbPool(databaseUrl, app.log);
-  const apiKeyAuthHandler = createApiKeyAuth(pool);
+  const apiKeyAuthHandler = createApiKeyAuth(pool, app.log);
   const currentFile = fileURLToPath(import.meta.url);
   const currentDir = path.dirname(currentFile);
   const migrationsDir = path.join(currentDir, "..", "db", "migrations");
@@ -739,16 +739,35 @@ async function main() {
       }
     }
 
+    const isMutating = !["GET", "HEAD", "OPTIONS"].includes(String(request.method || "GET").toUpperCase());
     if (isPublic) return;
 
     // API key auth: if X-API-Key header is present, authenticate via key
     if (request.headers["x-api-key"]) {
       try {
         await apiKeyAuthHandler(request);
-        if (request.auth) return; // successfully authenticated via API key
       } catch (err) {
         return sendError(reply, requestId, new ApiError(err.statusCode || 401, "unauthorized", err.message));
       }
+
+      if (!request.auth || !request.apiKey) {
+        return sendError(reply, requestId, new ApiError(401, "unauthorized", "Unauthorized"));
+      }
+
+      const apiKeyRateKey = `api_key:${request.apiKey.id}`;
+      if (!checkApiRateLimit(apiKeyRateKey, API_RATE_LIMIT_SESSION)) {
+        return sendError(reply, requestId, new ApiError(429, "rate_limited", "Too many requests"));
+      }
+
+      if (isMutating) {
+        const scopes = request.apiKey.scopes || [];
+        if (!scopes.includes("write") && !scopes.includes("admin")) {
+          return sendError(reply, requestId, new ApiError(403, "scope_insufficient", "API key lacks 'write' scope for this operation"));
+        }
+      }
+
+      // API keys don't use CSRF and don't carry session_id.
+      return;
     }
 
     const sid = request.cookies?.[cookieName];
@@ -779,19 +798,6 @@ async function main() {
     const sessionKey = `session:${sid}`;
     if (!checkApiRateLimit(sessionKey, API_RATE_LIMIT_SESSION)) {
       return sendError(reply, requestId, new ApiError(429, "rate_limited", "Too many requests"));
-    }
-
-    const isMutating = !["GET", "HEAD", "OPTIONS"].includes(String(request.method || "GET").toUpperCase());
-
-    // API key auth: enforce scopes on mutating requests, skip CSRF
-    if (request.apiKey) {
-      if (isMutating) {
-        const scopes = request.apiKey.scopes || [];
-        if (!scopes.includes("write") && !scopes.includes("admin")) {
-          return sendError(reply, requestId, new ApiError(403, "scope_insufficient", "API key lacks 'write' scope for this operation"));
-        }
-      }
-      return; // API keys don't use CSRF
     }
 
     if (isMutating) {

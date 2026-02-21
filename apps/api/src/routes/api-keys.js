@@ -1,11 +1,35 @@
 import { generateApiKey } from "../infra/api-keys.js";
 import { ApiError, sendError } from "../infra/api-contract.js";
+import { getEffectiveRole } from "../infra/rbac.js";
+
+function requireOwnerSession(request, reply) {
+  const role = getEffectiveRole(request);
+  if (role !== "owner" || request.apiKey) {
+    return sendError(reply, request.requestId, new ApiError(403, "forbidden", "Only owner session can manage API keys"));
+  }
+  return null;
+}
+
+function sanitizeScopes(input) {
+  const allowed = new Set(["read", "write", "admin"]);
+  const source = Array.isArray(input) ? input : [];
+  const unique = new Set();
+  for (const item of source) {
+    const scope = String(item || "").trim().toLowerCase();
+    if (allowed.has(scope)) unique.add(scope);
+  }
+  if (unique.size === 0) unique.add("read");
+  return Array.from(unique);
+}
 
 export function registerApiKeyRoutes(ctx) {
   const { registerGet, registerPost, pool } = ctx;
 
   // List API keys for the current project
   registerGet("/api-keys", async (request, reply) => {
+    const roleErr = requireOwnerSession(request, reply);
+    if (roleErr) return roleErr;
+
     const projectId = request.auth?.active_project_id;
     if (!projectId) {
       return sendError(reply, request.requestId, new ApiError(400, "project_required", "Active project required"));
@@ -26,6 +50,9 @@ export function registerApiKeyRoutes(ctx) {
 
   // Create a new API key
   registerPost("/api-keys", async (request, reply) => {
+    const roleErr = requireOwnerSession(request, reply);
+    if (roleErr) return roleErr;
+
     const projectId = request.auth?.active_project_id;
     const accountScopeId = request.auth?.account_scope_id;
     if (!projectId || !accountScopeId) {
@@ -34,7 +61,7 @@ export function registerApiKeyRoutes(ctx) {
 
     const body = request.body || {};
     const name = String(body.name || "").trim().slice(0, 100) || "Unnamed key";
-    const scopes = Array.isArray(body.scopes) ? body.scopes.filter((s) => ["read", "write", "admin"].includes(s)) : ["read"];
+    const scopes = sanitizeScopes(body.scopes);
     const expiresAt = body.expires_at ? new Date(body.expires_at) : null;
 
     if (expiresAt && Number.isNaN(expiresAt.getTime())) {
@@ -60,6 +87,9 @@ export function registerApiKeyRoutes(ctx) {
 
   // Delete an API key
   registerPost("/api-keys/revoke", async (request, reply) => {
+    const roleErr = requireOwnerSession(request, reply);
+    if (roleErr) return roleErr;
+
     const projectId = request.auth?.active_project_id;
     if (!projectId) {
       return sendError(reply, request.requestId, new ApiError(400, "project_required", "Active project required"));
