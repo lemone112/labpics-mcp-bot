@@ -41,6 +41,7 @@ import {
   ContinuityApplySchema,
   SearchAnalyticsTrackSchema,
   SearchAnalyticsSummarySchema,
+  SearchSuggestionsSchema,
 } from "./infra/schemas.js";
 import { rateLimitHook } from "./infra/rate-limit.js";
 import { applyMigrations } from "../db/migrate-lib.js";
@@ -864,7 +865,7 @@ async function main() {
     IdentitySuggestionApplySchema, ConnectorRetrySchema,
     AnalyticsRefreshSchema, OutboundApproveSchema, OutboundProcessSchema,
     LoopsSyncSchema, UpsellStatusSchema, ContinuityApplySchema,
-    SearchAnalyticsTrackSchema, SearchAnalyticsSummarySchema,
+    SearchAnalyticsTrackSchema, SearchAnalyticsSummarySchema, SearchSuggestionsSchema,
     // Auth helpers
     normalizeAccountUsername, assertLoginRateLimit, recordLoginFailure,
     clearLoginFailures, timingSafeStringEqual, auth, createSession,

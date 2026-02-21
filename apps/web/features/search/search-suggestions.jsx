@@ -1,7 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Clock, Search, Trash2, TrendingUp } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { Clock, Trash2, TrendingUp } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -13,13 +13,13 @@ import {
   CommandSeparator,
 } from "@/components/ui/command";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { apiFetch } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
 const STORAGE_KEY = "labpics:search_history";
 const MAX_HISTORY = 20;
 
-/** Popular query suggestions (static, could be dynamic from analytics later) */
-const POPULAR_QUERIES = [
+const FALLBACK_POPULAR_QUERIES = [
   "статус проекта",
   "дедлайн релиза",
   "обратная связь от клиента",
@@ -94,6 +94,7 @@ export function SearchSuggestions({
   className,
 }) {
   const [history, setHistory] = useState([]);
+  const [remotePopular, setRemotePopular] = useState([]);
 
   // Load history on mount and when popover opens
   useEffect(() => {
@@ -102,6 +103,29 @@ export function SearchSuggestions({
     }
   }, [open]);
 
+
+  useEffect(() => {
+    if (!open) return;
+
+    const timeoutId = setTimeout(async () => {
+      try {
+        const data = await apiFetch(`/search/suggestions?q=${encodeURIComponent(query || "")}&limit=8&days=30`, {
+          method: "GET"
+        });
+        const suggestions = Array.isArray(data?.suggestions)
+          ? data.suggestions.map((item) => String(item?.query || "").trim()).filter(Boolean)
+          : [];
+        setRemotePopular(suggestions.slice(0, 8));
+      } catch {
+        setRemotePopular([]);
+      }
+    }, 250);
+
+    return () => {
+      clearTimeout(timeoutId);
+    };
+  }, [open, query]);
+
   const filteredHistory = useMemo(() => {
     if (!query) return history;
     const lowerQuery = query.toLowerCase();
@@ -109,14 +133,18 @@ export function SearchSuggestions({
   }, [history, query]);
 
   const filteredPopular = useMemo(() => {
-    if (!query) return POPULAR_QUERIES;
+    const baseline = remotePopular.length > 0 ? remotePopular : FALLBACK_POPULAR_QUERIES;
+    if (!query) {
+      const historySet = new Set(history.map((h) => h.toLowerCase()));
+      return baseline.filter((item) => !historySet.has(item.toLowerCase()));
+    }
+
     const lowerQuery = query.toLowerCase();
-    // Exclude items that are already in history
     const historySet = new Set(history.map((h) => h.toLowerCase()));
-    return POPULAR_QUERIES.filter(
+    return baseline.filter(
       (p) => p.toLowerCase().includes(lowerQuery) && !historySet.has(p.toLowerCase())
     );
-  }, [query, history]);
+  }, [query, history, remotePopular]);
 
   function handleSelect(value) {
     onSelectQuery(value);

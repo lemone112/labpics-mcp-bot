@@ -126,6 +126,8 @@ export const LightRagQuerySchema = z.object({
   sourceFilter: z.array(z.string()).optional().nullable().default(null),
   date_from: z.coerce.date().optional().nullable().default(null),
   date_to: z.coerce.date().optional().nullable().default(null),
+  offset: z.coerce.number().int().min(0).max(10_000).optional().default(0),
+  limit: z.coerce.number().int().min(1).max(100).optional().default(10),
 });
 
 export const LightRagFeedbackSchema = z.object({
@@ -154,6 +156,13 @@ export const SearchAnalyticsTrackSchema = z.object({
   clicked_source_type: optionalTrimmedString(100),
   event_type: z.enum(["search", "click", "suggestion"]).optional().default("search"),
   duration_ms: z.coerce.number().int().min(0).max(300000).optional().nullable(),
+});
+
+
+export const SearchSuggestionsSchema = z.object({
+  q: optionalTrimmedString(4000),
+  limit: z.coerce.number().int().min(1).max(20).optional().default(8),
+  days: z.coerce.number().int().min(1).max(365).optional().default(30),
 });
 
 export const SearchAnalyticsSummarySchema = z.object({

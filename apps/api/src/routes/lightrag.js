@@ -4,7 +4,7 @@ import { requireProjectScope } from "../infra/scope.js";
 import { writeAuditEvent } from "../domains/core/audit.js";
 import { getLightRagStatus, queryLightRag, refreshLightRag, submitLightRagFeedback } from "../domains/rag/lightrag.js";
 import { rankSearchResults, computeRankingStats } from "../domains/rag/search-ranking.js";
-import { trackSearchEvent, getSearchAnalyticsSummary } from "../domains/rag/search-analytics.js";
+import { trackSearchEvent, getSearchAnalyticsSummary, getSearchSuggestions } from "../domains/rag/search-analytics.js";
 
 
 export function assertDateRange(dateFrom, dateTo) {
@@ -17,11 +17,24 @@ export function assertDateRange(dateFrom, dateTo) {
   }
 }
 
+
+export function paginateEvidence(evidence, offset, limit) {
+  const source = Array.isArray(evidence) ? evidence : [];
+  const safeOffset = Math.max(0, Number(offset) || 0);
+  const safeLimit = Math.max(1, Number(limit) || 10);
+  return {
+    evidence: source.slice(safeOffset, safeOffset + safeLimit),
+    total: source.length,
+    offset: safeOffset,
+    limit: safeLimit,
+  };
+}
+
 /**
  * @param {object} ctx
  */
 export function registerLightragRoutes(ctx) {
-  const { registerGet, registerPost, pool, cache, SearchSchema, LightRagQuerySchema, LightRagFeedbackSchema, SearchAnalyticsTrackSchema, SearchAnalyticsSummarySchema } = ctx;
+  const { registerGet, registerPost, pool, cache, SearchSchema, LightRagQuerySchema, LightRagFeedbackSchema, SearchAnalyticsTrackSchema, SearchAnalyticsSummarySchema, SearchSuggestionsSchema } = ctx;
 
   registerPost("/search", async (request, reply) => {
     const scope = requireProjectScope(request);
@@ -51,7 +64,7 @@ export function registerLightragRoutes(ctx) {
     const body = parseBody(LightRagQuerySchema, request.body);
     assertDateRange(body.date_from, body.date_to);
 
-    const ragCacheKey = `lightrag:${scope.projectId}:${cacheKeyHash(body.query, String(body.topK), JSON.stringify(body.sourceFilter || []), String(body.date_from || ''), String(body.date_to || ''))}`;
+    const ragCacheKey = `lightrag:${scope.projectId}:${cacheKeyHash(body.query, String(body.topK), JSON.stringify(body.sourceFilter || []), String(body.date_from || ''), String(body.date_to || ''), String(body.offset || 0), String(body.limit || 10))}`;
     const cached = await cache.get(ragCacheKey);
     if (cached) return sendOk(reply, request.requestId, { ...cached, cached: true });
 
@@ -67,10 +80,14 @@ export function registerLightragRoutes(ctx) {
     // Rank evidence by composite score (semantic + recency + authority)
     const rankedEvidence = rankSearchResults(result.evidence || []);
     const rankingStats = computeRankingStats(rankedEvidence);
+    const paged = paginateEvidence(rankedEvidence, body.offset, body.limit);
 
     const enrichedResult = {
       ...result,
-      evidence: rankedEvidence,
+      evidence: paged.evidence,
+      evidence_total: paged.total,
+      evidence_offset: paged.offset,
+      evidence_limit: paged.limit,
       ranking_stats: rankingStats,
       duration_ms: durationMs,
     };
@@ -139,6 +156,18 @@ export function registerLightragRoutes(ctx) {
       durationMs: body.duration_ms,
     }, request.log);
     return sendOk(reply, request.requestId, { tracked: Boolean(eventId), event_id: eventId });
+  });
+
+
+  registerGet("/search/suggestions", async (request, reply) => {
+    const scope = requireProjectScope(request);
+    const query = parseBody(SearchSuggestionsSchema, request.query || {});
+    const suggestions = await getSearchSuggestions(pool, scope, {
+      query: query.q,
+      limit: query.limit,
+      days: query.days,
+    });
+    return sendOk(reply, request.requestId, { suggestions });
   });
 
   registerGet("/search/analytics/summary", async (request, reply) => {

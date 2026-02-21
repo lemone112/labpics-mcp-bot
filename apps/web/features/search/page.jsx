@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Search as SearchIcon, SlidersHorizontal } from "lucide-react";
 
 import { PageShell } from "@/components/page-shell";
@@ -30,9 +30,11 @@ export default function SearchFeaturePage() {
   const [query, setQuery] = useState("");
   const [topK, setTopK] = useState(10);
   const [busy, setBusy] = useState(false);
+  const [debouncePending, setDebouncePending] = useState(false);
   const [suggestionsOpen, setSuggestionsOpen] = useState(false);
   const [showFilters, setShowFilters] = useState(true);
   const inputRef = useRef(null);
+  const skipDebouncedSearchRef = useRef(false);
 
   // Results state
   const [chunks, setChunks] = useState([]);
@@ -48,15 +50,14 @@ export default function SearchFeaturePage() {
 
   const { addToast } = useToast();
 
-  const totalPages = Math.max(1, Math.ceil(evidence.length / pageSize));
-  const pagedEvidence = useMemo(() => {
-    const start = (currentPage - 1) * pageSize;
-    return evidence.slice(start, start + pageSize);
-  }, [evidence, currentPage, pageSize]);
+  const totalEvidence = Number(meta?.evidenceTotal || 0);
+  const totalPages = Math.max(1, Math.ceil(totalEvidence / pageSize));
 
   useEffect(() => {
     setCurrentPage(1);
   }, [query, filters, pageSize]);
+
+
 
   useEffect(() => {
     if (currentPage > totalPages) {
@@ -64,10 +65,37 @@ export default function SearchFeaturePage() {
     }
   }, [currentPage, totalPages]);
 
+  useEffect(() => {
+    if (!hasSearched) return;
+
+    if (skipDebouncedSearchRef.current) {
+      skipDebouncedSearchRef.current = false;
+      setDebouncePending(false);
+      return;
+    }
+
+    const trimmedQuery = query.trim();
+    if (!trimmedQuery) {
+      setDebouncePending(false);
+      return;
+    }
+
+    setDebouncePending(true);
+    const timeoutId = setTimeout(() => {
+      executeSearch(trimmedQuery, filters, { offset: 0, limit: pageSize, silentToast: true, saveHistory: false });
+      setDebouncePending(false);
+    }, 300);
+
+    return () => {
+      clearTimeout(timeoutId);
+      setDebouncePending(false);
+    };
+  }, [query, filters, hasSearched, executeSearch, pageSize]);
+
   /**
    * Execute search with current query and filters.
    */
-  const executeSearch = useCallback(async (searchQuery, searchFilters) => {
+  const executeSearch = useCallback(async (searchQuery, searchFilters, options = {}) => {
     const q = (searchQuery ?? query).trim();
     if (!q) return;
 
@@ -75,8 +103,6 @@ export default function SearchFeaturePage() {
     setHasSearched(true);
     setSuggestionsOpen(false);
 
-    // Save to history
-    addToSearchHistory(q);
 
     try {
       // Build source filter from selected types
@@ -85,6 +111,13 @@ export default function SearchFeaturePage() {
         : null;
       const dateFrom = searchFilters?.dateRange?.from || null;
       const dateTo = searchFilters?.dateRange?.to || null;
+
+      const offset = Math.max(0, Number(options.offset) || 0);
+      const limit = Math.max(1, Number(options.limit) || pageSize);
+
+      if (offset === 0 && options.saveHistory !== false) {
+        addToSearchHistory(q);
+      }
 
       const startTime = Date.now();
       const data = await apiFetch("/lightrag/query", {
@@ -95,6 +128,8 @@ export default function SearchFeaturePage() {
           sourceFilter,
           date_from: dateFrom,
           date_to: dateTo,
+          offset,
+          limit,
         },
         timeoutMs: 10_000,
       });
@@ -103,19 +138,24 @@ export default function SearchFeaturePage() {
       setChunks(Array.isArray(data?.chunks) ? data.chunks : []);
       setEvidence(Array.isArray(data?.evidence) ? data.evidence : []);
       setAnswer(String(data?.answer || ""));
+      const totalResults = Number(data?.evidence_total) || (data?.evidence || []).length;
       setMeta({
         stats: data?.stats || {},
         topK: data?.topK,
         rankingStats: data?.ranking_stats || null,
         durationMs: data?.duration_ms || clientDuration,
         qualityScore: data?.quality_score,
+        evidenceTotal: totalResults,
+        evidenceOffset: Number(data?.evidence_offset) || offset,
+        evidenceLimit: Number(data?.evidence_limit) || limit,
       });
 
-      const totalResults = (data?.evidence || []).length;
-      addToast({
-        type: "success",
-        message: `Найдено ${totalResults} результатов (${data?.stats?.chunks || 0} chunks)`,
-      });
+      if (!options.silentToast) {
+        addToast({
+          type: "success",
+          message: `Найдено ${totalResults} результатов (${data?.stats?.chunks || 0} chunks)`,
+        });
+      }
 
       // Track search analytics (fire-and-forget)
       apiFetch("/search/analytics", {
@@ -136,14 +176,15 @@ export default function SearchFeaturePage() {
     } finally {
       setBusy(false);
     }
-  }, [query, topK, addToast]);
+  }, [query, topK, addToast, pageSize]);
 
   /**
    * Form submission handler.
    */
   function onSearch(event) {
     event.preventDefault();
-    executeSearch(query, filters);
+    skipDebouncedSearchRef.current = true;
+    executeSearch(query, filters, { offset: 0, limit: pageSize });
   }
 
   /**
@@ -152,7 +193,8 @@ export default function SearchFeaturePage() {
   function onSelectSuggestion(suggestion) {
     setQuery(suggestion);
     // Execute search immediately with the suggestion
-    executeSearch(suggestion, filters);
+    skipDebouncedSearchRef.current = true;
+    executeSearch(suggestion, filters, { offset: 0, limit: pageSize });
   }
 
   /**
@@ -161,9 +203,18 @@ export default function SearchFeaturePage() {
   function onFiltersChange(nextFilters) {
     setFilters(nextFilters);
     if (query.trim() && hasSearched) {
-      executeSearch(query, nextFilters);
+      skipDebouncedSearchRef.current = true;
+      executeSearch(query, nextFilters, { offset: 0, limit: pageSize });
     }
   }
+
+
+  useEffect(() => {
+    if (!hasSearched || !query.trim()) return;
+    const offset = (currentPage - 1) * pageSize;
+    skipDebouncedSearchRef.current = true;
+    executeSearch(query, filters, { offset, limit: pageSize, silentToast: true, saveHistory: false });
+  }, [currentPage, pageSize, hasSearched, query, filters, executeSearch]);
 
   /**
    * Track result click analytics.
@@ -173,7 +224,7 @@ export default function SearchFeaturePage() {
       method: "POST",
       body: {
         query,
-        result_count: evidence.length,
+        result_count: totalEvidence,
         filters: { sourceFilter: filters.sourceTypes, topK },
         clicked_result_id: item.source_pk || item.source_ref || null,
         clicked_source_type: item.source_type || null,
@@ -253,6 +304,11 @@ export default function SearchFeaturePage() {
                 <SearchIcon className="size-4" />
                 Найти
               </Button>
+              {debouncePending ? (
+                <Badge variant="secondary" className="whitespace-nowrap">
+                  Обновляем через 300мс…
+                </Badge>
+              ) : null}
               <Button
                 type="button"
                 variant={showFilters ? "secondary" : "outline"}
@@ -319,7 +375,7 @@ export default function SearchFeaturePage() {
                 <div className="flex items-center justify-between">
                   <h3 className="text-sm font-medium text-foreground">
                     Результаты
-                    <span className="ml-2 text-muted-foreground">({evidence.length})</span>
+                    <span className="ml-2 text-muted-foreground">({totalEvidence})</span>
                   </h3>
                   {meta?.rankingStats ? (
                     <span className="text-xs text-muted-foreground">
@@ -327,7 +383,7 @@ export default function SearchFeaturePage() {
                     </span>
                   ) : null}
                 </div>
-                {pagedEvidence.map((item, idx) => (
+                {evidence.map((item, idx) => (
                   <SearchResultCard
                     key={`${item.source_type}-${item.source_pk || idx}`}
                     item={item}
@@ -336,10 +392,10 @@ export default function SearchFeaturePage() {
                   />
                 ))}
 
-                {evidence.length > 0 ? (
+                {totalEvidence > 0 ? (
                   <div className="mt-2 flex flex-wrap items-center justify-between gap-2 border-t pt-3">
                     <p className="text-xs text-muted-foreground">
-                      Показано {(currentPage - 1) * pageSize + 1}-{Math.min(currentPage * pageSize, evidence.length)} из {evidence.length}
+                      Показано {Math.min((meta?.evidenceOffset || 0) + 1, totalEvidence)}-{Math.min((meta?.evidenceOffset || 0) + evidence.length, totalEvidence)} из {totalEvidence}
                     </p>
                     <div className="flex items-center gap-2">
                       <label className="text-xs text-muted-foreground" htmlFor="search-page-size">
@@ -348,7 +404,7 @@ export default function SearchFeaturePage() {
                       <select
                         id="search-page-size"
                         value={String(pageSize)}
-                        onChange={(e) => setPageSize(Number(e.target.value))}
+                        onChange={(e) => { setCurrentPage(1); setPageSize(Number(e.target.value)); }}
                         className="h-8 rounded-md border border-input bg-background px-2 text-xs"
                       >
                         <option value="5">5</option>

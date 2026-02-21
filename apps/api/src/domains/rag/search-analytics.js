@@ -214,3 +214,47 @@ export async function getSearchAnalyticsSummary(pool, scope, options = {}) {
     source_clicks: sourceBreakdownResult.rows || [],
   };
 }
+
+
+/**
+ * Get autocomplete search suggestions from recent analytics queries.
+ *
+ * @param {import('pg').Pool} pool
+ * @param {object} scope - { projectId, accountScopeId }
+ * @param {object} [options]
+ * @param {string} [options.query] - Prefix/substring query to match
+ * @param {number} [options.limit] - Max suggestions count
+ * @param {number} [options.days] - Lookback window in days
+ * @returns {Promise<Array<{query: string, search_count: number}>>}
+ */
+export async function getSearchSuggestions(pool, scope, options = {}) {
+  const queryText = safeText(options.query || "", 4000).toLowerCase();
+  const limit = Math.max(1, Math.min(Number(options.limit) || 8, 20));
+  const days = Math.max(1, Math.min(Number(options.days) || 30, 365));
+  const pattern = queryText ? `%${queryText}%` : null;
+
+  const { rows } = await pool.query(
+    `
+      SELECT
+        query,
+        count(*)::int AS search_count
+      FROM search_analytics
+      WHERE project_id = $1
+        AND account_scope_id = $2
+        AND event_type = 'search'
+        AND btrim(COALESCE(query, '')) <> ''
+        AND created_at >= now() - make_interval(days => $3)
+        AND ($4::text IS NULL OR lower(query) LIKE $4::text)
+      GROUP BY query
+      ORDER BY search_count DESC, max(created_at) DESC
+      LIMIT $5
+    `,
+    [scope.projectId, scope.accountScopeId, days, pattern, limit]
+  );
+
+  return rows.map((row) => ({
+    query: safeText(row.query, 4000),
+    search_count: Number(row.search_count || 0),
+  }));
+}
+

@@ -14,6 +14,7 @@ import {
   LightRagQuerySchema,
   LightRagFeedbackSchema,
   SearchSchema,
+  SearchSuggestionsSchema,
 } from "../src/infra/schemas.js";
 
 describe("parseBody", () => {
@@ -231,6 +232,33 @@ describe("LightRagQuerySchema", () => {
     assert.ok(result.date_to instanceof Date);
   });
 
+
+  it("supports pagination params", () => {
+    const result = parseBody(LightRagQuerySchema, {
+      query: "search",
+      offset: 30,
+      limit: 20,
+    });
+    assert.equal(result.offset, 30);
+    assert.equal(result.limit, 20);
+  });
+
+  it("applies pagination defaults", () => {
+    const result = parseBody(LightRagQuerySchema, { query: "search" });
+    assert.equal(result.offset, 0);
+    assert.equal(result.limit, 10);
+  });
+  it("rejects invalid pagination bounds", () => {
+    assert.throws(
+      () => parseBody(LightRagQuerySchema, { query: "q", offset: -1 }),
+      (err) => err.status === 400
+    );
+    assert.throws(
+      () => parseBody(LightRagQuerySchema, { query: "q", limit: 0 }),
+      (err) => err.status === 400
+    );
+  });
+
   it("rejects empty query", () => {
     assert.throws(
       () => parseBody(LightRagQuerySchema, { query: "" }),
@@ -280,5 +308,27 @@ describe("SearchSchema", () => {
     });
     assert.ok(result.date_from instanceof Date);
     assert.ok(result.date_to instanceof Date);
+  });
+});
+
+
+describe("SearchSuggestionsSchema", () => {
+  it("applies defaults", () => {
+    const result = parseBody(SearchSuggestionsSchema, {});
+    assert.equal(result.q, null);
+    assert.equal(result.limit, 8);
+    assert.equal(result.days, 30);
+  });
+
+  it("accepts custom values", () => {
+    const result = parseBody(SearchSuggestionsSchema, { q: "дед", limit: 5, days: 7 });
+    assert.equal(result.q, "дед");
+    assert.equal(result.limit, 5);
+    assert.equal(result.days, 7);
+  });
+
+  it("rejects invalid bounds", () => {
+    assert.throws(() => parseBody(SearchSuggestionsSchema, { limit: 0 }), (err) => err.status === 400);
+    assert.throws(() => parseBody(SearchSuggestionsSchema, { days: 0 }), (err) => err.status === 400);
   });
 });
