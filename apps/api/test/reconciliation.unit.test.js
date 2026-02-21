@@ -1,76 +1,12 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-
-// Re-implement pure functions from reconciliation.js for testing
-// (they are not exported but contain critical business logic)
-
-function clampPercent(value) {
-  return Math.max(0, Math.min(100, Number(value || 0)));
-}
-
-function toNumber(value, fallback = 0) {
-  const parsed = Number(value);
-  if (!Number.isFinite(parsed)) return fallback;
-  return parsed;
-}
-
-function percentOf(ok, total) {
-  const safeTotal = Math.max(0, toNumber(total, 0));
-  if (safeTotal <= 0) return 100;
-  return clampPercent((toNumber(ok, 0) / safeTotal) * 100);
-}
-
-function averagePercent(parts) {
-  if (!Array.isArray(parts) || !parts.length) return 100;
-  const sum = parts.reduce((acc, item) => acc + clampPercent(item), 0);
-  return clampPercent(sum / parts.length);
-}
-
-function finalizeMetric(connector, source, totalCount, missingCount, duplicateCount, payload) {
-  const total = Math.max(0, toNumber(totalCount, 0));
-  const missing = Math.max(0, toNumber(missingCount, 0));
-  const duplicates = Math.max(0, toNumber(duplicateCount, 0));
-  const completeness = clampPercent(
-    payload?.completeness_pct != null
-      ? payload.completeness_pct
-      : percentOf(Math.max(0, total - missing - duplicates), total)
-  );
-  return {
-    connector,
-    source,
-    total_count: total,
-    missing_count: missing,
-    duplicate_count: duplicates,
-    completeness_pct: Number(completeness.toFixed(2)),
-    payload: payload && typeof payload === "object" ? payload : {},
-  };
-}
-
-function buildPortfolioMetric(source, connectorMetrics = []) {
-  const rows = Array.isArray(connectorMetrics) ? connectorMetrics : [];
-  const totals = rows.reduce(
-    (acc, row) => {
-      acc.total += toNumber(row.total_count, 0);
-      acc.missing += toNumber(row.missing_count, 0);
-      acc.duplicates += toNumber(row.duplicate_count, 0);
-      acc.weighted += toNumber(row.completeness_pct, 0) * Math.max(1, toNumber(row.total_count, 0));
-      acc.weight += Math.max(1, toNumber(row.total_count, 0));
-      return acc;
-    },
-    { total: 0, missing: 0, duplicates: 0, weighted: 0, weight: 0 }
-  );
-  const completeness = totals.weight > 0 ? totals.weighted / totals.weight : 100;
-  return finalizeMetric("portfolio", source, totals.total, totals.missing, totals.duplicates, {
-    completeness_pct: completeness,
-    by_connector: rows.map((item) => ({
-      connector: item.connector,
-      completeness_pct: item.completeness_pct,
-      total_count: item.total_count,
-      missing_count: item.missing_count,
-      duplicate_count: item.duplicate_count,
-    })),
-  });
-}
+import {
+  averagePercent,
+  buildPortfolioMetric,
+  clampPercent,
+  finalizeMetric,
+  percentOf,
+} from "../src/domains/connectors/reconciliation.js";
 
 describe("clampPercent", () => {
   it("clamps to 0-100 range", () => {

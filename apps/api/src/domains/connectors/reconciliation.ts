@@ -1,23 +1,50 @@
-import { toPositiveInt, toNumber } from '../../infra/utils.js';
-import { writeAuditEvent } from '../core/audit.js';
+import { toPositiveInt, toNumber } from "../../infra/utils.js";
+import { writeAuditEvent } from "../core/audit.js";
+import type { Pool, ProjectScope } from "../../types/index.js";
 
-function clampPercent(value) {
+export interface ReconciliationMetric {
+  connector: string;
+  source: string;
+  total_count: number;
+  missing_count: number;
+  duplicate_count: number;
+  completeness_pct: number;
+  payload: Record<string, unknown>;
+}
+
+interface ReconciliationOptions {
+  source?: unknown;
+}
+
+interface ReconciliationListOptions {
+  days?: unknown;
+  limit?: unknown;
+}
+
+export function clampPercent(value: unknown): number {
   return Math.max(0, Math.min(100, Number(value || 0)));
 }
 
-function percentOf(ok, total) {
+export function percentOf(ok: unknown, total: unknown): number {
   const safeTotal = Math.max(0, toNumber(total, 0));
   if (safeTotal <= 0) return 100;
   return clampPercent((toNumber(ok, 0) / safeTotal) * 100);
 }
 
-function averagePercent(parts) {
+export function averagePercent(parts: unknown): number {
   if (!Array.isArray(parts) || !parts.length) return 100;
   const sum = parts.reduce((acc, item) => acc + clampPercent(item), 0);
   return clampPercent(sum / parts.length);
 }
 
-function finalizeMetric(connector, source, totalCount, missingCount, duplicateCount, payload) {
+export function finalizeMetric(
+  connector: string,
+  source: string,
+  totalCount: unknown,
+  missingCount: unknown,
+  duplicateCount: unknown,
+  payload: Record<string, unknown> | null
+): ReconciliationMetric {
   const total = Math.max(0, toNumber(totalCount, 0));
   const missing = Math.max(0, toNumber(missingCount, 0));
   const duplicates = Math.max(0, toNumber(duplicateCount, 0));
@@ -37,8 +64,12 @@ function finalizeMetric(connector, source, totalCount, missingCount, duplicateCo
   };
 }
 
-async function computeChatwootMetrics(pool, scope, source) {
-  const { rows } = await pool.query(
+async function computeChatwootMetrics(
+  pool: Pool,
+  scope: ProjectScope,
+  source: string
+): Promise<ReconciliationMetric> {
+  const { rows } = await pool.query<Record<string, unknown>>(
     `
       SELECT
         (SELECT count(*)::int FROM cw_contacts WHERE project_id = $1 AND account_scope_id = $2) AS contacts_total,
@@ -85,8 +116,12 @@ async function computeChatwootMetrics(pool, scope, source) {
   });
 }
 
-async function computeLinearMetrics(pool, scope, source) {
-  const { rows } = await pool.query(
+async function computeLinearMetrics(
+  pool: Pool,
+  scope: ProjectScope,
+  source: string
+): Promise<ReconciliationMetric> {
+  const { rows } = await pool.query<Record<string, unknown>>(
     `
       SELECT
         count(*)::int AS issues_total,
@@ -123,8 +158,12 @@ async function computeLinearMetrics(pool, scope, source) {
   });
 }
 
-async function computeAttioMetrics(pool, scope, source) {
-  const { rows } = await pool.query(
+async function computeAttioMetrics(
+  pool: Pool,
+  scope: ProjectScope,
+  source: string
+): Promise<ReconciliationMetric> {
+  const { rows } = await pool.query<Record<string, unknown>>(
     `
       WITH raw_accounts AS (
         SELECT count(*)::int AS total
@@ -195,12 +234,18 @@ async function computeAttioMetrics(pool, scope, source) {
   const mappedOpportunities = toNumber(row.mapped_opportunities_total, 0);
   const opportunitiesWithoutAccountRef = toNumber(row.opportunities_without_account_ref, 0);
   const opportunitiesWithAccountRef = toNumber(row.opportunities_with_account_ref_total, 0);
-  const opportunitiesUnmappedToCrmAccount = toNumber(row.opportunities_unmapped_to_crm_account_total, 0);
+  const opportunitiesUnmappedToCrmAccount = toNumber(
+    row.opportunities_unmapped_to_crm_account_total,
+    0
+  );
 
   const completeness = averagePercent([
     percentOf(mappedAccounts, rawAccounts),
     percentOf(mappedOpportunities, rawOpportunities),
-    percentOf(opportunitiesWithAccountRef - opportunitiesUnmappedToCrmAccount, opportunitiesWithAccountRef),
+    percentOf(
+      opportunitiesWithAccountRef - opportunitiesUnmappedToCrmAccount,
+      opportunitiesWithAccountRef
+    ),
     percentOf(rawOpportunities - opportunitiesWithoutAccountRef, rawOpportunities),
   ]);
 
@@ -218,14 +263,18 @@ async function computeAttioMetrics(pool, scope, source) {
   });
 }
 
-function buildPortfolioMetric(source, connectorMetrics = []) {
+export function buildPortfolioMetric(
+  source: string,
+  connectorMetrics: Array<Partial<ReconciliationMetric>> = []
+): ReconciliationMetric {
   const rows = Array.isArray(connectorMetrics) ? connectorMetrics : [];
   const totals = rows.reduce(
     (acc, row) => {
       acc.total += toNumber(row.total_count, 0);
       acc.missing += toNumber(row.missing_count, 0);
       acc.duplicates += toNumber(row.duplicate_count, 0);
-      acc.weighted += toNumber(row.completeness_pct, 0) * Math.max(1, toNumber(row.total_count, 0));
+      acc.weighted +=
+        toNumber(row.completeness_pct, 0) * Math.max(1, toNumber(row.total_count, 0));
       acc.weight += Math.max(1, toNumber(row.total_count, 0));
       return acc;
     },
@@ -244,7 +293,11 @@ function buildPortfolioMetric(source, connectorMetrics = []) {
   });
 }
 
-async function persistMetric(pool, scope, metric) {
+async function persistMetric(
+  pool: Pool,
+  scope: ProjectScope,
+  metric: ReconciliationMetric
+): Promise<void> {
   await pool.query(
     `
       INSERT INTO sync_reconciliation_metrics(
@@ -274,7 +327,21 @@ async function persistMetric(pool, scope, metric) {
   );
 }
 
-export async function runSyncReconciliation(pool, scope, options = {}) {
+export async function runSyncReconciliation(
+  pool: Pool,
+  scope: ProjectScope,
+  options: ReconciliationOptions = {}
+): Promise<{
+  source: string;
+  captured_at: string;
+  metrics: ReconciliationMetric[];
+  summary: {
+    completeness_pct: number;
+    missing_count: number;
+    duplicate_count: number;
+    total_count: number;
+  };
+}> {
   const source = String(options.source || "manual").trim().toLowerCase() || "manual";
   const chatwoot = await computeChatwootMetrics(pool, scope, source);
   const linear = await computeLinearMetrics(pool, scope, source);
@@ -289,7 +356,9 @@ export async function runSyncReconciliation(pool, scope, options = {}) {
   // --- Completeness alerting ---
   const minCompleteness = toNumber(
     process.env.CONNECTOR_RECONCILIATION_MIN_COMPLETENESS_PCT,
-    70, 0, 100
+    70,
+    0,
+    100
   );
   for (const metric of metrics) {
     if (metric.completeness_pct < minCompleteness) {
@@ -330,8 +399,11 @@ export async function runSyncReconciliation(pool, scope, options = {}) {
   };
 }
 
-export async function getCompletenessDiff(pool, scope) {
-  const { rows } = await pool.query(
+export async function getCompletenessDiff(
+  pool: Pool,
+  scope: ProjectScope
+): Promise<Array<Record<string, unknown>>> {
+  const { rows } = await pool.query<Record<string, unknown>>(
     `
       WITH latest AS (
         SELECT DISTINCT ON (connector)
@@ -368,12 +440,20 @@ export async function getCompletenessDiff(pool, scope) {
   return rows;
 }
 
-export async function listSyncReconciliation(pool, scope, options = {}) {
+export async function listSyncReconciliation(
+  pool: Pool,
+  scope: ProjectScope,
+  options: ReconciliationListOptions = {}
+): Promise<{
+  latest: Array<Record<string, unknown>>;
+  trend: Array<Record<string, unknown>>;
+  by_connector: Array<Record<string, unknown>>;
+}> {
   const days = toPositiveInt(options.days, 14, 1, 365);
   const limit = toPositiveInt(options.limit, 500, 20, 3000);
 
   const [latestRows, trendRows, byConnectorRows] = await Promise.all([
-    pool.query(
+    pool.query<Record<string, unknown>>(
       `
         SELECT DISTINCT ON (connector)
           connector,
@@ -391,7 +471,7 @@ export async function listSyncReconciliation(pool, scope, options = {}) {
       `,
       [scope.projectId, scope.accountScopeId]
     ),
-    pool.query(
+    pool.query<Record<string, unknown>>(
       `
         SELECT
           date_trunc('day', captured_at)::date::text AS point,
@@ -409,7 +489,7 @@ export async function listSyncReconciliation(pool, scope, options = {}) {
       `,
       [scope.projectId, scope.accountScopeId, days]
     ),
-    pool.query(
+    pool.query<Record<string, unknown>>(
       `
         SELECT
           date_trunc('day', captured_at)::date::text AS point,
