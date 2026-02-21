@@ -242,7 +242,7 @@ export async function queryLightRag(pool, scope, options = {}, logger = console)
           id,
           external_id::text AS source_ref,
           title,
-          left(COALESCE(next_step, ''), 320) AS snippet,
+          left(COALESCE(data->>'next_step', ''), 320) AS snippet,
           updated_at,
           jsonb_build_object(
             'state', state,
@@ -255,7 +255,7 @@ export async function queryLightRag(pool, scope, options = {}, logger = console)
           AND account_scope_id = $2
           AND (
             COALESCE(title, '') ILIKE ANY($3::text[])
-            OR COALESCE(next_step, '') ILIKE ANY($3::text[])
+            OR COALESCE(data->>'next_step', '') ILIKE ANY($3::text[])
           )
         AND ($4::timestamptz IS NULL OR updated_at >= $4::timestamptz)
           AND ($5::timestamptz IS NULL OR updated_at < $5::timestamptz)
