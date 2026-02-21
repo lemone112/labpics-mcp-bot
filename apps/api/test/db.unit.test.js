@@ -1,27 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-
-// Re-implement pure functions from db.js to avoid importing pg (external dep)
-
-function vectorLiteral(values) {
-  const nums = Array.isArray(values) ? values : [];
-  return `[${nums.map((v) => Number(v) || 0).join(",")}]`;
-}
-
-async function withTransaction(pool, fn) {
-  const client = await pool.connect();
-  try {
-    await client.query("BEGIN");
-    const result = await fn(client);
-    await client.query("COMMIT");
-    return result;
-  } catch (error) {
-    await client.query("ROLLBACK");
-    throw error;
-  } finally {
-    client.release();
-  }
-}
+import { vectorLiteral, withTransaction } from "../src/infra/db.js";
 
 describe("vectorLiteral", () => {
   it("converts array of numbers to PostgreSQL vector literal", () => {
