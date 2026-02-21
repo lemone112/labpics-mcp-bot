@@ -9,7 +9,7 @@ import { getEffectiveRole } from "../src/infra/rbac.js";
 
 const currentDir = dirname(fileURLToPath(import.meta.url));
 const indexSource = readFileSync(join(currentDir, "..", "src", "index.js"), "utf8");
-const apiKeysRouteSource = readFileSync(join(currentDir, "..", "src", "routes", "api-keys.js"), "utf8");
+const apiKeysRouteSource = readFileSync(join(currentDir, "..", "src", "routes", "api-keys.ts"), "utf8");
 
 test("getEffectiveRole treats non-admin API key as pm", () => {
   const role = getEffectiveRole({

@@ -226,11 +226,15 @@ test("index.js imports all new schemas", async () => {
 });
 
 test("dead letter endpoints exist in route files", async () => {
-  const { readFileSync } = await import("node:fs");
+  const { readFileSync, existsSync } = await import("node:fs");
   const { join, dirname } = await import("node:path");
   const { fileURLToPath } = await import("node:url");
   const currentDir = dirname(fileURLToPath(import.meta.url));
-  const connectorRouteSource = readFileSync(join(currentDir, "..", "src", "routes", "connectors.js"), "utf8");
+  const routesDir = join(currentDir, "..", "src", "routes");
+  const connectorRoutePathTs = join(routesDir, "connectors.ts");
+  const connectorRoutePathJs = join(routesDir, "connectors.js");
+  const connectorRoutePath = existsSync(connectorRoutePathTs) ? connectorRoutePathTs : connectorRoutePathJs;
+  const connectorRouteSource = readFileSync(connectorRoutePath, "utf8");
 
   assert.ok(connectorRouteSource.includes("/connectors/errors/dead-letter"), "Expected dead-letter GET endpoint");
   assert.ok(connectorRouteSource.includes("/connectors/errors/dead-letter/:id/retry"), "Expected dead-letter retry POST endpoint");

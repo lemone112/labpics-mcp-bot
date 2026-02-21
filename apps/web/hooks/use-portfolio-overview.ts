@@ -6,7 +6,21 @@ import { useQuery } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/api";
 import { normalizeProjectIds } from "@/lib/utils";
 
-export function usePortfolioOverview({ projectIds, enabled = true, messageLimit = 60, cardLimit = 24, sseConnected = false }) {
+type UsePortfolioOverviewParams = {
+  projectIds: unknown[];
+  enabled?: boolean;
+  messageLimit?: number;
+  cardLimit?: number;
+  sseConnected?: boolean;
+};
+
+export function usePortfolioOverview({
+  projectIds,
+  enabled = true,
+  messageLimit = 60,
+  cardLimit = 24,
+  sseConnected = false,
+}: UsePortfolioOverviewParams) {
   const ids = useMemo(() => normalizeProjectIds(projectIds), [projectIds]);
   const idsParam = useMemo(() => ids.join(","), [ids]);
 
@@ -25,7 +39,7 @@ export function usePortfolioOverview({ projectIds, enabled = true, messageLimit 
   return {
     payload: query.data ?? null,
     loading: query.isLoading,
-    error: query.error?.message || "",
+    error: (query.error as { message?: string } | null)?.message || "",
     reload: query.refetch,
     dataUpdatedAt: query.dataUpdatedAt,
   };

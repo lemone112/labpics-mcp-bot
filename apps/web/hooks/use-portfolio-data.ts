@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { apiFetch } from "@/lib/api";
+import { humanizeProjectError } from "@/lib/project-errors";
 import { readStorageValue, writeStorageValue } from "@/lib/safe-storage";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 
@@ -34,16 +35,6 @@ export function normalizeProjectId(value: unknown): string | null {
 function isLegacyScopeProject(project: ProjectLike): boolean {
   const name = String(project?.name || "").trim().toLowerCase();
   return name === "__legacy_scope__";
-}
-
-function humanizeProjectError(rawError: unknown, fallbackMessage: string): string {
-  const message = String((rawError as { message?: string } | null)?.message || fallbackMessage || "").trim();
-  if (!message) return "Не удалось обработать запрос по проектам";
-  const normalized = message.toLowerCase();
-  if (normalized === "internal_error") return "Временная ошибка сервера. Повторим автоматически.";
-  if (normalized.includes("account_scope_mismatch")) return "Выбранные проекты относятся к разным рабочим областям.";
-  if (normalized.includes("project_not_found")) return "Проект больше не доступен. Обновим список автоматически.";
-  return message;
 }
 
 /**

@@ -1,9 +1,11 @@
-import { ApiError, parseBody, sendError, sendOk, parseLimit } from "../infra/api-contract.js";
+import { ApiError, parseBody, sendError, sendOk } from "../infra/api-contract.js";
 import { writeAuditEvent } from "../domains/core/audit.js";
 import { getEffectiveRole } from "../infra/rbac.js";
-import { assertUuid } from "../infra/utils.js";
+import { assertUuid, requestIdOf } from "../infra/utils.js";
 import { z } from "zod";
 import bcrypt from "bcrypt";
+import type { Pool } from "../types/index.js";
+import type { FastifyReply, FastifyRequest } from "fastify";
 
 const BCRYPT_ROUNDS = 12;
 
@@ -30,23 +32,63 @@ const UnassignProjectSchema = z.object({
   project_id: z.string().uuid(),
 });
 
+type RequestLike = FastifyRequest & {
+  auth?: {
+    active_project_id?: string | null;
+    account_scope_id?: string | null;
+    user_id?: string | null;
+    user_role?: "owner" | "pm" | null;
+    username?: string | null;
+  };
+  params?: Record<string, unknown>;
+  query?: Record<string, unknown>;
+  body?: unknown;
+  requestId?: string;
+  log?: {
+    warn?: (payload: unknown, msg?: string) => void;
+  };
+};
+
+type ReplyLike = FastifyReply;
+
+type RegisterFn = (
+  path: string,
+  handler: (request: RequestLike, reply: ReplyLike) => Promise<unknown> | unknown
+) => void;
+
+interface RouteCtx {
+  registerGet: RegisterFn;
+  registerPost: RegisterFn;
+  pool: Pool;
+}
+
+function requireOwner(request: RequestLike, reply: ReplyLike, message: string) {
+  const role = getEffectiveRole(request);
+  if (role !== "owner") {
+    return sendError(reply, requestIdOf(request), new ApiError(403, "forbidden", message));
+  }
+  return null;
+}
+
+function bestEffortAudit(pool: Pool, request: RequestLike, payload: Parameters<typeof writeAuditEvent>[1]) {
+  writeAuditEvent(pool, payload).catch((error: unknown) => {
+    request.log?.warn?.(
+      { action: payload.action, error: String((error as Error)?.message || error), request_id: request.requestId },
+      "audit write failed"
+    );
+  });
+}
+
 /**
- * @param {object} ctx
- * @param {Function} ctx.registerGet
- * @param {Function} ctx.registerPost
- * @param {object} ctx.pool
- * @param {Function} ctx.parseBody
+ * User and project-assignment routes.
  */
-export function registerUserRoutes(ctx) {
+export function registerUserRoutes(ctx: RouteCtx) {
   const { registerGet, registerPost, pool } = ctx;
 
   // --- User CRUD (owner-only) ---
-
   registerGet("/users", async (request, reply) => {
-    const role = getEffectiveRole(request);
-    if (role !== "owner") {
-      return sendError(reply, request.requestId, new ApiError(403, "forbidden", "Only owners can manage users"));
-    }
+    const roleErr = requireOwner(request, reply, "Only owners can manage users");
+    if (roleErr) return roleErr;
 
     const { rows } = await pool.query(
       `
@@ -57,7 +99,7 @@ export function registerUserRoutes(ctx) {
         ORDER BY created_at ASC
       `
     );
-    return sendOk(reply, request.requestId, { users: rows });
+    return sendOk(reply, requestIdOf(request), { users: rows });
   });
 
   registerGet("/users/:id", async (request, reply) => {
@@ -67,7 +109,7 @@ export function registerUserRoutes(ctx) {
 
     // Users can view their own profile; owners can view anyone
     if (role !== "owner" && targetId !== userId) {
-      return sendError(reply, request.requestId, new ApiError(403, "forbidden", "Access denied"));
+      return sendError(reply, requestIdOf(request), new ApiError(403, "forbidden", "Access denied"));
     }
 
     const { rows } = await pool.query(
@@ -80,7 +122,7 @@ export function registerUserRoutes(ctx) {
       [targetId]
     );
     if (!rows[0]) {
-      return sendError(reply, request.requestId, new ApiError(404, "user_not_found", "User not found"));
+      return sendError(reply, requestIdOf(request), new ApiError(404, "user_not_found", "User not found"));
     }
 
     // Include assigned projects
@@ -98,17 +140,15 @@ export function registerUserRoutes(ctx) {
       [targetId]
     );
 
-    return sendOk(reply, request.requestId, {
+    return sendOk(reply, requestIdOf(request), {
       user: rows[0],
       project_assignments: assignments,
     });
   });
 
   registerPost("/users", async (request, reply) => {
-    const role = getEffectiveRole(request);
-    if (role !== "owner") {
-      return sendError(reply, request.requestId, new ApiError(403, "forbidden", "Only owners can create users"));
-    }
+    const roleErr = requireOwner(request, reply, "Only owners can create users");
+    if (roleErr) return roleErr;
 
     const body = parseBody(CreateUserSchema, request.body);
     const passwordHash = await bcrypt.hash(body.password, BCRYPT_ROUNDS);
@@ -119,7 +159,7 @@ export function registerUserRoutes(ctx) {
       [body.username]
     );
     if (existing.length > 0) {
-      return sendError(reply, request.requestId, new ApiError(409, "username_taken", "Username already exists"));
+      return sendError(reply, requestIdOf(request), new ApiError(409, "username_taken", "Username already exists"));
     }
 
     // Check for duplicate email
@@ -129,7 +169,7 @@ export function registerUserRoutes(ctx) {
         [body.email]
       );
       if (emailExists.length > 0) {
-        return sendError(reply, request.requestId, new ApiError(409, "email_taken", "Email already in use"));
+        return sendError(reply, requestIdOf(request), new ApiError(409, "email_taken", "Email already in use"));
       }
     }
 
@@ -142,26 +182,26 @@ export function registerUserRoutes(ctx) {
       [body.username, passwordHash, body.role, body.email]
     );
 
-    writeAuditEvent(pool, {
-      projectId: null, accountScopeId: null,
+    bestEffortAudit(pool, request, {
+      projectId: null,
+      accountScopeId: null,
       actorUsername: request.auth?.username || null,
       actorUserId: request.auth?.user_id || null,
       action: "user.create",
-      entityType: "user", entityId: rows[0].id,
+      entityType: "user",
+      entityId: rows[0].id,
       status: "ok",
-      requestId: request.requestId,
+      requestId: requestIdOf(request),
       payload: { username: body.username, role: body.role },
       evidenceRefs: [],
-    }).catch((err) => console.error({ action: "audit_write_failed", error: String(err?.message || err) }));
+    });
 
-    return sendOk(reply, request.requestId, { user: rows[0] }, 201);
+    return sendOk(reply, requestIdOf(request), { user: rows[0] }, 201);
   });
 
   registerPost("/users/:id/update", async (request, reply) => {
-    const role = getEffectiveRole(request);
-    if (role !== "owner") {
-      return sendError(reply, request.requestId, new ApiError(403, "forbidden", "Only owners can update users"));
-    }
+    const roleErr = requireOwner(request, reply, "Only owners can update users");
+    if (roleErr) return roleErr;
 
     const targetId = assertUuid(request.params?.id, "user_id");
     const body = parseBody(UpdateUserSchema, request.body);
@@ -172,11 +212,11 @@ export function registerUserRoutes(ctx) {
       [targetId]
     );
     if (!existing[0]) {
-      return sendError(reply, request.requestId, new ApiError(404, "user_not_found", "User not found"));
+      return sendError(reply, requestIdOf(request), new ApiError(404, "user_not_found", "User not found"));
     }
 
-    const updates = [];
-    const values = [];
+    const updates: string[] = [];
+    const values: unknown[] = [];
     let paramIndex = 1;
 
     if (body.role !== undefined) {
@@ -191,7 +231,7 @@ export function registerUserRoutes(ctx) {
           [body.email, targetId]
         );
         if (emailExists.length > 0) {
-          return sendError(reply, request.requestId, new ApiError(409, "email_taken", "Email already in use"));
+          return sendError(reply, requestIdOf(request), new ApiError(409, "email_taken", "Email already in use"));
         }
       }
       updates.push(`email = $${paramIndex++}`);
@@ -204,10 +244,10 @@ export function registerUserRoutes(ctx) {
     }
 
     if (updates.length === 0) {
-      return sendError(reply, request.requestId, new ApiError(400, "no_changes", "No fields to update"));
+      return sendError(reply, requestIdOf(request), new ApiError(400, "no_changes", "No fields to update"));
     }
 
-    updates.push(`updated_at = now()`);
+    updates.push("updated_at = now()");
     values.push(targetId);
 
     const { rows } = await pool.query(
@@ -215,36 +255,36 @@ export function registerUserRoutes(ctx) {
       values
     );
 
-    writeAuditEvent(pool, {
-      projectId: null, accountScopeId: null,
+    bestEffortAudit(pool, request, {
+      projectId: null,
+      accountScopeId: null,
       actorUsername: request.auth?.username || null,
       actorUserId: request.auth?.user_id || null,
       action: "user.update",
-      entityType: "user", entityId: targetId,
+      entityType: "user",
+      entityId: targetId,
       status: "ok",
-      requestId: request.requestId,
+      requestId: requestIdOf(request),
       payload: {
         target_username: existing[0].username,
-        changes: Object.keys(body).filter((k) => body[k] !== undefined && k !== "password"),
+        changes: Object.keys(body).filter((k) => body[k as keyof typeof body] !== undefined && k !== "password"),
       },
       evidenceRefs: [],
-    }).catch((err) => console.error({ action: "audit_write_failed", error: String(err?.message || err) }));
+    });
 
-    return sendOk(reply, request.requestId, { user: rows[0] });
+    return sendOk(reply, requestIdOf(request), { user: rows[0] });
   });
 
   registerPost("/users/:id/delete", async (request, reply) => {
-    const role = getEffectiveRole(request);
-    if (role !== "owner") {
-      return sendError(reply, request.requestId, new ApiError(403, "forbidden", "Only owners can delete users"));
-    }
+    const roleErr = requireOwner(request, reply, "Only owners can delete users");
+    if (roleErr) return roleErr;
 
     const targetId = assertUuid(request.params?.id, "user_id");
     const actorUserId = request.auth?.user_id || null;
 
     // Prevent self-deletion
     if (actorUserId && targetId === actorUserId) {
-      return sendError(reply, request.requestId, new ApiError(400, "self_delete", "Cannot delete your own account"));
+      return sendError(reply, requestIdOf(request), new ApiError(400, "self_delete", "Cannot delete your own account"));
     }
 
     const { rows: existing } = await pool.query(
@@ -252,33 +292,32 @@ export function registerUserRoutes(ctx) {
       [targetId]
     );
     if (!existing[0]) {
-      return sendError(reply, request.requestId, new ApiError(404, "user_not_found", "User not found"));
+      return sendError(reply, requestIdOf(request), new ApiError(404, "user_not_found", "User not found"));
     }
 
     await pool.query("DELETE FROM app_users WHERE id = $1", [targetId]);
 
-    writeAuditEvent(pool, {
-      projectId: null, accountScopeId: null,
+    bestEffortAudit(pool, request, {
+      projectId: null,
+      accountScopeId: null,
       actorUsername: request.auth?.username || null,
-      actorUserId: actorUserId,
+      actorUserId,
       action: "user.delete",
-      entityType: "user", entityId: targetId,
+      entityType: "user",
+      entityId: targetId,
       status: "ok",
-      requestId: request.requestId,
+      requestId: requestIdOf(request),
       payload: { deleted_username: existing[0].username },
       evidenceRefs: [],
-    }).catch((err) => console.error({ action: "audit_write_failed", error: String(err?.message || err) }));
+    });
 
-    return sendOk(reply, request.requestId, { deleted: true });
+    return sendOk(reply, requestIdOf(request), { deleted: true });
   });
 
   // --- Project assignments (owner-only) ---
-
   registerGet("/project-assignments", async (request, reply) => {
-    const role = getEffectiveRole(request);
-    if (role !== "owner") {
-      return sendError(reply, request.requestId, new ApiError(403, "forbidden", "Only owners can view assignments"));
-    }
+    const roleErr = requireOwner(request, reply, "Only owners can view assignments");
+    if (roleErr) return roleErr;
 
     const projectIdRaw = String(request.query?.project_id || "").trim();
     const userIdRaw = String(request.query?.user_id || "").trim();
@@ -294,8 +333,8 @@ export function registerUserRoutes(ctx) {
       JOIN app_users u ON u.id = pa.user_id
       JOIN projects p ON p.id = pa.project_id
     `;
-    const conditions = [];
-    const values = [];
+    const conditions: string[] = [];
+    const values: unknown[] = [];
 
     if (projectId) {
       values.push(projectId);
@@ -311,14 +350,12 @@ export function registerUserRoutes(ctx) {
     query += " ORDER BY pa.assigned_at ASC";
 
     const { rows } = await pool.query(query, values);
-    return sendOk(reply, request.requestId, { assignments: rows });
+    return sendOk(reply, requestIdOf(request), { assignments: rows });
   });
 
   registerPost("/project-assignments", async (request, reply) => {
-    const role = getEffectiveRole(request);
-    if (role !== "owner") {
-      return sendError(reply, request.requestId, new ApiError(403, "forbidden", "Only owners can assign projects"));
-    }
+    const roleErr = requireOwner(request, reply, "Only owners can assign projects");
+    if (roleErr) return roleErr;
 
     const body = parseBody(AssignProjectSchema, request.body);
 
@@ -328,16 +365,16 @@ export function registerUserRoutes(ctx) {
       [body.user_id]
     );
     if (!userRows[0]) {
-      return sendError(reply, request.requestId, new ApiError(404, "user_not_found", "User not found"));
+      return sendError(reply, requestIdOf(request), new ApiError(404, "user_not_found", "User not found"));
     }
 
     // Verify project exists
     const { rows: projectRows } = await pool.query(
-      "SELECT id, name FROM projects WHERE id = $1 LIMIT 1",
+      "SELECT id, name, account_scope_id FROM projects WHERE id = $1 LIMIT 1",
       [body.project_id]
     );
     if (!projectRows[0]) {
-      return sendError(reply, request.requestId, new ApiError(404, "project_not_found", "Project not found"));
+      return sendError(reply, requestIdOf(request), new ApiError(404, "project_not_found", "Project not found"));
     }
 
     const assignedBy = request.auth?.user_id || null;
@@ -354,40 +391,39 @@ export function registerUserRoutes(ctx) {
 
     // ON CONFLICT returns no rows if already assigned
     if (rows.length === 0) {
-      return sendOk(reply, request.requestId, {
+      return sendOk(reply, requestIdOf(request), {
         assignment: null,
         already_assigned: true,
       });
     }
 
-    writeAuditEvent(pool, {
+    bestEffortAudit(pool, request, {
       projectId: body.project_id,
       accountScopeId: projectRows[0].account_scope_id || null,
       actorUsername: request.auth?.username || null,
       actorUserId: assignedBy,
       action: "project.assign_user",
-      entityType: "project_assignment", entityId: rows[0].id,
+      entityType: "project_assignment",
+      entityId: rows[0].id,
       status: "ok",
-      requestId: request.requestId,
+      requestId: requestIdOf(request),
       payload: {
         user_id: body.user_id,
         username: userRows[0].username,
         project_name: projectRows[0].name,
       },
       evidenceRefs: [],
-    }).catch((err) => console.error({ action: "audit_write_failed", error: String(err?.message || err) }));
+    });
 
-    return sendOk(reply, request.requestId, {
+    return sendOk(reply, requestIdOf(request), {
       assignment: rows[0],
       already_assigned: false,
     }, 201);
   });
 
   registerPost("/project-assignments/remove", async (request, reply) => {
-    const role = getEffectiveRole(request);
-    if (role !== "owner") {
-      return sendError(reply, request.requestId, new ApiError(403, "forbidden", "Only owners can unassign projects"));
-    }
+    const roleErr = requireOwner(request, reply, "Only owners can unassign projects");
+    if (roleErr) return roleErr;
 
     const body = parseBody(UnassignProjectSchema, request.body);
 
@@ -397,21 +433,23 @@ export function registerUserRoutes(ctx) {
     );
 
     if (deleted.length === 0) {
-      return sendError(reply, request.requestId, new ApiError(404, "assignment_not_found", "Assignment not found"));
+      return sendError(reply, requestIdOf(request), new ApiError(404, "assignment_not_found", "Assignment not found"));
     }
 
-    writeAuditEvent(pool, {
-      projectId: body.project_id, accountScopeId: null,
+    bestEffortAudit(pool, request, {
+      projectId: body.project_id,
+      accountScopeId: null,
       actorUsername: request.auth?.username || null,
       actorUserId: request.auth?.user_id || null,
       action: "project.unassign_user",
-      entityType: "project_assignment", entityId: deleted[0].id,
+      entityType: "project_assignment",
+      entityId: deleted[0].id,
       status: "ok",
-      requestId: request.requestId,
+      requestId: requestIdOf(request),
       payload: { user_id: body.user_id, project_id: body.project_id },
       evidenceRefs: [],
-    }).catch((err) => console.error({ action: "audit_write_failed", error: String(err?.message || err) }));
+    });
 
-    return sendOk(reply, request.requestId, { removed: true });
+    return sendOk(reply, requestIdOf(request), { removed: true });
   });
 }

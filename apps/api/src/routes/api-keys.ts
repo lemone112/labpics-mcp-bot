@@ -1,29 +1,39 @@
-import { generateApiKey } from "../infra/api-keys.js";
+import { generateApiKey, sanitizeApiKeyScopes } from "../infra/api-keys.js";
 import { ApiError, sendError } from "../infra/api-contract.js";
 import { getEffectiveRole } from "../infra/rbac.js";
-import { assertUuid } from "../infra/utils.js";
+import { assertUuid, requestIdOf } from "../infra/utils.js";
+import type { Pool } from "../types/index.js";
+import type { FastifyReply, FastifyRequest } from "fastify";
 
-function requireOwnerSession(request, reply) {
+type RequestLike = FastifyRequest & {
+  auth?: {
+    active_project_id?: string | null;
+    account_scope_id?: string | null;
+  };
+  apiKey?: { id: string; scopes?: string[] };
+  body?: Record<string, unknown>;
+  requestId?: string;
+};
+
+type ReplyLike = FastifyReply;
+
+type RegisterFn = (path: string, handler: (request: RequestLike, reply: ReplyLike) => Promise<unknown> | unknown) => void;
+
+interface RouteCtx {
+  registerGet: RegisterFn;
+  registerPost: RegisterFn;
+  pool: Pool;
+}
+
+function requireOwnerSession(request: RequestLike, reply: ReplyLike) {
   const role = getEffectiveRole(request);
   if (role !== "owner" || request.apiKey) {
-    return sendError(reply, request.requestId, new ApiError(403, "forbidden", "Only owner session can manage API keys"));
+    return sendError(reply, requestIdOf(request), new ApiError(403, "forbidden", "Only owner session can manage API keys"));
   }
   return null;
 }
 
-function sanitizeScopes(input) {
-  const allowed = new Set(["read", "write", "admin"]);
-  const source = Array.isArray(input) ? input : [];
-  const unique = new Set();
-  for (const item of source) {
-    const scope = String(item || "").trim().toLowerCase();
-    if (allowed.has(scope)) unique.add(scope);
-  }
-  if (unique.size === 0) unique.add("read");
-  return Array.from(unique);
-}
-
-export function registerApiKeyRoutes(ctx) {
+export function registerApiKeyRoutes(ctx: RouteCtx) {
   const { registerGet, registerPost, pool } = ctx;
 
   // List API keys for the current project
@@ -33,7 +43,7 @@ export function registerApiKeyRoutes(ctx) {
 
     const projectId = request.auth?.active_project_id;
     if (!projectId) {
-      return sendError(reply, request.requestId, new ApiError(400, "project_required", "Active project required"));
+      return sendError(reply, requestIdOf(request), new ApiError(400, "project_required", "Active project required"));
     }
 
     const { rows } = await pool.query(
@@ -57,16 +67,16 @@ export function registerApiKeyRoutes(ctx) {
     const projectId = request.auth?.active_project_id;
     const accountScopeId = request.auth?.account_scope_id;
     if (!projectId || !accountScopeId) {
-      return sendError(reply, request.requestId, new ApiError(400, "project_required", "Active project required"));
+      return sendError(reply, requestIdOf(request), new ApiError(400, "project_required", "Active project required"));
     }
 
     const body = request.body || {};
     const name = String(body.name || "").trim().slice(0, 100) || "Unnamed key";
-    const scopes = sanitizeScopes(body.scopes);
-    const expiresAt = body.expires_at ? new Date(body.expires_at) : null;
+    const scopes = sanitizeApiKeyScopes(body.scopes);
+    const expiresAt = body.expires_at ? new Date(String(body.expires_at)) : null;
 
     if (expiresAt && Number.isNaN(expiresAt.getTime())) {
-      return sendError(reply, request.requestId, new ApiError(400, "invalid_expires_at", "Invalid expires_at date"));
+      return sendError(reply, requestIdOf(request), new ApiError(400, "invalid_expires_at", "Invalid expires_at date"));
     }
 
     const { raw, hash, prefix } = generateApiKey();
@@ -93,12 +103,12 @@ export function registerApiKeyRoutes(ctx) {
 
     const projectId = request.auth?.active_project_id;
     if (!projectId) {
-      return sendError(reply, request.requestId, new ApiError(400, "project_required", "Active project required"));
+      return sendError(reply, requestIdOf(request), new ApiError(400, "project_required", "Active project required"));
     }
 
     const rawKeyId = String(request.body?.id || "").trim();
     if (!rawKeyId) {
-      return sendError(reply, request.requestId, new ApiError(400, "id_required", "API key id required"));
+      return sendError(reply, requestIdOf(request), new ApiError(400, "id_required", "API key id required"));
     }
     const keyId = assertUuid(rawKeyId, "api_key_id");
 
@@ -108,7 +118,7 @@ export function registerApiKeyRoutes(ctx) {
     );
 
     if (!rowCount) {
-      return sendError(reply, request.requestId, new ApiError(404, "not_found", "API key not found"));
+      return sendError(reply, requestIdOf(request), new ApiError(404, "not_found", "API key not found"));
     }
 
     reply.send({ ok: true });

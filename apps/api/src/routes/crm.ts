@@ -3,18 +3,42 @@ import { requireProjectScope } from "../infra/scope.js";
 import { assertUuid } from "../infra/utils.js";
 import { normalizeEvidenceRefs, writeAuditEvent } from "../domains/core/audit.js";
 import { findCachedResponse, getIdempotencyKey, storeCachedResponse } from "../infra/idempotency.js";
+import type { Pool, FastifyReply, FastifyRequest } from "../types/index.js";
+import type { ZodTypeAny } from "zod";
 
-/**
- * @param {object} ctx
- */
-export function registerCrmRoutes(ctx) {
-  const {
-    registerGet, registerPost, pool,
-    CreateAccountSchema, CreateOpportunitySchema, UpdateStageSchema,
-  } = ctx;
+type RequestLike = FastifyRequest & {
+  requestId: string;
+  auth?: {
+    active_project_id?: string | null;
+    account_scope_id?: string | null;
+    user_id?: string | null;
+    user_role?: "owner" | "pm" | null;
+    username?: string | null;
+  };
+  params?: Record<string, unknown>;
+  query?: Record<string, unknown>;
+};
+
+type ReplyLike = FastifyReply;
+type RegisterFn = (
+  path: string,
+  handler: (request: RequestLike, reply: ReplyLike) => Promise<unknown> | unknown
+) => void;
+
+interface RouteCtx {
+  registerGet: RegisterFn;
+  registerPost: RegisterFn;
+  pool: Pool;
+  CreateAccountSchema: ZodTypeAny;
+  CreateOpportunitySchema: ZodTypeAny;
+  UpdateStageSchema: ZodTypeAny;
+}
+
+export function registerCrmRoutes(ctx: RouteCtx) {
+  const { registerGet, registerPost, pool, CreateAccountSchema, CreateOpportunitySchema, UpdateStageSchema } = ctx;
 
   registerGet("/crm/accounts", async (request, reply) => {
-    const scope = requireProjectScope(request);
+    const scope = requireProjectScope(request as any);
     const limit = parseLimit(request.query?.limit, 200, 500);
     const rows = await pool.query(
       `
@@ -27,17 +51,24 @@ export function registerCrmRoutes(ctx) {
       `,
       [scope.projectId, scope.accountScopeId, limit]
     );
-    return sendOk(reply, request.requestId, { accounts: rows.rows });
+    return sendOk(reply, request.requestId, { accounts: rows.rows as any });
   });
 
   registerPost("/crm/accounts", async (request, reply) => {
-    const scope = requireProjectScope(request);
-    const idemKey = getIdempotencyKey(request);
+    const scope = requireProjectScope(request as any);
+    const idemKey = getIdempotencyKey(request as any);
     if (idemKey) {
       const cached = await findCachedResponse(pool, scope.projectId, idemKey);
-      if (cached) return reply.code(cached.status_code).send(cached.response_body);
+      if (cached) return reply.code((cached as any).status_code).send((cached as any).response_body);
     }
-    const body = parseBody(CreateAccountSchema, request.body);
+    const body = parseBody<{
+      name: string;
+      domain?: string | null;
+      external_ref?: string | null;
+      stage: string;
+      owner_username?: string | null;
+      evidence_refs?: unknown;
+    }>(CreateAccountSchema as any, request.body);
     const ownerUsername = body.owner_username || request.auth?.username || null;
     const { rows } = await pool.query(
       `
@@ -53,11 +84,11 @@ export function registerCrmRoutes(ctx) {
       actorUsername: request.auth?.username || null,
       action: "crm.account.create",
       entityType: "crm_account",
-      entityId: rows[0].id,
+      entityId: (rows[0] as any).id,
       status: "ok",
       requestId: request.requestId,
-      payload: { name: rows[0].name, stage: rows[0].stage },
-      evidenceRefs: normalizeEvidenceRefs(body.evidence_refs),
+      payload: { name: (rows[0] as any).name, stage: (rows[0] as any).stage },
+      evidenceRefs: normalizeEvidenceRefs(body.evidence_refs as any),
     });
     const responseBody = { ok: true, account: rows[0], request_id: request.requestId };
     if (idemKey) await storeCachedResponse(pool, scope.projectId, idemKey, "/crm/accounts", 201, responseBody);
@@ -65,7 +96,7 @@ export function registerCrmRoutes(ctx) {
   });
 
   registerGet("/crm/opportunities", async (request, reply) => {
-    const scope = requireProjectScope(request);
+    const scope = requireProjectScope(request as any);
     const limit = parseLimit(request.query?.limit, 200, 500);
     const status = String(request.query?.stage || "").trim().toLowerCase();
     const rows = await pool.query(
@@ -94,12 +125,22 @@ export function registerCrmRoutes(ctx) {
       `,
       [scope.projectId, scope.accountScopeId, status, limit]
     );
-    return sendOk(reply, request.requestId, { opportunities: rows.rows });
+    return sendOk(reply, request.requestId, { opportunities: rows.rows as any });
   });
 
   registerPost("/crm/opportunities", async (request, reply) => {
-    const scope = requireProjectScope(request);
-    const body = parseBody(CreateOpportunitySchema, request.body);
+    const scope = requireProjectScope(request as any);
+    const body = parseBody<{
+      account_id: string;
+      title: string;
+      stage: string;
+      amount_estimate?: number | null;
+      probability?: number | null;
+      expected_close_date?: string | null;
+      next_step?: string | null;
+      owner_username?: string | null;
+      evidence_refs?: unknown;
+    }>(CreateOpportunitySchema as any, request.body);
     const ownerUsername = body.owner_username || request.auth?.username || null;
     const { rows } = await pool.query(
       `
@@ -131,7 +172,7 @@ export function registerCrmRoutes(ctx) {
         body.expected_close_date,
         body.next_step,
         ownerUsername,
-        JSON.stringify(normalizeEvidenceRefs(body.evidence_refs)),
+        JSON.stringify(normalizeEvidenceRefs(body.evidence_refs as any)),
       ]
     );
     await writeAuditEvent(pool, {
@@ -140,27 +181,30 @@ export function registerCrmRoutes(ctx) {
       actorUsername: request.auth?.username || null,
       action: "crm.opportunity.create",
       entityType: "crm_opportunity",
-      entityId: rows[0].id,
+      entityId: (rows[0] as any).id,
       status: "ok",
       requestId: request.requestId,
       payload: {
-        title: rows[0].title,
-        stage: rows[0].stage,
-        amount_estimate: rows[0].amount_estimate,
-        probability: rows[0].probability,
+        title: (rows[0] as any).title,
+        stage: (rows[0] as any).stage,
+        amount_estimate: (rows[0] as any).amount_estimate,
+        probability: (rows[0] as any).probability,
       },
-      evidenceRefs: rows[0].evidence_refs || [],
+      evidenceRefs: ((rows[0] as any).evidence_refs || []) as any,
     });
     return sendOk(reply, request.requestId, { opportunity: rows[0] }, 201);
   });
 
   registerPost("/crm/opportunities/:id/stage", async (request, reply) => {
-    const scope = requireProjectScope(request);
-    const body = parseBody(UpdateStageSchema, request.body);
+    const scope = requireProjectScope(request as any);
+    const body = parseBody<{ stage: string; reason?: string | null; evidence_refs?: unknown }>(
+      UpdateStageSchema as any,
+      request.body
+    );
     const opportunityId = assertUuid(request.params?.id, "opportunity_id");
     const nextStage = body.stage;
     const reason = body.reason;
-    const evidenceRefs = normalizeEvidenceRefs(body.evidence_refs);
+    const evidenceRefs = normalizeEvidenceRefs(body.evidence_refs as any);
     const current = await pool.query(
       `
         SELECT id, stage, title
@@ -185,7 +229,7 @@ export function registerCrmRoutes(ctx) {
           AND account_scope_id = $3
         RETURNING id, title, stage, amount_estimate, probability, expected_close_date, next_step, updated_at, evidence_refs
       `,
-      [current.rows[0].id, scope.projectId, scope.accountScopeId, nextStage]
+      [(current.rows[0] as any).id, scope.projectId, scope.accountScopeId, nextStage]
     );
     const audit = await writeAuditEvent(pool, {
       projectId: scope.projectId,
@@ -193,10 +237,10 @@ export function registerCrmRoutes(ctx) {
       actorUsername: request.auth?.username || null,
       action: "crm.opportunity.stage_update",
       entityType: "crm_opportunity",
-      entityId: current.rows[0].id,
+      entityId: (current.rows[0] as any).id,
       status: "ok",
       requestId: request.requestId,
-      payload: { from_stage: current.rows[0].stage, to_stage: nextStage, reason },
+      payload: { from_stage: (current.rows[0] as any).stage, to_stage: nextStage, reason },
       evidenceRefs,
     });
     await pool.query(
@@ -217,20 +261,20 @@ export function registerCrmRoutes(ctx) {
       [
         scope.projectId,
         scope.accountScopeId,
-        current.rows[0].id,
-        current.rows[0].stage,
+        (current.rows[0] as any).id,
+        (current.rows[0] as any).stage,
         nextStage,
         reason,
         request.auth?.username || null,
         JSON.stringify(evidenceRefs),
-        audit.id,
+        (audit as any).id,
       ]
     );
-    return sendOk(reply, request.requestId, { opportunity: updated.rows[0] });
+    return sendOk(reply, request.requestId, { opportunity: updated.rows[0] as any });
   });
 
   registerGet("/crm/overview", async (request, reply) => {
-    const scope = requireProjectScope(request);
+    const scope = requireProjectScope(request as any);
     const [accounts, opportunities, links] = await Promise.all([
       pool.query(
         `
@@ -263,9 +307,9 @@ export function registerCrmRoutes(ctx) {
       ),
     ]);
     return sendOk(reply, request.requestId, {
-      accounts: accounts.rows[0]?.total_accounts || 0,
-      opportunity_by_stage: opportunities.rows,
-      links_by_status: links.rows,
+      accounts: (accounts.rows[0] as any)?.total_accounts || 0,
+      opportunity_by_stage: opportunities.rows as any,
+      links_by_status: links.rows as any,
     });
   });
 }

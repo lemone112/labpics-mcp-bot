@@ -1,20 +1,61 @@
 import { fail, parseBody, parseLimit, sendOk } from "../infra/api-contract.js";
 import { requireProjectScope } from "../infra/scope.js";
-import { assertUuid } from "../infra/utils.js";
+import { assertUuid, requestIdOf } from "../infra/utils.js";
 import { listAuditEvents } from "../domains/core/audit.js";
 import { approveOutbound, createOutboundDraft, listOutbound, processDueOutbounds, sendOutbound, setOptOut } from "../domains/outbound/outbox.js";
 import { findCachedResponse, getIdempotencyKey, storeCachedResponse } from "../infra/idempotency.js";
 import { syncLoopsContacts } from "../domains/outbound/loops.js";
+import type { Pool } from "../types/index.js";
+import type { ZodTypeAny } from "zod";
+import type { FastifyReply, FastifyRequest } from "fastify";
+
+type RequestLike = FastifyRequest & {
+  auth?: {
+    active_project_id?: string | null;
+    account_scope_id?: string | null;
+    user_id?: string | null;
+    user_role?: string | null;
+    username?: string | null;
+  };
+  params?: Record<string, unknown>;
+  query?: Record<string, unknown>;
+  body?: unknown;
+  requestId?: string;
+  headers?: Record<string, unknown>;
+};
+
+type ReplyLike = FastifyReply;
+
+type RegisterFn = (
+  path: string,
+  handler: (request: RequestLike, reply: ReplyLike) => Promise<unknown> | unknown
+) => void;
+
+interface RouteCtx {
+  registerGet: RegisterFn;
+  registerPost: RegisterFn;
+  pool: Pool;
+  CreateOutboundDraftSchema: ZodTypeAny;
+  OutboundApproveSchema: ZodTypeAny;
+  OptOutSchema: ZodTypeAny;
+  OutboundProcessSchema: ZodTypeAny;
+  LoopsSyncSchema: ZodTypeAny;
+  parseProjectIdsInput: (input: unknown, max?: number) => string[];
+}
 
 /**
  * Outbound, audit, evidence, loops routes.
- * @param {object} ctx
  */
-export function registerOutboundRoutes(ctx) {
+export function registerOutboundRoutes(ctx: RouteCtx) {
   const {
-    registerGet, registerPost, pool,
-    CreateOutboundDraftSchema, OutboundApproveSchema,
-    OptOutSchema, OutboundProcessSchema, LoopsSyncSchema,
+    registerGet,
+    registerPost,
+    pool,
+    CreateOutboundDraftSchema,
+    OutboundApproveSchema,
+    OptOutSchema,
+    OutboundProcessSchema,
+    LoopsSyncSchema,
     parseProjectIdsInput,
   } = ctx;
 
@@ -25,14 +66,14 @@ export function registerOutboundRoutes(ctx) {
       limit: request.query?.limit,
       offset: request.query?.offset,
     });
-    return sendOk(reply, request.requestId, { events: rows });
+    return sendOk(reply, requestIdOf(request), { events: rows });
   });
 
   registerGet("/evidence/search", async (request, reply) => {
     const scope = requireProjectScope(request);
     const q = String(request.query?.q || "").trim();
     const limit = parseLimit(request.query?.limit, 30, 200);
-    if (!q) return sendOk(reply, request.requestId, { evidence: [] });
+    if (!q) return sendOk(reply, requestIdOf(request), { evidence: [] });
     const { rows } = await pool.query(
       `
         SELECT
@@ -48,7 +89,7 @@ export function registerOutboundRoutes(ctx) {
       `,
       [scope.projectId, scope.accountScopeId, q, limit]
     );
-    return sendOk(reply, request.requestId, { evidence: rows });
+    return sendOk(reply, requestIdOf(request), { evidence: rows });
   });
 
   registerGet("/outbound", async (request, reply) => {
@@ -58,66 +99,70 @@ export function registerOutboundRoutes(ctx) {
       limit: request.query?.limit,
       offset: request.query?.offset,
     });
-    return sendOk(reply, request.requestId, { outbound: rows });
+    return sendOk(reply, requestIdOf(request), { outbound: rows });
   });
 
   registerPost("/outbound/draft", async (request, reply) => {
     const scope = requireProjectScope(request);
-    const idemKey = getIdempotencyKey(request);
+    const idemKey = getIdempotencyKey(request as any);
     if (idemKey) {
       const cached = await findCachedResponse(pool, scope.projectId, idemKey);
       if (cached) return reply.code(cached.status_code).send(cached.response_body);
     }
     const body = parseBody(CreateOutboundDraftSchema, request.body);
-    const outbound = await createOutboundDraft(pool, scope, body, request.auth?.username || null, request.requestId);
-    const responseBody = { ok: true, outbound, request_id: request.requestId };
+    const requestId = requestIdOf(request);
+    const outbound = await createOutboundDraft(pool, scope, body, (request.auth?.username || null) as any, requestId as any);
+    const responseBody = { ok: true, outbound, request_id: requestId };
     if (idemKey) await storeCachedResponse(pool, scope.projectId, idemKey, "/outbound/draft", 201, responseBody);
     return reply.code(201).send(responseBody);
   });
 
   registerPost("/outbound/:id/approve", async (request, reply) => {
     const scope = requireProjectScope(request);
-    const body = parseBody(OutboundApproveSchema, request.body);
+    const body = parseBody(OutboundApproveSchema, request.body) as { evidence_refs: unknown[] };
     const outboundId = assertUuid(request.params?.id, "outbound_id");
     const outbound = await approveOutbound(
-      pool, scope,
+      pool,
+      scope,
       outboundId,
-      request.auth?.username || null,
-      request.requestId,
+      (request.auth?.username || null) as any,
+      requestIdOf(request) as any,
       body.evidence_refs
     );
-    return sendOk(reply, request.requestId, { outbound });
+    return sendOk(reply, requestIdOf(request), { outbound });
   });
 
   registerPost("/outbound/:id/send", async (request, reply) => {
     const scope = requireProjectScope(request);
     const outboundId = assertUuid(request.params?.id, "outbound_id");
     const outbound = await sendOutbound(
-      pool, scope,
+      pool,
+      scope,
       outboundId,
-      request.auth?.username || null,
-      request.requestId
+      (request.auth?.username || null) as any,
+      requestIdOf(request) as any
     );
-    return sendOk(reply, request.requestId, { outbound });
+    return sendOk(reply, requestIdOf(request), { outbound });
   });
 
   registerPost("/outbound/opt-out", async (request, reply) => {
     const scope = requireProjectScope(request);
     const body = parseBody(OptOutSchema, request.body);
-    const policy = await setOptOut(pool, scope, body, request.auth?.username || null, request.requestId);
-    return sendOk(reply, request.requestId, { policy });
+    const policy = await setOptOut(pool, scope, body, (request.auth?.username || null) as any, requestIdOf(request) as any);
+    return sendOk(reply, requestIdOf(request), { policy });
   });
 
   registerPost("/outbound/process", async (request, reply) => {
     const scope = requireProjectScope(request);
-    const body = parseBody(OutboundProcessSchema, request.body);
+    const body = parseBody(OutboundProcessSchema, request.body) as { limit: number };
     const result = await processDueOutbounds(
-      pool, scope,
-      request.auth?.username || "manual_runner",
-      request.requestId,
+      pool,
+      scope,
+      (request.auth?.username || "manual_runner") as any,
+      requestIdOf(request) as any,
       body.limit
     );
-    return sendOk(reply, request.requestId, { result });
+    return sendOk(reply, requestIdOf(request), { result });
   });
 
   registerPost("/loops/sync", async (request, reply) => {
@@ -125,7 +170,7 @@ export function registerOutboundRoutes(ctx) {
     if (!accountScopeId) {
       fail(409, "account_scope_required", "Account scope is required");
     }
-    const body = parseBody(LoopsSyncSchema, request.body);
+    const body = parseBody(LoopsSyncSchema, request.body) as { project_ids?: string[]; limit?: number };
     const result = await syncLoopsContacts(
       pool,
       {
@@ -134,10 +179,10 @@ export function registerOutboundRoutes(ctx) {
       },
       {
         actorUsername: request.auth?.username || null,
-        requestId: request.requestId,
+        requestId: requestIdOf(request),
         limit: body?.limit,
       }
     );
-    return sendOk(reply, request.requestId, { loops: result });
+    return sendOk(reply, requestIdOf(request), { loops: result });
   });
 }

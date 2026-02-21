@@ -8,27 +8,31 @@ const BACKOFF_MAX_MS = 30_000;
 const MAX_RECONNECT_ATTEMPTS = 10;
 const HEARTBEAT_TIMEOUT_MS = 60_000;
 
+type StreamEvent = Record<string, unknown> | null;
+
+type UseEventStreamOptions = {
+  enabled?: boolean;
+  key?: string;
+};
+
 /**
- * Connects to the SSE endpoint and exposes real-time events.
- * Implements exponential backoff reconnection and heartbeat timeout.
- * After MAX_RECONNECT_ATTEMPTS, gives up (falls back to polling-only).
- *
- * @param {{ enabled?: boolean, key?: string }} options
- * @param options.key — change this value (e.g. projectId) to force reconnect
+ * Connects to SSE endpoint with reconnect + heartbeat timeout.
  */
-export function useEventStream({ enabled = true, key = "" } = {}) {
+export function useEventStream({ enabled = true, key = "" }: UseEventStreamOptions = {}) {
   const [connected, setConnected] = useState(false);
-  const [lastEvent, setLastEvent] = useState(null);
-  const sourceRef = useRef(null);
-  const reconnectTimerRef = useRef(null);
-  const heartbeatTimerRef = useRef(null);
+  const [lastEvent, setLastEvent] = useState<StreamEvent>(null);
+  const sourceRef = useRef<EventSource | null>(null);
+  const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const heartbeatTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const attemptRef = useRef(0);
   const cleanedUpRef = useRef(false);
 
   const cleanup = useCallback(() => {
     cleanedUpRef.current = true;
-    clearTimeout(reconnectTimerRef.current);
-    clearTimeout(heartbeatTimerRef.current);
+    if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
+    reconnectTimerRef.current = null;
+    if (heartbeatTimerRef.current) clearTimeout(heartbeatTimerRef.current);
+    heartbeatTimerRef.current = null;
     if (sourceRef.current) {
       sourceRef.current.close();
       sourceRef.current = null;
@@ -47,10 +51,18 @@ export function useEventStream({ enabled = true, key = "" } = {}) {
     const sseBase = process.env.NEXT_PUBLIC_SSE_URL || API_BASE;
     const url = `${sseBase}/events/stream`;
 
+    function scheduleReconnect() {
+      if (cleanedUpRef.current) return;
+      if (attemptRef.current >= MAX_RECONNECT_ATTEMPTS) return;
+
+      const delay = Math.min(BACKOFF_BASE_MS * Math.pow(2, attemptRef.current), BACKOFF_MAX_MS);
+      attemptRef.current += 1;
+      reconnectTimerRef.current = setTimeout(connect, delay);
+    }
+
     function resetHeartbeat() {
-      clearTimeout(heartbeatTimerRef.current);
+      if (heartbeatTimerRef.current) clearTimeout(heartbeatTimerRef.current);
       heartbeatTimerRef.current = setTimeout(() => {
-        // No data for 60s — force reconnect
         if (sourceRef.current) {
           sourceRef.current.close();
           sourceRef.current = null;
@@ -63,11 +75,11 @@ export function useEventStream({ enabled = true, key = "" } = {}) {
     function connect() {
       if (cleanedUpRef.current) return;
 
-      let source;
+      let source: EventSource;
       try {
         source = new EventSource(url, { withCredentials: true });
-      } catch {
-        // EventSource not supported or URL invalid — degrade silently
+      } catch (error) {
+        console.warn("[sse] EventSource init failed", { url, error: String((error as Error)?.message || error) });
         return;
       }
       sourceRef.current = source;
@@ -78,17 +90,18 @@ export function useEventStream({ enabled = true, key = "" } = {}) {
         resetHeartbeat();
       });
 
-      source.addEventListener("job_completed", (event) => {
+      source.addEventListener("job_completed", (event: MessageEvent<string>) => {
         resetHeartbeat();
         try {
-          const data = JSON.parse(event.data);
+          const data = JSON.parse(event.data) as Record<string, unknown>;
           setLastEvent(data);
-        } catch {
-          // ignore malformed events
+        } catch (error) {
+          console.warn("[sse] malformed job_completed payload", {
+            error: String((error as Error)?.message || error),
+          });
         }
       });
 
-      // Reset heartbeat on any message (including heartbeat pings)
       source.onmessage = () => {
         resetHeartbeat();
       };
@@ -103,21 +116,7 @@ export function useEventStream({ enabled = true, key = "" } = {}) {
       };
     }
 
-    function scheduleReconnect() {
-      if (cleanedUpRef.current) return;
-      if (attemptRef.current >= MAX_RECONNECT_ATTEMPTS) return;
-
-      const delay = Math.min(
-        BACKOFF_BASE_MS * Math.pow(2, attemptRef.current),
-        BACKOFF_MAX_MS,
-      );
-      attemptRef.current += 1;
-
-      reconnectTimerRef.current = setTimeout(connect, delay);
-    }
-
     connect();
-
     return cleanup;
   }, [enabled, key, cleanup]);
 

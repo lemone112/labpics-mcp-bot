@@ -73,6 +73,10 @@ export const boolFromEnv = toBoolean;
 
 export const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
+export function requestIdOf(request: { requestId?: unknown; id?: unknown }): string {
+  return String(request.requestId || request.id);
+}
+
 export function isUuid(value: unknown): boolean {
   const normalized = String(value ?? "").trim();
   return UUID_REGEX.test(normalized);

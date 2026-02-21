@@ -34,7 +34,7 @@ interface RequestWithHeaders {
   };
 }
 
-function normalizeScopes(scopes: unknown): string[] {
+export function sanitizeApiKeyScopes(scopes: unknown): string[] {
   const raw = Array.isArray(scopes) ? scopes : [];
   const allowed = new Set(["read", "write", "admin"]);
   const unique = new Set<string>();
@@ -76,7 +76,7 @@ export function createApiKeyAuth(pool: Pool, logger: Console | { warn: (...args:
       throw Object.assign(new Error("API key expired"), { statusCode: 401 });
     }
 
-    const normalizedScopes = normalizeScopes(key.scopes);
+    const normalizedScopes = sanitizeApiKeyScopes(key.scopes);
     const userRole = normalizedScopes.includes("admin") ? "owner" : "pm";
 
     pool.query(

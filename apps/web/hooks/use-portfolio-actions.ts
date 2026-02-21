@@ -3,17 +3,20 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { apiFetch } from "@/lib/api";
+import { humanizeProjectError } from "@/lib/project-errors";
 import { normalizeProjectId } from "@/hooks/use-portfolio-data";
 
-function humanizeProjectError(rawError, fallbackMessage) {
-  const message = String(rawError?.message || fallbackMessage || "").trim();
-  if (!message) return "Не удалось обработать запрос по проектам";
-  const normalized = message.toLowerCase();
-  if (normalized === "internal_error") return "Временная ошибка сервера. Повторим автоматически.";
-  if (normalized.includes("account_scope_mismatch")) return "Выбранные проекты относятся к разным рабочим областям.";
-  if (normalized.includes("project_not_found")) return "Проект больше не доступен. Обновим список автоматически.";
-  return message;
-}
+type UsePortfolioActionsParams = {
+  projectIds: string[];
+  projectIdSet: Set<string>;
+  activeProjectId: string | null;
+  setActiveProjectId: (value: string | null) => void;
+  setSelectedScopeId: (value: string | null) => void;
+  setLastConcreteProjectId: (value: string | null) => void;
+  lastConcreteProjectId: string | null;
+  ensureConcreteSelection: (candidateId: unknown) => string | null;
+  canSelectAll: boolean;
+};
 
 /**
  * usePortfolioActions — mutation functions (activate project, select all).
@@ -29,17 +32,18 @@ export function usePortfolioActions({
   lastConcreteProjectId,
   ensureConcreteSelection,
   canSelectAll,
-}) {
+}: UsePortfolioActionsParams) {
   const [activatingProjectId, setActivatingProjectId] = useState("");
   const [activationError, setActivationError] = useState("");
   const autoRepairAttemptRef = useRef("");
 
   const activateProject = useCallback(
-    async (projectId) => {
+    async (projectId: unknown): Promise<void> => {
       const normalized = normalizeProjectId(projectId);
       if (!normalized || !projectIdSet.has(normalized)) {
         throw new Error("Проект недоступен для выбора");
       }
+
       setActivationError("");
       setActivatingProjectId(normalized);
       try {
@@ -66,18 +70,29 @@ export function usePortfolioActions({
     setSelectedScopeId("__all_projects__");
   }, [canSelectAll, projectIds.length, setSelectedScopeId]);
 
-  // Auto-repair: if activeProjectId is invalid, activate the fallback
+  // Auto-repair: if activeProjectId is invalid, activate the fallback.
   useEffect(() => {
     if (!projectIds.length) return;
     if (activatingProjectId) return;
+
     const normalizedActive = normalizeProjectId(activeProjectId);
     if (normalizedActive && projectIdSet.has(normalizedActive)) return;
+
     const fallbackConcrete = ensureConcreteSelection(lastConcreteProjectId);
     if (!fallbackConcrete) return;
+
     const repairKey = `${normalizedActive || "none"}->${fallbackConcrete}|${projectIds.join(",")}`;
     if (autoRepairAttemptRef.current === repairKey) return;
     autoRepairAttemptRef.current = repairKey;
-    activateProject(fallbackConcrete).catch(() => {});
+
+    activateProject(fallbackConcrete).catch((error) => {
+      // Keep UI resilient: auto-repair is best-effort and should not hard-crash.
+      console.warn("[portfolio] auto-repair activateProject failed", {
+        from: normalizedActive,
+        to: fallbackConcrete,
+        error: String((error as Error)?.message || error),
+      });
+    });
   }, [
     projectIds,
     projectIdSet,

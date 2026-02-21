@@ -3,15 +3,41 @@ import { requireProjectScope } from "../infra/scope.js";
 import { assertUuid } from "../infra/utils.js";
 import { normalizeEvidenceRefs, writeAuditEvent } from "../domains/core/audit.js";
 import { findCachedResponse, getIdempotencyKey, storeCachedResponse } from "../infra/idempotency.js";
+import type { Pool, FastifyReply, FastifyRequest } from "../types/index.js";
+import type { ZodTypeAny } from "zod";
 
-/**
- * @param {object} ctx
- */
-export function registerOfferRoutes(ctx) {
+type RequestLike = FastifyRequest & {
+  requestId: string;
+  auth?: {
+    active_project_id?: string | null;
+    account_scope_id?: string | null;
+    user_id?: string | null;
+    user_role?: "owner" | "pm" | null;
+    username?: string | null;
+  };
+  params?: Record<string, unknown>;
+  query?: Record<string, unknown>;
+};
+
+type ReplyLike = FastifyReply;
+type RegisterFn = (
+  path: string,
+  handler: (request: RequestLike, reply: ReplyLike) => Promise<unknown> | unknown
+) => void;
+
+interface RouteCtx {
+  registerGet: RegisterFn;
+  registerPost: RegisterFn;
+  pool: Pool;
+  CreateOfferSchema: ZodTypeAny;
+  ApproveOfferSchema: ZodTypeAny;
+}
+
+export function registerOfferRoutes(ctx: RouteCtx) {
   const { registerGet, registerPost, pool, CreateOfferSchema, ApproveOfferSchema } = ctx;
 
   registerGet("/offers", async (request, reply) => {
-    const scope = requireProjectScope(request);
+    const scope = requireProjectScope(request as any);
     const limit = parseLimit(request.query?.limit, 150, 500);
     const rows = await pool.query(
       `
@@ -27,22 +53,30 @@ export function registerOfferRoutes(ctx) {
       `,
       [scope.projectId, scope.accountScopeId, limit]
     );
-    return sendOk(reply, request.requestId, { offers: rows.rows });
+    return sendOk(reply, request.requestId, { offers: rows.rows as any });
   });
 
   registerPost("/offers", async (request, reply) => {
-    const scope = requireProjectScope(request);
-    const idemKey = getIdempotencyKey(request);
+    const scope = requireProjectScope(request as any);
+    const idemKey = getIdempotencyKey(request as any);
     if (idemKey) {
       const cached = await findCachedResponse(pool, scope.projectId, idemKey);
-      if (cached) return reply.code(cached.status_code).send(cached.response_body);
+      if (cached) return reply.code((cached as any).status_code).send((cached as any).response_body);
     }
-    const body = parseBody(CreateOfferSchema, request.body);
+    const body = parseBody<{
+      account_id: string;
+      opportunity_id: string;
+      title: string;
+      currency: string;
+      subtotal: number;
+      discount_pct: number;
+      evidence_refs?: unknown;
+    }>(CreateOfferSchema as any, request.body);
     const subtotal = body.subtotal;
     const discountPct = body.discount_pct;
     const total = Number((subtotal * (1 - discountPct / 100)).toFixed(2));
     const status = discountPct > 0 ? "draft" : "approved";
-    const evidenceRefs = normalizeEvidenceRefs(body.evidence_refs);
+    const evidenceRefs = normalizeEvidenceRefs(body.evidence_refs as any);
     const { rows } = await pool.query(
       `
         INSERT INTO offers(
@@ -57,10 +91,18 @@ export function registerOfferRoutes(ctx) {
           created_by, created_at, updated_at
       `,
       [
-        scope.projectId, scope.accountScopeId,
-        body.account_id, body.opportunity_id, body.title, body.currency,
-        subtotal, discountPct, total, status,
-        JSON.stringify(evidenceRefs), request.auth?.username || null,
+        scope.projectId,
+        scope.accountScopeId,
+        body.account_id,
+        body.opportunity_id,
+        body.title,
+        body.currency,
+        subtotal,
+        discountPct,
+        total,
+        status,
+        JSON.stringify(evidenceRefs),
+        request.auth?.username || null,
       ]
     );
     await writeAuditEvent(pool, {
@@ -69,7 +111,7 @@ export function registerOfferRoutes(ctx) {
       actorUsername: request.auth?.username || null,
       action: "offer.create",
       entityType: "offer",
-      entityId: rows[0].id,
+      entityId: (rows[0] as any).id,
       status: "ok",
       requestId: request.requestId,
       payload: { subtotal, discount_pct: discountPct, total, status },
@@ -81,10 +123,10 @@ export function registerOfferRoutes(ctx) {
   });
 
   registerPost("/offers/:id/approve-discount", async (request, reply) => {
-    const scope = requireProjectScope(request);
+    const scope = requireProjectScope(request as any);
     const offerId = assertUuid(request.params?.id, "offer_id");
-    const body = parseBody(ApproveOfferSchema, request.body);
-    const evidenceRefs = normalizeEvidenceRefs(body.evidence_refs);
+    const body = parseBody<{ comment?: string | null; evidence_refs?: unknown }>(ApproveOfferSchema as any, request.body);
+    const evidenceRefs = normalizeEvidenceRefs(body.evidence_refs as any);
     const { rows } = await pool.query(
       `
         UPDATE offers
@@ -95,7 +137,7 @@ export function registerOfferRoutes(ctx) {
       `,
       [offerId, scope.projectId, scope.accountScopeId]
     );
-    const offer = rows[0];
+    const offer = rows[0] as any;
     if (!offer) {
       return sendError(reply, request.requestId, new ApiError(404, "offer_not_found", "Offer not found"));
     }
@@ -120,19 +162,23 @@ export function registerOfferRoutes(ctx) {
         VALUES ($1, $2, $3, 'approve_discount', $4, $5, $6::jsonb, $7)
       `,
       [
-        scope.projectId, scope.accountScopeId, offer.id,
-        request.auth?.username || null, body.comment,
-        JSON.stringify(evidenceRefs), audit.id,
+        scope.projectId,
+        scope.accountScopeId,
+        offer.id,
+        request.auth?.username || null,
+        body.comment,
+        JSON.stringify(evidenceRefs),
+        (audit as any).id,
       ]
     );
     return sendOk(reply, request.requestId, { offer });
   });
 
   registerPost("/offers/:id/approve-send", async (request, reply) => {
-    const scope = requireProjectScope(request);
+    const scope = requireProjectScope(request as any);
     const offerId = assertUuid(request.params?.id, "offer_id");
-    const body = parseBody(ApproveOfferSchema, request.body);
-    const evidenceRefs = normalizeEvidenceRefs(body.evidence_refs);
+    const body = parseBody<{ comment?: string | null; evidence_refs?: unknown }>(ApproveOfferSchema as any, request.body);
+    const evidenceRefs = normalizeEvidenceRefs(body.evidence_refs as any);
     const { rows } = await pool.query(
       `
         UPDATE offers
@@ -143,7 +189,7 @@ export function registerOfferRoutes(ctx) {
       `,
       [offerId, scope.projectId, scope.accountScopeId]
     );
-    const offer = rows[0];
+    const offer = rows[0] as any;
     if (!offer) {
       return sendError(reply, request.requestId, new ApiError(404, "offer_not_found", "Offer not found"));
     }
@@ -168,9 +214,13 @@ export function registerOfferRoutes(ctx) {
         VALUES ($1, $2, $3, 'approve_send', $4, $5, $6::jsonb, $7)
       `,
       [
-        scope.projectId, scope.accountScopeId, offer.id,
-        request.auth?.username || null, body.comment,
-        JSON.stringify(evidenceRefs), audit.id,
+        scope.projectId,
+        scope.accountScopeId,
+        offer.id,
+        request.auth?.username || null,
+        body.comment,
+        JSON.stringify(evidenceRefs),
+        (audit as any).id,
       ]
     );
     return sendOk(reply, request.requestId, { offer });

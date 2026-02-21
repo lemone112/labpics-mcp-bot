@@ -1,30 +1,49 @@
 import { ApiError, parseBody, sendError, sendOk } from "../infra/api-contract.js";
-import { requireProjectScope } from "../infra/scope.js";
 import { assertUuid } from "../infra/utils.js";
 import { writeAuditEvent } from "../domains/core/audit.js";
 import { getEffectiveRole, getAccessibleProjectIds, canAccessProject } from "../infra/rbac.js";
+import type { Pool, FastifyReply, FastifyRequest } from "../types/index.js";
+import type { ZodTypeAny } from "zod";
 
 const LEGACY_SCOPE_PROJECT_NAME = "__legacy_scope__";
 
-/**
- * @param {object} ctx
- * @param {Function} ctx.registerGet
- * @param {Function} ctx.registerPost
- * @param {object} ctx.pool
- * @param {object} ctx.cache
- * @param {object} ctx.CreateProjectSchema
- */
-export function registerProjectRoutes(ctx) {
+type RequestLike = FastifyRequest & {
+  requestId: string;
+  auth?: {
+    active_project_id?: string | null;
+    account_scope_id?: string | null;
+    user_id?: string | null;
+    user_role?: "owner" | "pm" | null;
+    session_id?: string | null;
+    username?: string | null;
+  };
+  params?: Record<string, unknown>;
+};
+
+type ReplyLike = FastifyReply;
+type RegisterFn = (
+  path: string,
+  handler: (request: RequestLike, reply: ReplyLike) => Promise<unknown> | unknown
+) => void;
+
+interface RouteCtx {
+  registerGet: RegisterFn;
+  registerPost: RegisterFn;
+  pool: Pool;
+  cache: { del: (key: string) => Promise<void> | void };
+  CreateProjectSchema: ZodTypeAny;
+}
+
+export function registerProjectRoutes(ctx: RouteCtx) {
   const { registerGet, registerPost, pool, cache, CreateProjectSchema } = ctx;
 
   registerGet("/projects", async (request, reply) => {
     const userId = request.auth?.user_id || null;
-    const userRole = getEffectiveRole(request);
+    const userRole = getEffectiveRole(request as any);
     const accessibleIds = await getAccessibleProjectIds(pool, userId, userRole);
 
-    let rows;
+    let rows: any[] = [];
     if (accessibleIds === null) {
-      // Owner or legacy env var user — return all projects
       const result = await pool.query(
         `
           SELECT id, name, account_scope_id, created_at
@@ -36,7 +55,6 @@ export function registerProjectRoutes(ctx) {
       );
       rows = result.rows;
     } else {
-      // PM user — return only assigned projects
       const result = await pool.query(
         `
           SELECT id, name, account_scope_id, created_at
@@ -58,13 +76,16 @@ export function registerProjectRoutes(ctx) {
   });
 
   registerPost("/projects", async (request, reply) => {
-    // Only owners can create projects
-    const userRole = getEffectiveRole(request);
+    const userRole = getEffectiveRole(request as any);
     if (userRole !== "owner") {
       return sendError(reply, request.requestId, new ApiError(403, "forbidden", "Only owners can create projects"));
     }
 
-    const body = parseBody(CreateProjectSchema, request.body);
+    const body = parseBody(CreateProjectSchema, request.body) as {
+      name: string;
+      account_scope_key?: string | null;
+      account_scope_name: string;
+    };
     const name = body.name;
     if (name.toLowerCase() === LEGACY_SCOPE_PROJECT_NAME) {
       return sendError(reply, request.requestId, new ApiError(400, "reserved_name", "Project name is reserved"));
@@ -72,7 +93,7 @@ export function registerProjectRoutes(ctx) {
 
     const desiredScopeKey = body.account_scope_key ? body.account_scope_key.toLowerCase() : null;
     const scopeName = body.account_scope_name;
-    let accountScopeId = null;
+    let accountScopeId: string | null = null;
     if (desiredScopeKey) {
       const { rows: scopeRows } = await pool.query(
         `
@@ -84,7 +105,7 @@ export function registerProjectRoutes(ctx) {
         `,
         [desiredScopeKey, scopeName.slice(0, 160)]
       );
-      accountScopeId = scopeRows[0]?.id || null;
+      accountScopeId = (scopeRows[0] as { id: string } | undefined)?.id || null;
     } else {
       const { rows: scopeRows } = await pool.query(
         `
@@ -94,7 +115,7 @@ export function registerProjectRoutes(ctx) {
           LIMIT 1
         `
       );
-      accountScopeId = scopeRows[0]?.id || null;
+      accountScopeId = (scopeRows[0] as { id: string } | undefined)?.id || null;
     }
     if (!accountScopeId) {
       return sendError(reply, request.requestId, new ApiError(500, "account_scope_resolve_failed", "Failed to resolve account scope"));
@@ -110,16 +131,16 @@ export function registerProjectRoutes(ctx) {
     );
 
     await writeAuditEvent(pool, {
-      projectId: rows[0].id,
-      accountScopeId: rows[0].account_scope_id,
+      projectId: (rows[0] as any).id,
+      accountScopeId: (rows[0] as any).account_scope_id,
       actorUsername: request.auth?.username || null,
       actorUserId: request.auth?.user_id || null,
       action: "project.create",
       entityType: "project",
-      entityId: rows[0].id,
+      entityId: (rows[0] as any).id,
       status: "ok",
       requestId: request.requestId,
-      payload: { name: rows[0].name },
+      payload: { name: (rows[0] as any).name },
       evidenceRefs: [],
     });
 
@@ -130,20 +151,16 @@ export function registerProjectRoutes(ctx) {
     const projectId = assertUuid(request.params?.id, "project_id");
     const sid = request.auth?.session_id;
 
-    const project = await pool.query(
-      "SELECT id, name, account_scope_id FROM projects WHERE id = $1 LIMIT 1",
-      [projectId]
-    );
+    const project = await pool.query("SELECT id, name, account_scope_id FROM projects WHERE id = $1 LIMIT 1", [projectId]);
     if (!project.rows[0]) {
       return sendError(reply, request.requestId, new ApiError(404, "project_not_found", "Project not found"));
     }
-    if (String(project.rows[0].name || "").trim().toLowerCase() === LEGACY_SCOPE_PROJECT_NAME) {
+    if (String((project.rows[0] as any).name || "").trim().toLowerCase() === LEGACY_SCOPE_PROJECT_NAME) {
       return sendError(reply, request.requestId, new ApiError(404, "project_not_found", "Project not found"));
     }
 
-    // RBAC: PM users can only select projects they are assigned to
     const userId = request.auth?.user_id || null;
-    const userRole = getEffectiveRole(request);
+    const userRole = getEffectiveRole(request as any);
     const hasAccess = await canAccessProject(pool, userId, userRole, projectId);
     if (!hasAccess) {
       return sendError(reply, request.requestId, new ApiError(403, "project_access_denied", "You do not have access to this project"));
@@ -153,7 +170,7 @@ export function registerProjectRoutes(ctx) {
     await cache.del(`session:${sid}`);
     await writeAuditEvent(pool, {
       projectId,
-      accountScopeId: project.rows[0].account_scope_id,
+      accountScopeId: (project.rows[0] as any).account_scope_id,
       actorUsername: request.auth?.username || null,
       actorUserId: request.auth?.user_id || null,
       action: "project.select",

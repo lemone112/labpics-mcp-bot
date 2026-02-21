@@ -5,7 +5,21 @@ import { useQuery } from "@tanstack/react-query";
 
 import { apiFetch } from "@/lib/api";
 
-export function usePortfolioMessages({ projectId, contactGlobalId, enabled = true, limit = 250, sseConnected = false }) {
+type UsePortfolioMessagesParams = {
+  projectId: string | null;
+  contactGlobalId: string | null;
+  enabled?: boolean;
+  limit?: number;
+  sseConnected?: boolean;
+};
+
+export function usePortfolioMessages({
+  projectId,
+  contactGlobalId,
+  enabled = true,
+  limit = 250,
+  sseConnected = false,
+}: UsePortfolioMessagesParams) {
   const normalizedProjectId = useMemo(() => String(projectId || "").trim(), [projectId]);
   const normalizedContactId = useMemo(() => String(contactGlobalId || "").trim(), [contactGlobalId]);
 
@@ -28,7 +42,7 @@ export function usePortfolioMessages({ projectId, contactGlobalId, enabled = tru
   return {
     payload: query.data ?? null,
     loading: query.isLoading,
-    error: query.error?.message || "",
+    error: (query.error as { message?: string } | null)?.message || "",
     reload: query.refetch,
     dataUpdatedAt: query.dataUpdatedAt,
   };
