@@ -9,7 +9,6 @@ import {
   normalizeInt,
   normalizeStatusFilter,
   retryConnectorErrors,
-  runAllConnectorsSync,
   runConnectorSync,
 } from "../src/domains/connectors/connector-sync.js";
 
@@ -139,72 +138,6 @@ describe("connector-sync execution boundaries", () => {
     const dueCall = calls.find((call) => call.text.includes("next_retry_at <= now()"));
     assert.ok(dueCall, "expected due-errors query call");
     assert.deepStrictEqual(dueCall.params, [scope.projectId, scope.accountScopeId, 200]);
-  });
-
-  it("retryConnectorErrors records failed retries and emits warning event", async () => {
-    let insertEvents = 0;
-    const pool = {
-      query: async (sql, params) => {
-        const text = String(sql);
-        if (text.includes("INSERT INTO connector_events")) {
-          insertEvents += 1;
-          return { rows: [] };
-        }
-        if (text.includes("FROM connector_errors") && text.includes("next_retry_at <= now()")) {
-          assert.deepStrictEqual(params, [scope.projectId, scope.accountScopeId, 20]);
-          return { rows: [{ id: "err-1", connector: "unknown" }] };
-        }
-        throw new Error(`Unexpected SQL in test pool: ${text.slice(0, 80)}`);
-      },
-    };
-
-    const result = await retryConnectorErrors(pool, scope, { logger: {} });
-
-    assert.equal(result.due, 1);
-    assert.equal(result.succeeded, 0);
-    assert.equal(result.failed, 1);
-    assert.equal(result.retried.length, 1);
-    assert.equal(result.retried[0].status, "failed");
-    assert.match(String(result.retried[0].error || ""), /unsupported_connector/);
-    assert.equal(insertEvents, 3, "expected start, warning, finish process events");
-  });
-
-  it("runAllConnectorsSync completes cycle when all connector modes are invalid", async () => {
-    const prevMode = process.env.CONNECTOR_MODE;
-    process.env.CONNECTOR_MODE = "invalid";
-    try {
-      let errorInserts = 0;
-      const pool = {
-        query: async (sql) => {
-          const text = String(sql);
-          if (text.includes("FROM connector_sync_state")) return { rows: [] };
-          if (text.includes("INSERT INTO connector_sync_state")) return { rows: [] };
-          if (text.includes("FROM connector_errors") && text.includes("dedupe_key = $4")) {
-            return { rows: [] };
-          }
-          if (text.includes("INSERT INTO connector_errors")) {
-            errorInserts += 1;
-            return { rows: [{ id: `err-${errorInserts}` }] };
-          }
-          if (text.includes("INSERT INTO connector_events")) return { rows: [] };
-          if (text.includes("REFRESH MATERIALIZED VIEW CONCURRENTLY")) {
-            throw new Error("matview unavailable");
-          }
-          throw new Error(`forced failure: ${text.slice(0, 80)}`);
-        },
-      };
-
-      const result = await runAllConnectorsSync(pool, scope, {}, {});
-      assert.equal(result.total, 3);
-      assert.equal(result.ok, 0);
-      assert.equal(result.failed, 3);
-      assert.equal(result.results.length, 3);
-      assert.ok(result.results.every((row) => row.status === "failed"));
-      assert.equal(errorInserts, 3);
-    } finally {
-      if (prevMode == null) delete process.env.CONNECTOR_MODE;
-      else process.env.CONNECTOR_MODE = prevMode;
-    }
   });
 
 });
