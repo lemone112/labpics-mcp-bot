@@ -1,11 +1,13 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const currentDir = dirname(fileURLToPath(import.meta.url));
-const workerLoopSource = readFileSync(join(currentDir, "..", "src", "worker-loop.js"), "utf8");
+const workerLoopPathTs = join(currentDir, "..", "src", "worker-loop.ts");
+const workerLoopPathJs = join(currentDir, "..", "src", "worker-loop.js");
+const workerLoopSource = readFileSync(existsSync(workerLoopPathTs) ? workerLoopPathTs : workerLoopPathJs, "utf8");
 
 test("worker loop isolates per-project scheduler errors", () => {
   assert.ok(

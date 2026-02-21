@@ -8,11 +8,15 @@ import { runSchedulerTick } from "./domains/core/scheduler.js";
 
 const logger = createLogger("worker-loop");
 
-function sleep(ms) {
+function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function runCycle(pool, limitPerProject, publishFn) {
+async function runCycle(
+  pool: ReturnType<typeof createDbPool>,
+  limitPerProject: number,
+  publishFn: ((channel: string, message: unknown) => Promise<void> | void) | null
+) {
   const { rows } = await pool.query(
     `
       SELECT id AS project_id, account_scope_id
@@ -24,22 +28,22 @@ async function runCycle(pool, limitPerProject, publishFn) {
   let processed = 0;
   let failed = 0;
   let projectErrors = 0;
-  for (const row of rows) {
+  for (const row of rows as Array<{ project_id: string; account_scope_id: string }>) {
     const scope = {
       projectId: row.project_id,
       accountScopeId: row.account_scope_id,
     };
     try {
-      const result = await runSchedulerTick(pool, scope, { limit: limitPerProject, logger, publishFn });
-      processed += result.processed;
-      failed += result.failed;
+      const result = await runSchedulerTick(pool, scope, { limit: limitPerProject, logger, publishFn } as any);
+      processed += (result as any).processed;
+      failed += (result as any).failed;
     } catch (error) {
       projectErrors += 1;
       logger.error(
         {
           project_id: scope.projectId,
           account_scope_id: scope.accountScopeId,
-          err: String(error?.message || error),
+          err: String((error as Error)?.message || error),
         },
         "project scheduler tick failed"
       );
@@ -55,10 +59,11 @@ async function main() {
   const intervalSeconds = Number.parseInt(String(process.env.WORKER_INTERVAL_SECONDS || "60"), 10) || 60;
   const pool = createDbPool(databaseUrl);
 
-  // Redis for publishing job completion events
   const redisPubSub = createRedisPubSub({ logger });
   const publishFn = redisPubSub.enabled
-    ? (channel, message) => redisPubSub.publish(channel, message)
+    ? async (channel: string, message: unknown) => {
+        await redisPubSub.publish(channel, message as any);
+      }
     : null;
 
   if (redisPubSub.enabled) {
@@ -67,20 +72,23 @@ async function main() {
     logger.warn("redis unavailable, real-time SSE disabled (polling still active)");
   }
 
-  // --- Graceful shutdown ---
   let running = true;
-  async function gracefulShutdown(signal) {
+  async function gracefulShutdown(signal: string) {
     logger.info({ signal }, "shutdown signal received");
     running = false;
-    const deadlineMs = parseInt(process.env.SHUTDOWN_TIMEOUT_MS, 10) || 30_000;
+    const deadlineMs = parseInt(String(process.env.SHUTDOWN_TIMEOUT_MS), 10) || 30_000;
     const forceExit = setTimeout(() => {
       logger.fatal({ deadline_ms: deadlineMs }, "force exit — shutdown deadline exceeded");
       process.exit(1);
     }, deadlineMs);
     forceExit.unref();
   }
-  process.on("SIGTERM", () => gracefulShutdown("SIGTERM"));
-  process.on("SIGINT", () => gracefulShutdown("SIGINT"));
+  process.on("SIGTERM", () => {
+    void gracefulShutdown("SIGTERM");
+  });
+  process.on("SIGINT", () => {
+    void gracefulShutdown("SIGINT");
+  });
 
   try {
     while (running) {
@@ -89,7 +97,6 @@ async function main() {
       } catch (error) {
         logger.error({ err: error }, "worker cycle failed");
       }
-      // Interruptible sleep: check running flag every second
       for (let i = 0; i < intervalSeconds && running; i++) {
         await sleep(1000);
       }

@@ -1,4 +1,4 @@
-const TEMPLATE_LIBRARY = {
+const TEMPLATE_LIBRARY: Record<string, string> = {
   waiting_on_client_follow_up: [
     "Тема: Нужен апрув по этапу {{stage_name}}",
     "",
@@ -69,13 +69,13 @@ const TEMPLATE_LIBRARY = {
   ].join("\n"),
 };
 
-function sanitizeTemplateValue(value) {
+function sanitizeTemplateValue(value: unknown) {
   return String(value ?? "")
     .replace(/\r/g, "")
     .trim();
 }
 
-function renderTemplate(templateBody, variables = {}) {
+function renderTemplate(templateBody: string, variables: Record<string, unknown> = {}) {
   let rendered = String(templateBody || "");
   for (const [key, value] of Object.entries(variables || {})) {
     const token = new RegExp(`\\{\\{\\s*${key}\\s*\\}\\}`, "g");
@@ -84,11 +84,11 @@ function renderTemplate(templateBody, variables = {}) {
   return rendered;
 }
 
-export function getTemplateByKey(templateKey) {
+export function getTemplateByKey(templateKey: string) {
   return TEMPLATE_LIBRARY[templateKey] || "";
 }
 
-export function buildSuggestedTemplate(templateKey, variables = {}) {
+export function buildSuggestedTemplate(templateKey: string, variables: Record<string, unknown> = {}) {
   const body = getTemplateByKey(templateKey);
   if (!body) return "";
   return renderTemplate(body, variables);
@@ -98,11 +98,18 @@ export async function generateTemplate({
   templateKey,
   variables = {},
   llmGenerateTemplate = null,
+}: {
+  templateKey: string;
+  variables?: Record<string, unknown>;
+  llmGenerateTemplate?: ((params: {
+    templateKey: string;
+    variables: Record<string, unknown>;
+    fallback: string;
+  }) => Promise<string | null> | string | null) | null;
 }) {
   const fallback = buildSuggestedTemplate(templateKey, variables);
   if (!llmGenerateTemplate) return fallback;
 
-  // LLM is allowed only for human-facing template text generation.
   const generated = await llmGenerateTemplate({
     templateKey,
     variables,

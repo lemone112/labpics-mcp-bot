@@ -2,15 +2,39 @@ name: CI Quality
 
 on:
   pull_request:
+    branches:
+      - labpics_dashboard
   push:
     branches:
-      - main
+      - labpics_dashboard
       - cursor/**
+  workflow_dispatch:
+
+concurrency:
+  group: ci-quality-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
 
 jobs:
   quality:
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_DB: labpics_ci
+          POSTGRES_USER: app
+          POSTGRES_PASSWORD: app
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U app -d labpics_ci"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -36,9 +60,25 @@ jobs:
         working-directory: apps/api
         run: npm run typecheck
 
-      - name: Server tests with coverage
+      - name: API migration idempotency
         working-directory: apps/api
-        run: npm run test:coverage
+        env:
+          DATABASE_URL: postgresql://app:app@127.0.0.1:5432/labpics_ci
+        run: npm run test:migrations:idempotency
+
+      - name: Server tests with coverage gates
+        working-directory: apps/api
+        run: npm run test:coverage:ci
+
+      - name: Upload API coverage artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: api-coverage
+          path: |
+            apps/api/coverage/lcov.info
+            apps/api/coverage/coverage-summary.json
+          if-no-files-found: error
 
       - name: Web typecheck
         working-directory: apps/web
@@ -56,19 +96,89 @@ jobs:
         working-directory: apps/web
         run: npm run bundle:check
 
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ hashFiles('package-lock.json') }}
+
       - name: Install Playwright browsers
         working-directory: apps/web
         run: npx playwright install --with-deps chromium
 
       - name: Web mocked e2e
         working-directory: apps/web
+        env:
+          PLAYWRIGHT_REPORTER: ci
+          PLAYWRIGHT_JUNIT_OUTPUT_FILE: test-results/mock/junit.xml
+          PLAYWRIGHT_OUTPUT_DIR: test-results/mock
         run: npm run test:e2e
 
       - name: Web live integration e2e (strict docker)
         working-directory: apps/web
         env:
           E2E_REQUIRE_DOCKER: "1"
+          PLAYWRIGHT_REPORTER: ci
+          PLAYWRIGHT_JUNIT_OUTPUT_FILE: test-results/integration/junit.xml
+          PLAYWRIGHT_OUTPUT_DIR: test-results/integration
         run: npm run test:e2e:integration
+
+      - name: Upload Playwright artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-artifacts
+          path: |
+            apps/web/test-results
+            apps/web/playwright-report
+          if-no-files-found: warn
+
+  lightrag-integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_DB: labpics_lightrag_ci
+          POSTGRES_USER: app
+          POSTGRES_PASSWORD: app
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U app -d labpics_lightrag_ci"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install all dependencies
+        run: npm ci
+
+      - name: LightRAG DB + Redis integration tests
+        working-directory: apps/api
+        env:
+          LIGHTRAG_INTEGRATION: "1"
+          DATABASE_URL: postgresql://app:app@127.0.0.1:5432/labpics_lightrag_ci
+          REDIS_URL: redis://127.0.0.1:6379
+        run: npm run test:integration:lightrag
 
   biome:
     runs-on: ubuntu-latest
@@ -108,6 +218,10 @@ jobs:
       - name: Typecheck bot
         working-directory: apps/telegram-bot
         run: npm run typecheck
+
+      - name: Bot build smoke
+        working-directory: apps/telegram-bot
+        run: npm run build
 
   smoke:
     runs-on: ubuntu-latest

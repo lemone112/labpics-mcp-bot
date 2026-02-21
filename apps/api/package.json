@@ -7,10 +7,13 @@
     "dev": "tsx watch src/index.js",
     "start": "tsx src/index.js",
     "migrate": "node db/migrate.js",
-    "worker": "tsx src/worker.js",
-    "worker:loop": "tsx src/worker-loop.js",
+    "worker": "tsx src/worker.ts",
+    "worker:loop": "tsx src/worker-loop.ts",
     "test": "tsx --test test/**/*.test.js",
     "test:coverage": "c8 --reporter=text --reporter=lcov tsx --test test/**/*.test.js",
+    "test:coverage:ci": "c8 --reporter=text --reporter=lcov --reporter=json-summary tsx --test test/**/*.test.js && node scripts/check-coverage-gates.mjs",
+    "test:integration:lightrag": "tsx --test test/lightrag-db-redis.integration.test.js",
+    "test:migrations:idempotency": "node scripts/check-migrations-idempotency.mjs",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

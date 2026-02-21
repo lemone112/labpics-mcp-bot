@@ -1,4 +1,22 @@
-export async function resolveProjectSourceBinding(pool, scope, sourceKind, fallbackExternalId = "", meta = {}) {
+import type { Pool } from "../../types/index.js";
+
+type ProjectScope = {
+  projectId: string;
+  accountScopeId: string;
+};
+
+type PgUniqueViolation = {
+  code?: string;
+  detail?: string;
+};
+
+export async function resolveProjectSourceBinding(
+  pool: Pool,
+  scope: ProjectScope,
+  sourceKind: string,
+  fallbackExternalId = "",
+  meta: Record<string, unknown> = {}
+) {
   const { rows } = await pool.query(
     `
       SELECT external_id
@@ -10,7 +28,9 @@ export async function resolveProjectSourceBinding(pool, scope, sourceKind, fallb
     `,
     [scope.projectId, scope.accountScopeId, sourceKind]
   );
-  if (rows[0]?.external_id) return String(rows[0].external_id);
+  if ((rows[0] as { external_id?: string } | undefined)?.external_id) {
+    return String((rows[0] as { external_id: string }).external_id);
+  }
 
   const fallback = String(fallbackExternalId || "").trim();
   if (!fallback) {
@@ -27,8 +47,9 @@ export async function resolveProjectSourceBinding(pool, scope, sourceKind, fallb
     );
     return fallback;
   } catch (error) {
-    if (String(error?.code) === "23505") {
-      const detail = String(error?.detail || "").toLowerCase();
+    const err = error as PgUniqueViolation;
+    if (String(err?.code) === "23505") {
+      const detail = String(err?.detail || "").toLowerCase();
       if (detail.includes("source_kind") && detail.includes("external_id")) {
         throw new Error(`${sourceKind}_external_id_already_bound_to_another_project`);
       }

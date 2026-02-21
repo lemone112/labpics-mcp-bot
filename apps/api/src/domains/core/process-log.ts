@@ -1,19 +1,45 @@
 import crypto from "node:crypto";
+import type { Pool } from "../../types/index.js";
 
-function toIso(value, fallback = new Date()) {
-  const date = value instanceof Date ? value : new Date(value || fallback);
+type Scope = {
+  projectId: string;
+  accountScopeId: string;
+};
+
+type ProcessEventRow = {
+  event_type: string;
+  occurred_at: string;
+  source?: string;
+  source_ref: string;
+  payload_json?: Record<string, unknown>;
+  dedupe_key: string;
+};
+
+type ProcessRun = {
+  process: string;
+  run_id: string;
+  started_at: string;
+  source: string;
+  source_ref: string;
+};
+
+function toIso(value: unknown, fallback = new Date()) {
+  const date = value instanceof Date ? value : new Date(String(value || fallback));
   return Number.isFinite(date.getTime()) ? date.toISOString() : new Date().toISOString();
 }
 
-function buildDedupeKey(parts = []) {
-  return crypto.createHash("sha1").update(parts.map((item) => String(item || "")).join("|")).digest("hex");
+function buildDedupeKey(parts: unknown[] = []) {
+  return crypto
+    .createHash("sha1")
+    .update(parts.map((item) => String(item || "")).join("|"))
+    .digest("hex");
 }
 
-function buildSourceRef(processName, runId) {
+function buildSourceRef(processName: string, runId: string) {
   return `process:${processName}:${runId}`;
 }
 
-async function insertProcessEvent(pool, scope, row) {
+async function insertProcessEvent(pool: Pool, scope: Scope, row: ProcessEventRow) {
   await pool.query(
     `
       INSERT INTO connector_events(
@@ -62,7 +88,17 @@ async function insertProcessEvent(pool, scope, row) {
   );
 }
 
-export async function startProcessRun(pool, scope, processName, options = {}) {
+export async function startProcessRun(
+  pool: Pool,
+  scope: Scope,
+  processName: string,
+  options: {
+    run_id?: string;
+    started_at?: unknown;
+    source?: string;
+    payload?: Record<string, unknown>;
+  } = {}
+): Promise<ProcessRun> {
   const runId = options.run_id || crypto.randomUUID();
   const startedAt = toIso(options.started_at);
   const source = String(options.source || "system").trim().toLowerCase() || "system";
@@ -91,7 +127,16 @@ export async function startProcessRun(pool, scope, processName, options = {}) {
   };
 }
 
-export async function finishProcessRun(pool, scope, run, options = {}) {
+export async function finishProcessRun(
+  pool: Pool,
+  scope: Scope,
+  run: ProcessRun | null,
+  options: {
+    finished_at?: unknown;
+    counters?: Record<string, unknown>;
+    payload?: Record<string, unknown>;
+  } = {}
+) {
   if (!run) return;
   const finishedAt = toIso(options.finished_at);
   const startedAt = new Date(run.started_at);
@@ -118,7 +163,17 @@ export async function finishProcessRun(pool, scope, run, options = {}) {
   });
 }
 
-export async function failProcessRun(pool, scope, run, error, options = {}) {
+export async function failProcessRun(
+  pool: Pool,
+  scope: Scope,
+  run: ProcessRun | null,
+  error: unknown,
+  options: {
+    failed_at?: unknown;
+    counters?: Record<string, unknown>;
+    payload?: Record<string, unknown>;
+  } = {}
+) {
   if (!run) return;
   const failedAt = toIso(options.failed_at);
   const startedAt = new Date(run.started_at);
@@ -132,7 +187,7 @@ export async function failProcessRun(pool, scope, run, error, options = {}) {
     started_at: run.started_at,
     failed_at: failedAt,
     duration_ms: durationMs,
-    error_message: String(error?.message || error || "process_failed").slice(0, 4000),
+    error_message: String((error as Error)?.message || error || "process_failed").slice(0, 4000),
     counters: options.counters || {},
     ...(options.payload || {}),
   };
@@ -146,7 +201,18 @@ export async function failProcessRun(pool, scope, run, error, options = {}) {
   });
 }
 
-export async function warnProcess(pool, scope, processName, warningMessage, options = {}) {
+export async function warnProcess(
+  pool: Pool,
+  scope: Scope,
+  processName: string,
+  warningMessage: unknown,
+  options: {
+    occurred_at?: unknown;
+    source?: string;
+    source_ref?: string;
+    payload?: Record<string, unknown>;
+  } = {}
+) {
   const occurredAt = toIso(options.occurred_at);
   const source = String(options.source || "system").trim().toLowerCase() || "system";
   const sourceRef = String(options.source_ref || `process:${processName}`).slice(0, 500);
