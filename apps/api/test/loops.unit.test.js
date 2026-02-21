@@ -149,3 +149,127 @@ test("syncLoopsContacts processes contacts, handles duplicate upsert, and writes
     else process.env.LOOPS_API_BASE_URL = prevBase;
   }
 });
+
+test("syncLoopsContacts marks audit as partial on mixed success and failure", async () => {
+  const prevKey = process.env.LOOPS_SECRET_KEY;
+  const prevBase = process.env.LOOPS_API_BASE_URL;
+  const prevFetch = globalThis.fetch;
+  process.env.LOOPS_SECRET_KEY = "test-key";
+  process.env.LOOPS_API_BASE_URL = "https://loops.example";
+
+  const fetchCalls = [];
+  globalThis.fetch = async (url) => {
+    fetchCalls.push(String(url));
+    if (fetchCalls.length === 1) {
+      return { ok: true, status: 200, text: async () => JSON.stringify({ ok: true }) };
+    }
+    return { ok: false, status: 500, text: async () => JSON.stringify({ message: "rate limit" }) };
+  };
+
+  try {
+    const auditInserts = [];
+    const pool = {
+      query: async (sql, params) => {
+        if (String(sql).includes("FROM projects")) {
+          // no projectIds filter passed -> default scope branch
+          assert.doesNotMatch(String(sql), /ANY\\(\\$2::text\\[\\]\\)/);
+          return { rows: [{ id: "proj-default" }] };
+        }
+        if (String(sql).includes("FROM cw_contacts")) {
+          return {
+            rows: [
+              { email: "ok@example.com", name: "Ok", project_ids: ["proj-default"], project_names: ["Default"] },
+              { email: "fail@example.com", name: "Fail", project_ids: ["proj-default"], project_names: ["Default"] },
+            ],
+          };
+        }
+        if (String(sql).includes("INSERT INTO audit_events")) {
+          auditInserts.push(params);
+          return { rows: [{ id: "evt-1", created_at: "2026-02-21T00:00:00.000Z" }] };
+        }
+        throw new Error(`Unexpected SQL in test: ${String(sql).slice(0, 40)}`);
+      },
+    };
+
+    const result = await syncLoopsContacts(
+      pool,
+      { accountScopeId: "scope-1" },
+      { actorUsername: "owner", requestId: "req-mixed", limit: 100 }
+    );
+
+    assert.equal(result.processed, 1);
+    assert.equal(result.failed, 1);
+    assert.equal(result.created, 1);
+    assert.equal(result.updated, 0);
+    assert.equal(result.errors.length, 1);
+    assert.match(result.errors[0].message, /loops_http_500/);
+    assert.equal(auditInserts.length, 1);
+    assert.equal(auditInserts[0][7], "partial");
+  } finally {
+    globalThis.fetch = prevFetch;
+    if (prevKey == null) delete process.env.LOOPS_SECRET_KEY;
+    else process.env.LOOPS_SECRET_KEY = prevKey;
+    if (prevBase == null) delete process.env.LOOPS_API_BASE_URL;
+    else process.env.LOOPS_API_BASE_URL = prevBase;
+  }
+});
+
+test("syncLoopsContacts caps stored errors to 20 entries", async () => {
+  const prevKey = process.env.LOOPS_SECRET_KEY;
+  const prevBase = process.env.LOOPS_API_BASE_URL;
+  const prevFetch = globalThis.fetch;
+  process.env.LOOPS_SECRET_KEY = "test-key";
+  process.env.LOOPS_API_BASE_URL = "https://loops.example";
+
+  globalThis.fetch = async () => ({
+    ok: false,
+    status: 502,
+    // Non-JSON body hits readJsonSafe fallback branch.
+    text: async () => "gateway-down",
+  });
+
+  try {
+    const contacts = Array.from({ length: 25 }, (_, idx) => ({
+      email: `user${idx}@example.com`,
+      name: `User ${idx}`,
+      project_ids: ["proj-a"],
+      project_names: ["Project A"],
+    }));
+    const auditInserts = [];
+
+    const pool = {
+      query: async (sql, params) => {
+        if (String(sql).includes("FROM projects")) {
+          return { rows: [{ id: "proj-a" }] };
+        }
+        if (String(sql).includes("FROM cw_contacts")) {
+          return { rows: contacts };
+        }
+        if (String(sql).includes("INSERT INTO audit_events")) {
+          auditInserts.push(params);
+          return { rows: [{ id: "evt-cap", created_at: "2026-02-21T00:00:00.000Z" }] };
+        }
+        throw new Error(`Unexpected SQL in test: ${String(sql).slice(0, 40)}`);
+      },
+    };
+
+    const result = await syncLoopsContacts(
+      pool,
+      { accountScopeId: "scope-1", projectIds: ["proj-a"] },
+      { actorUsername: "owner", requestId: "req-cap", limit: 9999 }
+    );
+
+    assert.equal(result.processed, 0);
+    assert.equal(result.failed, 25);
+    assert.equal(result.errors.length, 20);
+    assert.match(result.errors[0].message, /loops_http_502/);
+    assert.equal(auditInserts.length, 1);
+    assert.equal(auditInserts[0][7], "failed");
+  } finally {
+    globalThis.fetch = prevFetch;
+    if (prevKey == null) delete process.env.LOOPS_SECRET_KEY;
+    else process.env.LOOPS_SECRET_KEY = prevKey;
+    if (prevBase == null) delete process.env.LOOPS_API_BASE_URL;
+    else process.env.LOOPS_API_BASE_URL = prevBase;
+  }
+});
