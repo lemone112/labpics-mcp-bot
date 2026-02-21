@@ -12,6 +12,8 @@ import {
   asText,
   toBoolean,
   boolFromEnv,
+  isUuid,
+  assertUuid,
   requiredEnv,
 } from "../src/infra/utils.js";
 
@@ -195,6 +197,30 @@ describe("toBoolean", () => {
 describe("boolFromEnv", () => {
   it("is an alias for toBoolean", () => {
     assert.equal(boolFromEnv, toBoolean);
+  });
+});
+
+describe("UUID helpers", () => {
+  it("isUuid recognizes valid UUID values", () => {
+    assert.equal(isUuid("00000000-0000-4000-8000-000000000001"), true);
+    assert.equal(isUuid("550e8400-e29b-41d4-a716-446655440000"), true);
+  });
+
+  it("isUuid rejects invalid UUID values", () => {
+    assert.equal(isUuid("not-a-uuid"), false);
+    assert.equal(isUuid("123"), false);
+    assert.equal(isUuid("550e8400-e29b-41d4-a716-44665544"), false);
+  });
+
+  it("assertUuid returns normalized uuid and throws on invalid values", () => {
+    assert.equal(
+      assertUuid("550e8400-e29b-41d4-a716-446655440000", "project_id"),
+      "550e8400-e29b-41d4-a716-446655440000"
+    );
+    assert.throws(
+      () => assertUuid("bad-id", "project_id"),
+      (err) => err.name === "ApiError" && err.status === 400 && err.code === "invalid_uuid"
+    );
   });
 });
 

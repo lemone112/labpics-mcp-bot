@@ -341,9 +341,11 @@ export default function ReportListPage() {
             </CardHeader>
             <CardContent>
               {selectedReport.format === "html" && selectedReport.data?.html ? (
-                <div
-                  className="prose prose-sm max-w-none dark:prose-invert"
-                  dangerouslySetInnerHTML={{ __html: selectedReport.data.html }}
+                <iframe
+                  title={`report-${selectedReport.id}`}
+                  className="h-[640px] w-full rounded-md border bg-background"
+                  sandbox=""
+                  srcDoc={String(selectedReport.data.html)}
                 />
               ) : (
                 <pre className="max-h-[600px] overflow-auto rounded-md bg-muted p-4 text-xs">

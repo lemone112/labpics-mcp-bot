@@ -1,5 +1,31 @@
 import { ApiError } from "./api-contract.js";
 
+type Role = "owner" | "pm";
+
+interface AuthContext {
+  session_id?: string;
+  user_id?: string | null;
+  user_role?: Role | null;
+  active_project_id?: string | null;
+}
+
+interface ApiKeyContext {
+  scopes?: string[];
+}
+
+interface RequestLike {
+  auth?: AuthContext;
+  apiKey?: ApiKeyContext;
+}
+
+interface QueryResult {
+  rows: Array<Record<string, unknown>>;
+}
+
+interface PoolLike {
+  query: (query: string, params?: unknown[]) => Promise<QueryResult>;
+}
+
 /**
  * Role-based access control middleware for multi-user support.
  *
@@ -12,12 +38,17 @@ import { ApiError } from "./api-contract.js";
 
 /**
  * Returns the effective role for the current request.
- * - If authenticated via API key, returns "owner" (API keys are system-level).
+ * - If authenticated via API key with admin scope, returns "owner".
+ * - If authenticated via API key without admin scope, returns "pm".
  * - If user_role is set from the session JOIN, use that.
  * - If no user_id (legacy env var session), default to "owner".
  */
-export function getEffectiveRole(request) {
-  if (request.apiKey) return "owner";
+export function getEffectiveRole(request: RequestLike): Role {
+  if (request.apiKey) {
+    if (request.auth?.user_role) return request.auth.user_role;
+    const scopes = Array.isArray(request.apiKey?.scopes) ? request.apiKey.scopes : [];
+    return scopes.includes("admin") ? "owner" : "pm";
+  }
   return request.auth?.user_role || "owner";
 }
 
@@ -26,8 +57,8 @@ export function getEffectiveRole(request) {
  * Role hierarchy: owner > pm.
  * Usage: requireRole("owner") — only owners can access.
  */
-export function requireRole(role) {
-  return async function checkRole(request) {
+export function requireRole(role: Role) {
+  return async function checkRole(request: RequestLike): Promise<void> {
     const effectiveRole = getEffectiveRole(request);
     if (role === "owner" && effectiveRole !== "owner") {
       throw new ApiError(403, "forbidden", "This action requires owner role");
@@ -39,14 +70,13 @@ export function requireRole(role) {
 /**
  * Check if a PM user has access to a specific project.
  * Owners always have access. PMs need a project_assignments record.
- *
- * @param {object} pool - Database pool
- * @param {string|null} userId - User ID from session
- * @param {string} userRole - "owner" or "pm"
- * @param {string} projectId - Project ID to check
- * @returns {Promise<boolean>}
  */
-export async function canAccessProject(pool, userId, userRole, projectId) {
+export async function canAccessProject(
+  pool: PoolLike,
+  userId: string | null,
+  userRole: Role,
+  projectId: string
+): Promise<boolean> {
   // Owners and legacy env var users (no userId) can access all projects
   if (userRole === "owner" || !userId) return true;
   if (!projectId) return false;
@@ -62,11 +92,9 @@ export async function canAccessProject(pool, userId, userRole, projectId) {
  * Middleware: enforce project-level access for the current request.
  * Uses the active_project_id from the session scope.
  * Owners pass through. PMs are checked against project_assignments.
- *
- * @param {object} pool - Database pool
  */
-export function requireProjectAccess(pool) {
-  return async function checkProjectAccess(request) {
+export function requireProjectAccess(pool: PoolLike) {
+  return async function checkProjectAccess(request: RequestLike): Promise<void> {
     if (request.apiKey) return; // API keys have their own scope
 
     const userId = request.auth?.user_id || null;
@@ -85,18 +113,17 @@ export function requireProjectAccess(pool) {
 /**
  * Get the list of project IDs a user can access.
  * Owners get null (meaning all projects). PMs get their assigned project IDs.
- *
- * @param {object} pool - Database pool
- * @param {string|null} userId - User ID
- * @param {string} userRole - "owner" or "pm"
- * @returns {Promise<string[]|null>} Array of project IDs, or null for unrestricted access
  */
-export async function getAccessibleProjectIds(pool, userId, userRole) {
+export async function getAccessibleProjectIds(
+  pool: PoolLike,
+  userId: string | null,
+  userRole: Role
+): Promise<string[] | null> {
   if (userRole === "owner" || !userId) return null; // null = unrestricted
 
   const { rows } = await pool.query(
     "SELECT project_id::text FROM project_assignments WHERE user_id = $1",
     [userId]
   );
-  return rows.map((r) => r.project_id);
+  return rows.map((r) => String(r.project_id));
 }

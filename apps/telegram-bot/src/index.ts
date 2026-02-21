@@ -53,7 +53,8 @@ export default {
     let update: TelegramUpdate;
     try {
       update = (await request.json()) as TelegramUpdate;
-    } catch {
+    } catch (err) {
+      console.error("[webhook] invalid telegram update payload", err);
       return json({ ok: false, error: "invalid json" }, 400);
     }
 

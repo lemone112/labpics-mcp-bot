@@ -23,17 +23,30 @@ async function runCycle(pool, limitPerProject, publishFn) {
 
   let processed = 0;
   let failed = 0;
+  let projectErrors = 0;
   for (const row of rows) {
     const scope = {
       projectId: row.project_id,
       accountScopeId: row.account_scope_id,
     };
-    const result = await runSchedulerTick(pool, scope, { limit: limitPerProject, logger, publishFn });
-    processed += result.processed;
-    failed += result.failed;
+    try {
+      const result = await runSchedulerTick(pool, scope, { limit: limitPerProject, logger, publishFn });
+      processed += result.processed;
+      failed += result.failed;
+    } catch (error) {
+      projectErrors += 1;
+      logger.error(
+        {
+          project_id: scope.projectId,
+          account_scope_id: scope.accountScopeId,
+          err: String(error?.message || error),
+        },
+        "project scheduler tick failed"
+      );
+    }
   }
 
-  logger.info({ projects: rows.length, processed, failed }, "worker cycle complete");
+  logger.info({ projects: rows.length, processed, failed, project_errors: projectErrors }, "worker cycle complete");
 }
 
 async function main() {

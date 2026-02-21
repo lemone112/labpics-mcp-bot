@@ -43,7 +43,12 @@ export function createRedisPubSub({ url, logger = console }: PubSubOptions = {})
       callbacks.get(channel)?.delete(callback);
       if (callbacks.get(channel)?.size === 0) {
         callbacks.delete(channel);
-        subscriber.unsubscribe(channel).catch(() => {});
+        subscriber.unsubscribe(channel).catch((err: unknown) => {
+          logger.warn(
+            { channel, error: String((err as Error)?.message || err) },
+            "redis unsubscribe failed"
+          );
+        });
       }
     };
   }

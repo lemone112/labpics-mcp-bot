@@ -1,5 +1,6 @@
 import { fail, parseBody, parseLimit, sendOk } from "../infra/api-contract.js";
 import { requireProjectScope } from "../infra/scope.js";
+import { assertUuid } from "../infra/utils.js";
 import { listAuditEvents } from "../domains/core/audit.js";
 import { approveOutbound, createOutboundDraft, listOutbound, processDueOutbounds, sendOutbound, setOptOut } from "../domains/outbound/outbox.js";
 import { findCachedResponse, getIdempotencyKey, storeCachedResponse } from "../infra/idempotency.js";
@@ -77,9 +78,10 @@ export function registerOutboundRoutes(ctx) {
   registerPost("/outbound/:id/approve", async (request, reply) => {
     const scope = requireProjectScope(request);
     const body = parseBody(OutboundApproveSchema, request.body);
+    const outboundId = assertUuid(request.params?.id, "outbound_id");
     const outbound = await approveOutbound(
       pool, scope,
-      String(request.params?.id || ""),
+      outboundId,
       request.auth?.username || null,
       request.requestId,
       body.evidence_refs
@@ -89,9 +91,10 @@ export function registerOutboundRoutes(ctx) {
 
   registerPost("/outbound/:id/send", async (request, reply) => {
     const scope = requireProjectScope(request);
+    const outboundId = assertUuid(request.params?.id, "outbound_id");
     const outbound = await sendOutbound(
       pool, scope,
-      String(request.params?.id || ""),
+      outboundId,
       request.auth?.username || null,
       request.requestId
     );

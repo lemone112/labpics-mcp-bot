@@ -166,11 +166,11 @@ export const SearchAnalyticsSummarySchema = z.object({
 // ---------------------------------------------------------------------------
 
 export const SignalStatusSchema = z.object({
-  status: z.string().trim().toLowerCase().min(1, "status is required"),
+  status: z.enum(["proposed", "accepted", "dismissed", "done"]),
 });
 
 export const NbaStatusSchema = z.object({
-  status: z.string().trim().toLowerCase().min(1, "status is required"),
+  status: z.enum(["proposed", "accepted", "dismissed", "done", "cancelled"]),
 });
 
 export const IdentityPreviewSchema = z.object({
@@ -241,11 +241,11 @@ export const OutboundProcessSchema = z.object({
 });
 
 export const LoopsSyncSchema = z.object({
-  project_ids: z.array(z.string()).optional().default([]),
+  project_ids: z.array(z.string().uuid()).optional().default([]),
 });
 
 export const UpsellStatusSchema = z.object({
-  status: z.string().trim().toLowerCase().min(1, "status is required"),
+  status: z.enum(["proposed", "accepted", "dismissed", "converted"]),
 });
 
 export const ContinuityApplySchema = z.object({

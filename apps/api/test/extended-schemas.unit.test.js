@@ -29,22 +29,22 @@ import {
 // 9.1 Signals & Identity
 // ---------------------------------------------------------------------------
 
-test("SignalStatusSchema accepts valid status", () => {
-  const result = parseBody(SignalStatusSchema, { status: " active " });
-  assert.equal(result.status, "active");
+test("SignalStatusSchema accepts valid enum status", () => {
+  const result = parseBody(SignalStatusSchema, { status: "accepted" });
+  assert.equal(result.status, "accepted");
 });
 
-test("SignalStatusSchema rejects empty status", () => {
-  assert.throws(() => parseBody(SignalStatusSchema, { status: "" }), (err) => err.code === "validation_error");
+test("SignalStatusSchema rejects unknown status", () => {
+  assert.throws(() => parseBody(SignalStatusSchema, { status: "active" }), (err) => err.code === "validation_error");
 });
 
 test("NbaStatusSchema accepts valid status", () => {
-  const result = parseBody(NbaStatusSchema, { status: "DISMISSED" });
-  assert.equal(result.status, "dismissed");
+  const result = parseBody(NbaStatusSchema, { status: "cancelled" });
+  assert.equal(result.status, "cancelled");
 });
 
-test("NbaStatusSchema rejects missing status", () => {
-  assert.throws(() => parseBody(NbaStatusSchema, {}), (err) => err.code === "validation_error");
+test("NbaStatusSchema rejects legacy unknown status", () => {
+  assert.throws(() => parseBody(NbaStatusSchema, { status: "approved" }), (err) => err.code === "validation_error");
 });
 
 test("IdentityPreviewSchema has limit with default 100", () => {
@@ -158,17 +158,28 @@ test("LoopsSyncSchema defaults project_ids to empty", () => {
 });
 
 test("LoopsSyncSchema accepts project_ids array", () => {
-  const result = parseBody(LoopsSyncSchema, { project_ids: ["p1", "p2"] });
-  assert.deepEqual(result.project_ids, ["p1", "p2"]);
+  const projectIds = [
+    "00000000-0000-4000-8000-000000000001",
+    "00000000-0000-4000-8000-000000000002",
+  ];
+  const result = parseBody(LoopsSyncSchema, { project_ids: projectIds });
+  assert.deepEqual(result.project_ids, projectIds);
+});
+
+test("LoopsSyncSchema rejects non-uuid project ids", () => {
+  assert.throws(
+    () => parseBody(LoopsSyncSchema, { project_ids: ["not-a-uuid"] }),
+    (err) => err.code === "validation_error"
+  );
 });
 
 test("UpsellStatusSchema accepts valid status", () => {
-  const result = parseBody(UpsellStatusSchema, { status: " Active " });
-  assert.equal(result.status, "active");
+  const result = parseBody(UpsellStatusSchema, { status: "accepted" });
+  assert.equal(result.status, "accepted");
 });
 
-test("UpsellStatusSchema rejects empty status", () => {
-  assert.throws(() => parseBody(UpsellStatusSchema, { status: "" }), (err) => err.code === "validation_error");
+test("UpsellStatusSchema rejects unknown status", () => {
+  assert.throws(() => parseBody(UpsellStatusSchema, { status: "active" }), (err) => err.code === "validation_error");
 });
 
 test("ContinuityApplySchema defaults action_ids to empty", () => {
@@ -223,4 +234,21 @@ test("dead letter endpoints exist in route files", async () => {
 
   assert.ok(connectorRouteSource.includes("/connectors/errors/dead-letter"), "Expected dead-letter GET endpoint");
   assert.ok(connectorRouteSource.includes("/connectors/errors/dead-letter/:id/retry"), "Expected dead-letter retry POST endpoint");
+});
+
+test("migration 0034 aligns NBA status contract to accepted/dismissed", async () => {
+  const { readFileSync } = await import("node:fs");
+  const { join, dirname } = await import("node:path");
+  const { fileURLToPath } = await import("node:url");
+  const currentDir = dirname(fileURLToPath(import.meta.url));
+  const migration = readFileSync(
+    join(currentDir, "..", "db", "migrations", "0034_nba_status_contract.sql"),
+    "utf8"
+  );
+
+  assert.ok(migration.includes("status = 'accepted'"), "Expected migration to rewrite legacy approved status");
+  assert.ok(
+    migration.includes("('proposed', 'accepted', 'dismissed', 'done', 'cancelled')"),
+    "Expected new NBA status check set"
+  );
 });

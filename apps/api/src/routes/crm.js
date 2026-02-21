@@ -1,5 +1,6 @@
 import { ApiError, parseBody, parseLimit, sendError, sendOk } from "../infra/api-contract.js";
 import { requireProjectScope } from "../infra/scope.js";
+import { assertUuid } from "../infra/utils.js";
 import { normalizeEvidenceRefs, writeAuditEvent } from "../domains/core/audit.js";
 import { findCachedResponse, getIdempotencyKey, storeCachedResponse } from "../infra/idempotency.js";
 
@@ -156,6 +157,7 @@ export function registerCrmRoutes(ctx) {
   registerPost("/crm/opportunities/:id/stage", async (request, reply) => {
     const scope = requireProjectScope(request);
     const body = parseBody(UpdateStageSchema, request.body);
+    const opportunityId = assertUuid(request.params?.id, "opportunity_id");
     const nextStage = body.stage;
     const reason = body.reason;
     const evidenceRefs = normalizeEvidenceRefs(body.evidence_refs);
@@ -168,7 +170,7 @@ export function registerCrmRoutes(ctx) {
           AND account_scope_id = $3
         LIMIT 1
       `,
-      [String(request.params?.id || ""), scope.projectId, scope.accountScopeId]
+      [opportunityId, scope.projectId, scope.accountScopeId]
     );
     if (!current.rows[0]) {
       return sendError(reply, request.requestId, new ApiError(404, "opportunity_not_found", "Opportunity not found"));

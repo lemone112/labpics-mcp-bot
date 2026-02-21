@@ -85,7 +85,12 @@ export function registerLightragRoutes(ctx) {
       userId: request.auth?.user_id || null,
       eventType: "search",
       durationMs,
-    }, request.log).catch(() => {});
+    }, request.log).catch((err) => {
+      request.log.warn(
+        { error: String(err?.message || err), request_id: request.requestId },
+        "search analytics fire-and-forget failed"
+      );
+    });
 
     return sendOk(reply, request.requestId, enrichedResult);
   });
