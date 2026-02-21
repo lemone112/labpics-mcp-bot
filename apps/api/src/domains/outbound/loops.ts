@@ -1,12 +1,31 @@
 import { fail } from "../../infra/api-contract.js";
 import { writeAuditEvent } from "../core/audit.js";
-import { toPositiveInt } from '../../infra/utils.js';
+import { toPositiveInt } from "../../infra/utils.js";
+import type { Pool } from "../../types/index.js";
 
 const DEFAULT_LOOPS_API_BASE = "https://app.loops.so/api/v1";
 
-function uniqueIds(input) {
+interface LoopsScopeInput {
+  accountScopeId?: string | null;
+  projectIds?: string[] | null;
+}
+
+interface SyncLoopsOptions {
+  actorUsername?: string | null;
+  requestId?: string | null;
+  limit?: unknown;
+}
+
+interface LoopsContactPayload {
+  email: string;
+  name: string;
+  project_ids: string[];
+  project_names: string[];
+}
+
+function uniqueIds(input: unknown): string[] {
   if (!Array.isArray(input)) return [];
-  const set = new Set();
+  const set = new Set<string>();
   for (const item of input) {
     const id = String(item || "").trim();
     if (!id) continue;
@@ -16,7 +35,7 @@ function uniqueIds(input) {
   return Array.from(set);
 }
 
-function isDuplicateContactError(message) {
+function isDuplicateContactError(message: unknown): boolean {
   const normalized = String(message || "").toLowerCase();
   return (
     normalized.includes("exists") ||
@@ -26,7 +45,7 @@ function isDuplicateContactError(message) {
   );
 }
 
-async function readJsonSafe(response) {
+async function readJsonSafe(response: { text: () => Promise<string> }): Promise<unknown> {
   const text = await response.text();
   if (!text) return null;
   try {
@@ -36,7 +55,7 @@ async function readJsonSafe(response) {
   }
 }
 
-async function loopsRequest(path, payload, apiKey) {
+async function loopsRequest(path: string, payload: unknown, apiKey: string): Promise<unknown> {
   const baseUrl = String(process.env.LOOPS_API_BASE_URL || DEFAULT_LOOPS_API_BASE).replace(/\/$/, "");
   const response = await fetch(`${baseUrl}${path}`, {
     method: "POST",
@@ -56,7 +75,7 @@ async function loopsRequest(path, payload, apiKey) {
   return body;
 }
 
-async function upsertLoopsContact(contact, apiKey) {
+async function upsertLoopsContact(contact: LoopsContactPayload, apiKey: string): Promise<{ status: "created" | "updated" }> {
   const payload = {
     email: contact.email,
     firstName: contact.name,
@@ -69,7 +88,7 @@ async function upsertLoopsContact(contact, apiKey) {
     await loopsRequest("/contacts/create", payload, apiKey);
     return { status: "created" };
   } catch (error) {
-    if (!isDuplicateContactError(error?.message)) {
+    if (!isDuplicateContactError((error as Error)?.message)) {
       throw error;
     }
   }
@@ -78,7 +97,11 @@ async function upsertLoopsContact(contact, apiKey) {
   return { status: "updated" };
 }
 
-async function resolveScopedProjectIds(pool, accountScopeId, requestedProjectIds = []) {
+async function resolveScopedProjectIds(
+  pool: Pool,
+  accountScopeId: string,
+  requestedProjectIds: unknown = []
+): Promise<string[]> {
   const requested = uniqueIds(requestedProjectIds);
   const hasFilter = requested.length > 0;
   const query = hasFilter
@@ -96,11 +119,25 @@ async function resolveScopedProjectIds(pool, accountScopeId, requestedProjectIds
       ORDER BY created_at DESC
     `;
   const values = hasFilter ? [accountScopeId, requested] : [accountScopeId];
-  const { rows } = await pool.query(query, values);
+  const { rows } = await pool.query<{ id: string }>(query, values);
   return rows.map((row) => row.id);
 }
 
-export async function syncLoopsContacts(pool, scope, options = {}) {
+export async function syncLoopsContacts(
+  pool: Pool,
+  scope: LoopsScopeInput,
+  options: SyncLoopsOptions = {}
+): Promise<{
+  enabled: boolean;
+  reason?: string;
+  processed: number;
+  created: number;
+  updated: number;
+  failed: number;
+  skipped: number;
+  errors: Array<{ email: string; message: string }>;
+  selected_project_ids?: string[];
+}> {
   const accountScopeId = String(scope?.accountScopeId || "");
   if (!accountScopeId) {
     fail(409, "account_scope_required", "Account scope is required for Loops sync");
@@ -135,7 +172,12 @@ export async function syncLoopsContacts(pool, scope, options = {}) {
   }
 
   const limit = toPositiveInt(options.limit, 300, 1, 5000);
-  const contactsResult = await pool.query(
+  const contactsResult = await pool.query<{
+    email: string | null;
+    name: string | null;
+    project_ids: string[] | null;
+    project_names: string[] | null;
+  }>(
     `
       SELECT
         lower(c.email) AS email,
@@ -160,7 +202,7 @@ export async function syncLoopsContacts(pool, scope, options = {}) {
   let updated = 0;
   let failed = 0;
   let skipped = 0;
-  const errors = [];
+  const errors: Array<{ email: string; message: string }> = [];
 
   for (const contact of contactsResult.rows) {
     const email = String(contact.email || "").trim().toLowerCase();
@@ -185,7 +227,7 @@ export async function syncLoopsContacts(pool, scope, options = {}) {
       failed += 1;
       errors.push({
         email,
-        message: String(error?.message || "loops_sync_failed").slice(0, 300),
+        message: String((error as Error)?.message || "loops_sync_failed").slice(0, 300),
       });
       if (errors.length > 20) {
         errors.length = 20;
