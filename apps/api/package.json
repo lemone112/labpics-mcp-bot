@@ -19,6 +19,9 @@
     "test:integration:workforce": "tsx --test test/workforce-schema.integration.test.js",
     "test:integration:client-executor": "tsx --test test/client-executor-graph.integration.test.js",
     "test:integration:concurrency": "tsx --test test/concurrency-races.integration.test.js",
+    "perf:budget": "node scripts/check-perf-budgets.mjs",
+    "perf:budget:ci": "PERF_FAIL_ON_REGRESSION=1 node scripts/check-perf-budgets.mjs",
+    "perf:baseline:update": "PERF_WRITE_BASELINE=1 node scripts/check-perf-budgets.mjs",
     "test:migrations:idempotency": "node scripts/check-migrations-idempotency.mjs",
     "typecheck": "tsc --noEmit"
   },
