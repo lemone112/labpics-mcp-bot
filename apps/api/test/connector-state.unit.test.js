@@ -1,31 +1,11 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import crypto from "node:crypto";
-
-// Re-implement pure functions from connector-state.js for unit testing
-
-function clampInt(value, fallback, min = 0, max = 1000) {
-  const parsed = Number.parseInt(String(value ?? ""), 10);
-  if (!Number.isFinite(parsed)) return fallback;
-  return Math.max(min, Math.min(max, parsed));
-}
-
-function addSeconds(date, seconds) {
-  return new Date(date.getTime() + seconds * 1000);
-}
-
-function nextBackoffSeconds(attempt, baseSeconds = 30, capSeconds = 6 * 60 * 60) {
-  const power = Math.max(0, Math.min(10, attempt - 1));
-  const seconds = baseSeconds * Math.pow(2, power);
-  return Math.min(capSeconds, seconds);
-}
-
-function dedupeKeyForError({ connector, mode, operation, sourceRef, errorKind }) {
-  return crypto
-    .createHash("sha1")
-    .update(`${connector}:${mode}:${operation}:${sourceRef || ""}:${errorKind || ""}`)
-    .digest("hex");
-}
+import {
+  addSeconds,
+  clampInt,
+  dedupeKeyForError,
+  nextBackoffSeconds,
+} from "../src/domains/connectors/connector-state.js";
 
 describe("nextBackoffSeconds", () => {
   it("returns base seconds for attempt 1", () => {

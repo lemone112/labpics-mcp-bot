@@ -5,8 +5,46 @@
  * and built-in (seed) templates for common report types.
  */
 
+import type { Pool, ProjectScope } from "../../types/index.js";
+
+type TemplateSection =
+  | "summary_stats"
+  | "connector_health"
+  | "project_activity"
+  | "embedding_coverage"
+  | "error_summary";
+
+type ReportFormat = "json" | "html";
+
+interface ValidationResult {
+  valid: boolean;
+  error?: string;
+}
+
+export interface ReportTemplateRow {
+  id: string;
+  name: string;
+  description: string | null;
+  sections: string[] | null;
+  format: string;
+  schedule: string | null;
+  active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+interface UpsertReportTemplateInput {
+  id?: unknown;
+  name?: unknown;
+  description?: unknown;
+  sections?: unknown;
+  format?: unknown;
+  schedule?: unknown;
+  active?: unknown;
+}
+
 // ── Valid section types ─────────────────────────────────────────
-const VALID_SECTIONS = new Set([
+const VALID_SECTIONS = new Set<TemplateSection>([
   "summary_stats",
   "connector_health",
   "project_activity",
@@ -14,20 +52,18 @@ const VALID_SECTIONS = new Set([
   "error_summary",
 ]);
 
-const VALID_FORMATS = new Set(["json", "html"]);
+const VALID_FORMATS = new Set<ReportFormat>(["json", "html"]);
 
 /**
  * Validate a template sections array.
  * Each section must be a string from the allowed set.
- * @param {unknown[]} sections
- * @returns {{ valid: boolean, error?: string }}
  */
-export function validateSections(sections) {
+export function validateSections(sections: unknown): ValidationResult {
   if (!Array.isArray(sections) || sections.length === 0) {
     return { valid: false, error: "sections must be a non-empty array" };
   }
   for (const section of sections) {
-    if (typeof section !== "string" || !VALID_SECTIONS.has(section)) {
+    if (typeof section !== "string" || !VALID_SECTIONS.has(section as TemplateSection)) {
       return {
         valid: false,
         error: `invalid section: "${section}". Allowed: ${[...VALID_SECTIONS].join(", ")}`,
@@ -39,11 +75,9 @@ export function validateSections(sections) {
 
 /**
  * Validate a report format.
- * @param {string} format
- * @returns {{ valid: boolean, error?: string }}
  */
-export function validateFormat(format) {
-  if (!format || !VALID_FORMATS.has(format)) {
+export function validateFormat(format: unknown): ValidationResult {
+  if (!format || !VALID_FORMATS.has(format as ReportFormat)) {
     return {
       valid: false,
       error: `invalid format: "${format}". Allowed: ${[...VALID_FORMATS].join(", ")}`,
@@ -54,10 +88,8 @@ export function validateFormat(format) {
 
 /**
  * Validate a cron expression (basic check: 5 space-separated fields).
- * @param {string|null|undefined} schedule
- * @returns {{ valid: boolean, error?: string }}
  */
-export function validateSchedule(schedule) {
+export function validateSchedule(schedule: string | null | undefined): ValidationResult {
   if (schedule == null || schedule === "") return { valid: true };
   const parts = String(schedule).trim().split(/\s+/);
   if (parts.length !== 5) {
@@ -67,7 +99,13 @@ export function validateSchedule(schedule) {
 }
 
 // ── Built-in template definitions (seeds) ───────────────────────
-export const BUILTIN_TEMPLATES = [
+export const BUILTIN_TEMPLATES: Array<{
+  name: string;
+  description: string;
+  sections: TemplateSection[];
+  format: ReportFormat;
+  schedule: string;
+}> = [
   {
     name: "Weekly Summary",
     description: "Weekly overview of project activity, connector health, and key metrics",
@@ -95,12 +133,12 @@ export const BUILTIN_TEMPLATES = [
 
 /**
  * List all report templates for a project scope.
- * @param {import('pg').Pool} pool
- * @param {{ projectId: string, accountScopeId: string }} scope
- * @returns {Promise<object[]>}
  */
-export async function listReportTemplates(pool, scope) {
-  const { rows } = await pool.query(
+export async function listReportTemplates(
+  pool: Pool,
+  scope: ProjectScope
+): Promise<ReportTemplateRow[]> {
+  const { rows } = await pool.query<ReportTemplateRow>(
     `
       SELECT
         id, name, description, sections, format, schedule, active,
@@ -117,13 +155,13 @@ export async function listReportTemplates(pool, scope) {
 
 /**
  * Get a single report template by ID.
- * @param {import('pg').Pool} pool
- * @param {{ projectId: string, accountScopeId: string }} scope
- * @param {string} templateId
- * @returns {Promise<object|null>}
  */
-export async function getReportTemplate(pool, scope, templateId) {
-  const { rows } = await pool.query(
+export async function getReportTemplate(
+  pool: Pool,
+  scope: ProjectScope,
+  templateId: string
+): Promise<ReportTemplateRow | null> {
+  const { rows } = await pool.query<ReportTemplateRow>(
     `
       SELECT
         id, name, description, sections, format, schedule, active,
@@ -142,19 +180,12 @@ export async function getReportTemplate(pool, scope, templateId) {
 /**
  * Create or update a report template.
  * If id is provided and exists, updates; otherwise inserts.
- * @param {import('pg').Pool} pool
- * @param {{ projectId: string, accountScopeId: string }} scope
- * @param {object} input
- * @param {string} [input.id] - Template ID for update
- * @param {string} input.name
- * @param {string} [input.description]
- * @param {string[]} input.sections
- * @param {string} [input.format]
- * @param {string|null} [input.schedule]
- * @param {boolean} [input.active]
- * @returns {Promise<object>}
  */
-export async function upsertReportTemplate(pool, scope, input) {
+export async function upsertReportTemplate(
+  pool: Pool,
+  scope: ProjectScope,
+  input: UpsertReportTemplateInput
+): Promise<ReportTemplateRow> {
   const name = String(input.name || "").trim();
   if (!name) throw new Error("Template name is required");
 
@@ -177,7 +208,7 @@ export async function upsertReportTemplate(pool, scope, input) {
 
   if (input.id) {
     // Update existing template
-    const { rows } = await pool.query(
+    const { rows } = await pool.query<ReportTemplateRow>(
       `
         UPDATE report_templates
         SET
@@ -210,7 +241,7 @@ export async function upsertReportTemplate(pool, scope, input) {
   }
 
   // Insert new template
-  const { rows } = await pool.query(
+  const { rows } = await pool.query<ReportTemplateRow>(
     `
       INSERT INTO report_templates(
         project_id, account_scope_id,
@@ -236,12 +267,12 @@ export async function upsertReportTemplate(pool, scope, input) {
 /**
  * Ensure built-in templates exist for a given project scope.
  * Inserts only if no templates exist for the scope yet (first-run seeding).
- * @param {import('pg').Pool} pool
- * @param {{ projectId: string, accountScopeId: string }} scope
- * @returns {Promise<number>} Number of templates seeded
  */
-export async function ensureBuiltinTemplates(pool, scope) {
-  const { rows: existing } = await pool.query(
+export async function ensureBuiltinTemplates(
+  pool: Pool,
+  scope: ProjectScope
+): Promise<number> {
+  const { rows: existing } = await pool.query<{ cnt: number | string }>(
     `
       SELECT count(*)::int AS cnt
       FROM report_templates
@@ -272,7 +303,7 @@ export async function ensureBuiltinTemplates(pool, scope) {
         tpl.schedule,
       ]
     );
-    seeded++;
+    seeded += 1;
   }
   return seeded;
 }

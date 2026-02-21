@@ -1,19 +1,72 @@
 import crypto from "node:crypto";
+import type { Pool, ProjectScope } from "../../types/index.js";
 
-function dedupeKey(projectId, sourceRef, title) {
-  return crypto.createHash("sha1").update(`${projectId}:${sourceRef}:${title}`).digest("hex");
+interface MessageRow {
+  id: string;
+  conversation_global_id: string | null;
+  content: string | null;
 }
 
-function toScore(value, fallback = 0.5) {
+interface OpportunityRow {
+  id: string;
+  account_external_id: string | null;
+  title: string | null;
+  stage: string | null;
+  amount: number | string | null;
+}
+
+interface UpsellCandidate {
+  source_ref: string;
+  account_external_id: string | null;
+  title: string;
+  rationale: string;
+  score: number;
+  evidence_refs: string[];
+  suggested_offer_payload: Record<string, unknown>;
+  suggested_outbound_payload: Record<string, unknown>;
+}
+
+export interface UpsellRadarRow {
+  id: string;
+  account_external_id: string | null;
+  source_ref: string;
+  title: string;
+  rationale: string;
+  score: number;
+  status: string;
+  suggested_offer_payload: Record<string, unknown> | null;
+  suggested_outbound_payload: Record<string, unknown> | null;
+  evidence_refs: string[] | null;
+  created_at: string;
+  updated_at: string;
+}
+
+interface ListUpsellOptions {
+  status?: unknown;
+  limit?: unknown;
+}
+
+function dedupeKey(projectId: string, sourceRef: string, title: string): string {
+  return crypto
+    .createHash("sha1")
+    .update(`${projectId}:${sourceRef}:${title}`)
+    .digest("hex");
+}
+
+function toScore(value: unknown, fallback = 0.5): number {
   const n = Number(value);
   if (!Number.isFinite(n)) return fallback;
   return Math.max(0, Math.min(1, n));
 }
 
-function detectFromMessage(row) {
+function detectFromMessage(row: MessageRow): UpsellCandidate | null {
   const text = String(row.content || "").toLowerCase();
   if (!text) return null;
-  if (!/(upgrade|add-on|addon|expand|cross[- ]?sell|upsell|bundle|new module)|расширить|дополнительно|апгрейд|допродаж|новый модуль|пакет|доработк|масштабировать/i.test(text)) {
+  if (
+    !/(upgrade|add-on|addon|expand|cross[- ]?sell|upsell|bundle|new module)|расширить|дополнительно|апгрейд|допродаж|новый модуль|пакет|доработк|масштабировать/i.test(
+      text
+    )
+  ) {
     return null;
   }
   return {
@@ -22,24 +75,26 @@ function detectFromMessage(row) {
     title: "Potential expansion request from conversation",
     rationale: "Client language indicates upsell/cross-sell intent",
     score: 0.72,
-    evidence_refs: [row.id, row.conversation_global_id].filter(Boolean),
+    evidence_refs: [row.id, row.conversation_global_id].filter(Boolean) as string[],
     suggested_offer_payload: {
       template: "expansion_offer_v1",
       discount_recommendation_pct: 5,
     },
     suggested_outbound_payload: {
       channel: "chatwoot",
-      message: "Мы можем расширить объём работ дополнительным пакетом. Подготовить краткий обзор вариантов? / We can extend scope with an add-on package. Want a short options breakdown?",
+      message:
+        "Мы можем расширить объём работ дополнительным пакетом. Подготовить краткий обзор вариантов? / We can extend scope with an add-on package. Want a short options breakdown?",
     },
   };
 }
 
-function detectFromOpportunity(row) {
+function detectFromOpportunity(row: OpportunityRow): UpsellCandidate | null {
   if (!row || !row.title) return null;
   const stage = String(row.stage || "").toLowerCase();
   if (!["qualified", "proposal", "negotiation"].includes(stage)) return null;
   const amount = Number(row.amount || 0);
-  const score = amount > 20000 ? 0.85 : amount > 10000 ? 0.78 : amount > 5000 ? 0.7 : 0.6;
+  const score =
+    amount > 20000 ? 0.85 : amount > 10000 ? 0.78 : amount > 5000 ? 0.7 : 0.6;
   return {
     source_ref: row.id,
     account_external_id: row.account_external_id || null,
@@ -53,12 +108,17 @@ function detectFromOpportunity(row) {
     },
     suggested_outbound_payload: {
       channel: "email",
-      message: "Prepared expansion options aligned with your current roadmap milestone.",
+      message:
+        "Prepared expansion options aligned with your current roadmap milestone.",
     },
   };
 }
 
-async function upsertUpsellRows(pool, scope, rows) {
+async function upsertUpsellRows(
+  pool: Pool,
+  scope: ProjectScope,
+  rows: UpsellCandidate[]
+): Promise<number> {
   if (!rows.length) return 0;
   const payload = rows.map((row) => ({
     project_id: scope.projectId,
@@ -135,9 +195,12 @@ async function upsertUpsellRows(pool, scope, rows) {
   return result.rowCount || 0;
 }
 
-export async function refreshUpsellRadar(pool, scope) {
+export async function refreshUpsellRadar(
+  pool: Pool,
+  scope: ProjectScope
+): Promise<{ generated_candidates: number; touched: number }> {
   const [messages, opportunities] = await Promise.all([
-    pool.query(
+    pool.query<MessageRow>(
       `
         SELECT id, conversation_global_id, left(content, 1200) AS content
         FROM cw_messages
@@ -150,7 +213,7 @@ export async function refreshUpsellRadar(pool, scope) {
       `,
       [scope.projectId, scope.accountScopeId]
     ),
-    pool.query(
+    pool.query<OpportunityRow>(
       `
         SELECT id, account_external_id, title, stage, amount
         FROM attio_opportunities_raw
@@ -163,7 +226,7 @@ export async function refreshUpsellRadar(pool, scope) {
     ),
   ]);
 
-  const candidates = [];
+  const candidates: UpsellCandidate[] = [];
   for (const row of messages.rows) {
     const candidate = detectFromMessage(row);
     if (candidate) candidates.push(candidate);
@@ -180,11 +243,17 @@ export async function refreshUpsellRadar(pool, scope) {
   };
 }
 
-export async function listUpsellRadar(pool, scope, options = {}) {
+export async function listUpsellRadar(
+  pool: Pool,
+  scope: ProjectScope,
+  options: ListUpsellOptions = {}
+): Promise<UpsellRadarRow[]> {
   const limitRaw = Number.parseInt(String(options.limit || "100"), 10);
-  const limit = Number.isFinite(limitRaw) ? Math.max(1, Math.min(limitRaw, 400)) : 100;
+  const limit = Number.isFinite(limitRaw)
+    ? Math.max(1, Math.min(limitRaw, 400))
+    : 100;
   const status = String(options.status || "").trim();
-  const { rows } = await pool.query(
+  const { rows } = await pool.query<UpsellRadarRow>(
     `
       SELECT
         id,
@@ -211,12 +280,17 @@ export async function listUpsellRadar(pool, scope, options = {}) {
   return rows;
 }
 
-export async function updateUpsellStatus(pool, scope, id, status) {
+export async function updateUpsellStatus(
+  pool: Pool,
+  scope: ProjectScope,
+  id: string,
+  status: string
+): Promise<UpsellRadarRow | null> {
   const normalized = String(status || "").trim().toLowerCase();
   if (!["proposed", "accepted", "dismissed", "converted"].includes(normalized)) {
     throw new Error("invalid_upsell_status");
   }
-  const { rows } = await pool.query(
+  const { rows } = await pool.query<UpsellRadarRow>(
     `
       UPDATE upsell_opportunities
       SET status = $4,

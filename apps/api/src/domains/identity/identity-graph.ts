@@ -1,8 +1,82 @@
 import crypto from "node:crypto";
+import type { Pool, ProjectScope } from "../../types/index.js";
 
-function similarityScore(a, b) {
-  const left = String(a || "").trim().toLowerCase();
-  const right = String(b || "").trim().toLowerCase();
+interface IdentitySuggestionCandidate {
+  left_entity_type: string;
+  left_entity_id: string;
+  right_entity_type: string;
+  right_entity_id: string;
+  confidence: number;
+  reason: string;
+  dedupe_key: string;
+  evidence_refs: string[];
+  meta: Record<string, unknown>;
+}
+
+interface ContactRow {
+  id: string;
+  name: string | null;
+  email: string | null;
+}
+
+interface AttioAccountRow {
+  id: string;
+  external_id: string | null;
+  name: string | null;
+  domain: string | null;
+}
+
+interface LinearProjectRow {
+  id: string;
+  external_id: string | null;
+  name: string | null;
+}
+
+interface IdentitySuggestionRow {
+  id: string;
+  left_entity_type: string;
+  left_entity_id: string;
+  right_entity_type: string;
+  right_entity_id: string;
+  confidence: number;
+  reason: string;
+  status: string;
+  evidence_refs: string[] | null;
+  meta: Record<string, unknown> | null;
+  created_at: string;
+  updated_at: string;
+}
+
+interface IdentityLinkRow {
+  id: string;
+  left_entity_type: string;
+  left_entity_id: string;
+  right_entity_type: string;
+  right_entity_id: string;
+  status: string;
+  source: string;
+  evidence_refs: string[] | null;
+  created_by: string | null;
+  created_at: string;
+}
+
+interface IdentitySuggestionListOptions {
+  limit?: unknown;
+  status?: unknown;
+}
+
+interface IdentityLinkListOptions {
+  limit?: unknown;
+  status?: unknown;
+}
+
+function similarityScore(a: unknown, b: unknown): number {
+  const left = String(a || "")
+    .trim()
+    .toLowerCase();
+  const right = String(b || "")
+    .trim()
+    .toLowerCase();
   if (!left || !right) return 0;
   if (left === right) return 1;
   if (left.includes(right) || right.includes(left)) return 0.86;
@@ -16,14 +90,23 @@ function similarityScore(a, b) {
   return overlap / Math.max(leftWords.size, rightWords.size);
 }
 
-function dedupeKey(leftType, leftId, rightType, rightId) {
+function dedupeKey(
+  leftType: string,
+  leftId: string,
+  rightType: string,
+  rightId: string
+): string {
   const a = `${leftType}:${leftId}`;
   const b = `${rightType}:${rightId}`;
   const sorted = a <= b ? `${a}|${b}` : `${b}|${a}`;
   return crypto.createHash("sha1").update(sorted).digest("hex");
 }
 
-async function upsertSuggestions(pool, scope, suggestions) {
+async function upsertSuggestions(
+  pool: Pool,
+  scope: ProjectScope,
+  suggestions: IdentitySuggestionCandidate[]
+): Promise<number> {
   if (!suggestions.length) return 0;
   const payload = suggestions.map((row) => ({
     project_id: scope.projectId,
@@ -99,16 +182,29 @@ async function upsertSuggestions(pool, scope, suggestions) {
   return result.rowCount || 0;
 }
 
-function domainFromEmail(email) {
-  const value = String(email || "").trim().toLowerCase();
+function domainFromEmail(email: unknown): string | null {
+  const value = String(email || "")
+    .trim()
+    .toLowerCase();
   if (!value || !value.includes("@")) return null;
   return value.split("@")[1] || null;
 }
 
-export async function previewIdentitySuggestions(pool, scope, limit = 100) {
-  const safeLimit = Number.isFinite(limit) ? Math.max(1, Math.min(limit, 200)) : 100;
+export async function previewIdentitySuggestions(
+  pool: Pool,
+  scope: ProjectScope,
+  limit: unknown = 100
+): Promise<{
+  generated: number;
+  stored: number;
+  suggestions: IdentitySuggestionCandidate[];
+}> {
+  const safeLimit =
+    typeof limit === "number" && Number.isFinite(limit)
+      ? Math.max(1, Math.min(limit, 200))
+      : 100;
   const [contactsResult, attioResult, linearProjectsResult] = await Promise.all([
-    pool.query(
+    pool.query<ContactRow>(
       `
         SELECT id, name, email
         FROM cw_contacts
@@ -119,7 +215,7 @@ export async function previewIdentitySuggestions(pool, scope, limit = 100) {
       `,
       [scope.projectId, scope.accountScopeId]
     ),
-    pool.query(
+    pool.query<AttioAccountRow>(
       `
         SELECT id, external_id, name, domain
         FROM attio_accounts_raw
@@ -130,7 +226,7 @@ export async function previewIdentitySuggestions(pool, scope, limit = 100) {
       `,
       [scope.projectId, scope.accountScopeId]
     ),
-    pool.query(
+    pool.query<LinearProjectRow>(
       `
         SELECT id, external_id, name
         FROM linear_projects_raw
@@ -143,16 +239,24 @@ export async function previewIdentitySuggestions(pool, scope, limit = 100) {
     ),
   ]);
 
-  const suggestions = [];
+  const suggestions: IdentitySuggestionCandidate[] = [];
   for (const contact of contactsResult.rows) {
     const contactName = String(contact.name || "").trim();
     const contactDomain = domainFromEmail(contact.email);
     for (const account of attioResult.rows) {
       const nameScore = similarityScore(contactName, account.name);
-      const domainScore = contactDomain && account.domain && contactDomain === String(account.domain).toLowerCase() ? 1 : 0;
+      const domainScore =
+        contactDomain &&
+        account.domain &&
+        contactDomain === String(account.domain).toLowerCase()
+          ? 1
+          : 0;
       const score = Math.max(nameScore, domainScore * 0.95);
       if (score < 0.72) continue;
-      const reason = domainScore > 0 ? "matching_email_domain" : "matching_contact_account_name";
+      const reason =
+        domainScore > 0
+          ? "matching_email_domain"
+          : "matching_contact_account_name";
       suggestions.push({
         left_entity_type: "cw_contact",
         left_entity_id: contact.id,
@@ -183,7 +287,12 @@ export async function previewIdentitySuggestions(pool, scope, limit = 100) {
         right_entity_id: linearProject.id,
         confidence: Number(score.toFixed(4)),
         reason: "matching_account_project_name",
-        dedupe_key: dedupeKey("attio_account", account.id, "linear_project", linearProject.id),
+        dedupe_key: dedupeKey(
+          "attio_account",
+          account.id,
+          "linear_project",
+          linearProject.id
+        ),
         evidence_refs: [account.id, linearProject.id],
         meta: {
           account_name: account.name || null,
@@ -194,8 +303,8 @@ export async function previewIdentitySuggestions(pool, scope, limit = 100) {
   }
 
   suggestions.sort((a, b) => b.confidence - a.confidence);
-  const unique = [];
-  const seen = new Set();
+  const unique: IdentitySuggestionCandidate[] = [];
+  const seen = new Set<string>();
   for (const suggestion of suggestions) {
     if (seen.has(suggestion.dedupe_key)) continue;
     seen.add(suggestion.dedupe_key);
@@ -211,11 +320,15 @@ export async function previewIdentitySuggestions(pool, scope, limit = 100) {
   };
 }
 
-export async function listIdentitySuggestions(pool, scope, options = {}) {
+export async function listIdentitySuggestions(
+  pool: Pool,
+  scope: ProjectScope,
+  options: IdentitySuggestionListOptions = {}
+): Promise<IdentitySuggestionRow[]> {
   const limitRaw = Number.parseInt(String(options.limit || "50"), 10);
   const limit = Number.isFinite(limitRaw) ? Math.max(1, Math.min(limitRaw, 200)) : 50;
   const status = String(options.status || "proposed").trim();
-  const { rows } = await pool.query(
+  const { rows } = await pool.query<IdentitySuggestionRow>(
     `
       SELECT
         id,
@@ -242,12 +355,28 @@ export async function listIdentitySuggestions(pool, scope, options = {}) {
   return rows;
 }
 
-export async function applyIdentitySuggestions(pool, scope, suggestionIds = [], actorUsername = null) {
+export async function applyIdentitySuggestions(
+  pool: Pool,
+  scope: ProjectScope,
+  suggestionIds: string[] = [],
+  actorUsername: string | null = null
+): Promise<{ applied: number; links: IdentityLinkRow[] }> {
   if (!Array.isArray(suggestionIds) || !suggestionIds.length) {
     return { applied: 0, links: [] };
   }
 
-  const { rows } = await pool.query(
+  const { rows } = await pool.query<
+    Pick<
+      IdentitySuggestionRow,
+      | "id"
+      | "left_entity_type"
+      | "left_entity_id"
+      | "right_entity_type"
+      | "right_entity_id"
+      | "confidence"
+      | "evidence_refs"
+    >
+  >(
     `
       SELECT
         id,
@@ -282,7 +411,7 @@ export async function applyIdentitySuggestions(pool, scope, suggestionIds = [], 
     created_by: actorUsername,
   }));
 
-  const inserted = await pool.query(
+  const inserted = await pool.query<IdentityLinkRow>(
     `
       INSERT INTO identity_links(
         project_id,
@@ -348,11 +477,15 @@ export async function applyIdentitySuggestions(pool, scope, suggestionIds = [], 
   };
 }
 
-export async function listIdentityLinks(pool, scope, options = {}) {
+export async function listIdentityLinks(
+  pool: Pool,
+  scope: ProjectScope,
+  options: IdentityLinkListOptions = {}
+): Promise<IdentityLinkRow[]> {
   const limitRaw = Number.parseInt(String(options.limit || "100"), 10);
   const limit = Number.isFinite(limitRaw) ? Math.max(1, Math.min(limitRaw, 400)) : 100;
   const status = String(options.status || "active").trim();
-  const { rows } = await pool.query(
+  const { rows } = await pool.query<IdentityLinkRow>(
     `
       SELECT
         id,

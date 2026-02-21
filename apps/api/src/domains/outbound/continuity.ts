@@ -1,10 +1,71 @@
 import crypto from "node:crypto";
+import type { Pool, ProjectScope } from "../../types/index.js";
 
-function dedupeKey(projectId, sourceType, sourceRef, title) {
-  return crypto.createHash("sha1").update(`${projectId}:${sourceType}:${sourceRef}:${title}`).digest("hex");
+interface ContinuityCandidate {
+  source_type: string;
+  source_ref: string;
+  title: string;
+  description: string;
+  preview_payload: Record<string, unknown>;
+  evidence_refs: string[];
 }
 
-function pickContinuityFromOpportunity(row) {
+interface OpportunityRow {
+  id: string;
+  title: string | null;
+  next_step: string | null;
+  expected_close_date: string | null;
+}
+
+interface MessageRow {
+  id: string;
+  conversation_global_id: string | null;
+  content: string | null;
+}
+
+interface ContinuityActionRow {
+  id: string;
+  source_type: string;
+  source_ref: string;
+  title: string;
+  description: string;
+  preview_payload: Record<string, unknown> | null;
+  linear_issue_external_id: string | null;
+  status: string;
+  evidence_refs: string[] | null;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+interface ListContinuityOptions {
+  status?: unknown;
+  limit?: unknown;
+}
+
+interface SelectedActionRow {
+  id: string;
+  title: string;
+  description: string;
+  preview_payload: Record<string, unknown> | null;
+  status: string;
+}
+
+function dedupeKey(
+  projectId: string,
+  sourceType: string,
+  sourceRef: string,
+  title: string
+): string {
+  return crypto
+    .createHash("sha1")
+    .update(`${projectId}:${sourceType}:${sourceRef}:${title}`)
+    .digest("hex");
+}
+
+function pickContinuityFromOpportunity(
+  row: OpportunityRow
+): ContinuityCandidate | null {
   const nextStep = String(row.next_step || "").trim();
   if (!nextStep || nextStep.length < 5) return null;
   return {
@@ -21,9 +82,13 @@ function pickContinuityFromOpportunity(row) {
   };
 }
 
-function pickContinuityFromMessage(row) {
+function pickContinuityFromMessage(row: MessageRow): ContinuityCandidate | null {
   const text = String(row.content || "");
-  if (!/(we will|i will|promise|commit|deliver|send by|by friday|next week)/i.test(text)) {
+  if (
+    !/(we will|i will|promise|commit|deliver|send by|by friday|next week)/i.test(
+      text
+    )
+  ) {
     return null;
   }
   return {
@@ -36,11 +101,16 @@ function pickContinuityFromMessage(row) {
       from_message_id: row.id,
       conversation_global_id: row.conversation_global_id,
     },
-    evidence_refs: [row.id, row.conversation_global_id].filter(Boolean),
+    evidence_refs: [row.id, row.conversation_global_id].filter(Boolean) as string[],
   };
 }
 
-async function upsertContinuity(pool, scope, rows, actorUsername = null) {
+async function upsertContinuity(
+  pool: Pool,
+  scope: ProjectScope,
+  rows: ContinuityCandidate[],
+  actorUsername: string | null = null
+): Promise<{ touched: number; rows: ContinuityActionRow[] }> {
   if (!rows.length) return { touched: 0, rows: [] };
   const payload = rows.map((row) => ({
     project_id: scope.projectId,
@@ -52,11 +122,16 @@ async function upsertContinuity(pool, scope, rows, actorUsername = null) {
     preview_payload: row.preview_payload || {},
     status: "previewed",
     evidence_refs: row.evidence_refs || [],
-    dedupe_key: dedupeKey(scope.projectId, row.source_type, row.source_ref, row.title),
+    dedupe_key: dedupeKey(
+      scope.projectId,
+      row.source_type,
+      row.source_ref,
+      row.title
+    ),
     created_by: actorUsername,
   }));
 
-  const result = await pool.query(
+  const result = await pool.query<ContinuityActionRow>(
     `
       INSERT INTO continuity_actions(
         project_id,
@@ -127,9 +202,13 @@ async function upsertContinuity(pool, scope, rows, actorUsername = null) {
   };
 }
 
-export async function buildContinuityPreview(pool, scope, actorUsername = null) {
+export async function buildContinuityPreview(
+  pool: Pool,
+  scope: ProjectScope,
+  actorUsername: string | null = null
+): Promise<{ touched: number; rows: ContinuityActionRow[] }> {
   const [opportunities, messages] = await Promise.all([
-    pool.query(
+    pool.query<OpportunityRow>(
       `
         SELECT id, title, next_step, expected_close_date
         FROM crm_opportunities
@@ -141,7 +220,7 @@ export async function buildContinuityPreview(pool, scope, actorUsername = null) 
       `,
       [scope.projectId, scope.accountScopeId]
     ),
-    pool.query(
+    pool.query<MessageRow>(
       `
         SELECT id, conversation_global_id, left(content, 1200) AS content
         FROM cw_messages
@@ -156,7 +235,7 @@ export async function buildContinuityPreview(pool, scope, actorUsername = null) 
     ),
   ]);
 
-  const candidates = [];
+  const candidates: ContinuityCandidate[] = [];
   for (const row of opportunities.rows) {
     const candidate = pickContinuityFromOpportunity(row);
     if (candidate) candidates.push(candidate);
@@ -168,11 +247,17 @@ export async function buildContinuityPreview(pool, scope, actorUsername = null) 
   return upsertContinuity(pool, scope, candidates, actorUsername);
 }
 
-export async function listContinuityActions(pool, scope, options = {}) {
+export async function listContinuityActions(
+  pool: Pool,
+  scope: ProjectScope,
+  options: ListContinuityOptions = {}
+): Promise<ContinuityActionRow[]> {
   const limitRaw = Number.parseInt(String(options.limit || "100"), 10);
-  const limit = Number.isFinite(limitRaw) ? Math.max(1, Math.min(limitRaw, 400)) : 100;
+  const limit = Number.isFinite(limitRaw)
+    ? Math.max(1, Math.min(limitRaw, 400))
+    : 100;
   const status = String(options.status || "").trim();
-  const { rows } = await pool.query(
+  const { rows } = await pool.query<ContinuityActionRow>(
     `
       SELECT
         id,
@@ -199,11 +284,16 @@ export async function listContinuityActions(pool, scope, options = {}) {
   return rows;
 }
 
-export async function applyContinuityActions(pool, scope, actionIds = [], actorUsername = null) {
+export async function applyContinuityActions(
+  pool: Pool,
+  scope: ProjectScope,
+  actionIds: string[] = [],
+  actorUsername: string | null = null
+): Promise<{ applied: number; actions: ContinuityActionRow[] }> {
   if (!Array.isArray(actionIds) || !actionIds.length) {
     return { applied: 0, actions: [] };
   }
-  const selected = await pool.query(
+  const selected = await pool.query<SelectedActionRow>(
     `
       SELECT
         id,
@@ -224,7 +314,7 @@ export async function applyContinuityActions(pool, scope, actionIds = [], actorU
   }
 
   for (const action of selected.rows) {
-    const linearProject = await pool.query(
+    const linearProject = await pool.query<{ external_id: string }>(
       `
         SELECT external_id
         FROM linear_projects_raw
@@ -235,9 +325,13 @@ export async function applyContinuityActions(pool, scope, actionIds = [], actorU
       `,
       [scope.projectId, scope.accountScopeId]
     );
-    const linearProjectExternalId = linearProject.rows[0]?.external_id || "continuity-fallback";
+    const linearProjectExternalId =
+      linearProject.rows[0]?.external_id || "continuity-fallback";
     const issueExternalId = `continuity:${action.id}`;
     const issueId = `linissue:${scope.projectId}:${issueExternalId}`;
+    const suggestedTitle = String(
+      (action.preview_payload?.suggested_linear_title as string) || action.title
+    );
 
     await pool.query(
       `
@@ -273,7 +367,7 @@ export async function applyContinuityActions(pool, scope, actionIds = [], actorU
         scope.accountScopeId,
         issueExternalId,
         linearProjectExternalId,
-        action.preview_payload?.suggested_linear_title || action.title,
+        suggestedTitle,
         actorUsername,
         JSON.stringify({
           source: "continuity_apply",
@@ -299,7 +393,10 @@ export async function applyContinuityActions(pool, scope, actionIds = [], actorU
     );
   }
 
-  const updated = await listContinuityActions(pool, scope, { status: "applied", limit: 200 });
+  const updated = await listContinuityActions(pool, scope, {
+    status: "applied",
+    limit: 200,
+  });
   return {
     applied: selected.rows.length,
     actions: updated.filter((row) => actionIds.includes(row.id)),
