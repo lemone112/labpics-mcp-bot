@@ -150,17 +150,17 @@ export async function runConnectorSync(
   if (!httpRunner) {
     throw new Error("connector_runner_not_found");
   }
-  const connectorRunner = createConnector({
-    name: normalizedConnector,
-    mode: mode as "http" | "mcp",
-    httpRunner: async () => httpRunner(pool, scope, logger),
-    mcpRunner: createComposioMcpRunner({
-      connector: normalizedConnector,
-      invoke: process.env.COMPOSIO_MCP_INVOKER ? runMcpConnector : undefined,
-    }),
-  });
 
   try {
+    const connectorRunner = createConnector({
+      name: normalizedConnector,
+      mode: mode as "http" | "mcp",
+      httpRunner: async () => httpRunner(pool, scope, logger),
+      mcpRunner: createComposioMcpRunner({
+        connector: normalizedConnector,
+        invoke: process.env.COMPOSIO_MCP_INVOKER ? runMcpConnector : undefined,
+      }),
+    });
     const result = (await connectorRunner.pull({
       pool,
       scope,
