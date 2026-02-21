@@ -318,10 +318,16 @@ function createHandlers(customHandlers = {}, options = {}) {
   return { ...handlers, ...customHandlers };
 }
 
-let _defaultJobsEnsured = false;
+const _defaultJobsEnsuredByScope = new Set();
+
+function scopeKey(scope) {
+  return `${String(scope?.projectId || "")}:${String(scope?.accountScopeId || "")}`;
+}
 
 export async function ensureDefaultScheduledJobs(pool, scope) {
-  if (_defaultJobsEnsured) return;
+  if (!scope?.projectId || !scope?.accountScopeId) return;
+  const key = scopeKey(scope);
+  if (_defaultJobsEnsuredByScope.has(key)) return;
 
   const defaults = [
     { jobType: "connectors_sync_cycle", cadenceSeconds: 900 },
@@ -357,7 +363,7 @@ export async function ensureDefaultScheduledJobs(pool, scope) {
       [scope.projectId, scope.accountScopeId, item.jobType, item.cadenceSeconds]
     );
   }
-  _defaultJobsEnsured = true;
+  _defaultJobsEnsuredByScope.add(key);
 }
 
 export async function listScheduledJobs(pool, scope) {
