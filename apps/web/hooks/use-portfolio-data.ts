@@ -11,18 +11,33 @@ const STORAGE_LAST_PROJECT_KEY = "labpics:portfolio:last-concrete-project";
 const ALL_PROJECTS_SCOPE = "__all_projects__";
 const PROJECTS_AUTO_REFRESH_MS = 60_000;
 
-function normalizeProjectId(value) {
+type ProjectLike = {
+  id: string | number;
+  name?: string | null;
+  [key: string]: unknown;
+};
+
+type RefreshProjectsOptions = {
+  silent?: boolean;
+};
+
+type ProjectsResponse = {
+  projects?: ProjectLike[];
+  active_project_id?: string | null;
+};
+
+export function normalizeProjectId(value: unknown): string | null {
   const normalized = String(value || "").trim();
   return normalized || null;
 }
 
-function isLegacyScopeProject(project) {
+function isLegacyScopeProject(project: ProjectLike): boolean {
   const name = String(project?.name || "").trim().toLowerCase();
   return name === "__legacy_scope__";
 }
 
-function humanizeProjectError(rawError, fallbackMessage) {
-  const message = String(rawError?.message || fallbackMessage || "").trim();
+function humanizeProjectError(rawError: unknown, fallbackMessage: string): string {
+  const message = String((rawError as { message?: string } | null)?.message || fallbackMessage || "").trim();
   if (!message) return "Не удалось обработать запрос по проектам";
   const normalized = message.toLowerCase();
   if (normalized === "internal_error") return "Временная ошибка сервера. Повторим автоматически.";
@@ -35,11 +50,11 @@ function humanizeProjectError(rawError, fallbackMessage) {
  * usePortfolioData — data fetching, caching, and project list state.
  * Extracted from use-project-portfolio.js for maintainability.
  */
-export function usePortfolioData({ canSelectAll }) {
-  const [projects, setProjects] = useState([]);
-  const [selectedScopeId, setSelectedScopeId] = useState(null);
-  const [lastConcreteProjectId, setLastConcreteProjectId] = useState(null);
-  const [activeProjectId, setActiveProjectId] = useState(null);
+export function usePortfolioData({ canSelectAll }: { canSelectAll: boolean }) {
+  const [projects, setProjects] = useState<ProjectLike[]>([]);
+  const [selectedScopeId, setSelectedScopeId] = useState<string | null>(null);
+  const [lastConcreteProjectId, setLastConcreteProjectId] = useState<string | null>(null);
+  const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
   const [loadingProjects, setLoadingProjects] = useState(true);
   const [error, setError] = useState("");
 
@@ -47,7 +62,7 @@ export function usePortfolioData({ canSelectAll }) {
   const projectIdSet = useMemo(() => new Set(projectIds), [projectIds]);
 
   const ensureConcreteSelection = useCallback(
-    (candidateId) => {
+    (candidateId: unknown): string | null => {
       if (!projectIds.length) return null;
       const normalizedCandidate = normalizeProjectId(candidateId);
       if (normalizedCandidate && projectIdSet.has(normalizedCandidate)) {
@@ -62,14 +77,14 @@ export function usePortfolioData({ canSelectAll }) {
     [projectIdSet, projectIds, activeProjectId]
   );
 
-  const refreshProjects = useCallback(async (options = {}) => {
+  const refreshProjects = useCallback(async (options: RefreshProjectsOptions = {}): Promise<void> => {
     const silent = Boolean(options?.silent);
     if (!silent) {
       setLoadingProjects(true);
       setError("");
     }
     try {
-      const data = await apiFetch("/projects");
+      const data = (await apiFetch("/projects")) as ProjectsResponse;
       const sourceProjects = Array.isArray(data?.projects) ? data.projects : [];
       const nextProjects = sourceProjects.filter((project) => !isLegacyScopeProject(project));
       const nextProjectIds = nextProjects.map((project) => String(project.id));
@@ -173,4 +188,4 @@ export function usePortfolioData({ canSelectAll }) {
   };
 }
 
-export { ALL_PROJECTS_SCOPE, normalizeProjectId };
+export { ALL_PROJECTS_SCOPE };
