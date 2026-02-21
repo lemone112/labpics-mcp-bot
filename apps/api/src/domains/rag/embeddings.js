@@ -302,9 +302,15 @@ export async function runEmbeddings(pool, scope, logger = console) {
   }
 }
 
-export async function searchChunks(pool, scope, query, topK, logger = console) {
+export async function searchChunks(pool, scope, query, topK, logger = console, options = {}) {
   const safeTopK = toPositiveInt(topK, 10, 1, 50);
   const normalizedQuery = String(query || "").trim().slice(0, 4_000);
+  const dateFrom = options?.dateFrom ? new Date(options.dateFrom) : null;
+  const dateTo = options?.dateTo ? new Date(options.dateTo) : null;
+  const dateToExclusive = dateTo && !Number.isNaN(dateTo.getTime())
+    ? new Date(dateTo.getTime() + (24 * 60 * 60 * 1000))
+    : null;
+  const safeDateFrom = dateFrom && !Number.isNaN(dateFrom.getTime()) ? dateFrom : null;
   if (!normalizedQuery) return { query: "", topK: safeTopK, results: [] };
 
   const { model, embeddings } = await createEmbeddings([normalizedQuery], logger);
@@ -336,10 +342,12 @@ export async function searchChunks(pool, scope, query, topK, logger = console) {
           AND embedding IS NOT NULL
           AND project_id = $2
           AND account_scope_id = $3
+          AND ($4::timestamptz IS NULL OR created_at >= $4::timestamptz)
+          AND ($5::timestamptz IS NULL OR created_at < $5::timestamptz)
         ORDER BY embedding <=> $1::vector
-        LIMIT $4
+        LIMIT $6
       `,
-      [vectorText, scope.projectId, scope.accountScopeId, safeTopK]
+      [vectorText, scope.projectId, scope.accountScopeId, safeDateFrom, dateToExclusive, safeTopK]
     );
     await client.query("COMMIT");
 
