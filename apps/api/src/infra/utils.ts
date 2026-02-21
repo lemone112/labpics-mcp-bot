@@ -1,3 +1,5 @@
+import { ApiError } from "./api-contract.js";
+
 // ── Number utilities ────────────────────────────────────────────
 
 export function toPositiveInt(value: unknown, fallback: number, min = 1, max = 100_000): number {
@@ -66,6 +68,23 @@ export function toBoolean(value: unknown, fallback = false): boolean {
 }
 
 export const boolFromEnv = toBoolean;
+
+// ── ID utilities ────────────────────────────────────────────────
+
+export const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+export function isUuid(value: unknown): boolean {
+  const normalized = String(value ?? "").trim();
+  return UUID_REGEX.test(normalized);
+}
+
+export function assertUuid(value: unknown, fieldName = "id"): string {
+  const normalized = String(value ?? "").trim();
+  if (!UUID_REGEX.test(normalized)) {
+    throw new ApiError(400, "invalid_uuid", `${fieldName} must be a valid UUID`);
+  }
+  return normalized;
+}
 
 // ── Env utilities ──────────────────────────────────────────────
 

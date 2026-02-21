@@ -1,5 +1,6 @@
 import { ApiError, parseBody, sendError, sendOk } from "../infra/api-contract.js";
 import { requireProjectScope } from "../infra/scope.js";
+import { assertUuid } from "../infra/utils.js";
 import { writeAuditEvent } from "../domains/core/audit.js";
 import { extractSignalsAndNba, listNba, listSignals, updateNbaStatus, updateSignalStatus } from "../domains/analytics/signals.js";
 import { listUpsellRadar, refreshUpsellRadar, updateUpsellStatus } from "../domains/analytics/upsell.js";
@@ -108,7 +109,8 @@ export function registerSignalRoutes(ctx) {
   registerPost("/signals/:id/status", async (request, reply) => {
     const scope = requireProjectScope(request);
     const body = parseBody(SignalStatusSchema, request.body);
-    const signal = await updateSignalStatus(pool, scope, String(request.params?.id || ""), body.status);
+    const signalId = assertUuid(request.params?.id, "signal_id");
+    const signal = await updateSignalStatus(pool, scope, signalId, body.status);
     if (!signal) {
       return sendError(reply, request.requestId, new ApiError(404, "signal_not_found", "Signal not found"));
     }
@@ -140,7 +142,8 @@ export function registerSignalRoutes(ctx) {
   registerPost("/nba/:id/status", async (request, reply) => {
     const scope = requireProjectScope(request);
     const body = parseBody(NbaStatusSchema, request.body);
-    const item = await updateNbaStatus(pool, scope, String(request.params?.id || ""), body.status);
+    const nbaId = assertUuid(request.params?.id, "nba_id");
+    const item = await updateNbaStatus(pool, scope, nbaId, body.status);
     if (!item) {
       return sendError(reply, request.requestId, new ApiError(404, "nba_not_found", "NBA item not found"));
     }
@@ -190,7 +193,8 @@ export function registerSignalRoutes(ctx) {
   registerPost("/upsell/:id/status", async (request, reply) => {
     const scope = requireProjectScope(request);
     const body = parseBody(UpsellStatusSchema, request.body);
-    const item = await updateUpsellStatus(pool, scope, String(request.params?.id || ""), body.status);
+    const upsellId = assertUuid(request.params?.id, "upsell_id");
+    const item = await updateUpsellStatus(pool, scope, upsellId, body.status);
     if (!item) {
       return sendError(reply, request.requestId, new ApiError(404, "upsell_not_found", "Upsell opportunity not found"));
     }

@@ -1,6 +1,7 @@
 import { generateApiKey } from "../infra/api-keys.js";
 import { ApiError, sendError } from "../infra/api-contract.js";
 import { getEffectiveRole } from "../infra/rbac.js";
+import { assertUuid } from "../infra/utils.js";
 
 function requireOwnerSession(request, reply) {
   const role = getEffectiveRole(request);
@@ -95,10 +96,11 @@ export function registerApiKeyRoutes(ctx) {
       return sendError(reply, request.requestId, new ApiError(400, "project_required", "Active project required"));
     }
 
-    const keyId = String(request.body?.id || "").trim();
-    if (!keyId) {
+    const rawKeyId = String(request.body?.id || "").trim();
+    if (!rawKeyId) {
       return sendError(reply, request.requestId, new ApiError(400, "id_required", "API key id required"));
     }
+    const keyId = assertUuid(rawKeyId, "api_key_id");
 
     const { rowCount } = await pool.query(
       "DELETE FROM api_keys WHERE id = $1::uuid AND project_id = $2::uuid",

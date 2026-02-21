@@ -1,6 +1,7 @@
 import { ApiError, parseBody, sendError, sendOk, parseLimit } from "../infra/api-contract.js";
 import { writeAuditEvent } from "../domains/core/audit.js";
 import { getEffectiveRole } from "../infra/rbac.js";
+import { assertUuid } from "../infra/utils.js";
 import { z } from "zod";
 import bcrypt from "bcrypt";
 
@@ -62,7 +63,7 @@ export function registerUserRoutes(ctx) {
   registerGet("/users/:id", async (request, reply) => {
     const role = getEffectiveRole(request);
     const userId = request.auth?.user_id || null;
-    const targetId = String(request.params?.id || "");
+    const targetId = assertUuid(request.params?.id, "user_id");
 
     // Users can view their own profile; owners can view anyone
     if (role !== "owner" && targetId !== userId) {
@@ -162,7 +163,7 @@ export function registerUserRoutes(ctx) {
       return sendError(reply, request.requestId, new ApiError(403, "forbidden", "Only owners can update users"));
     }
 
-    const targetId = String(request.params?.id || "");
+    const targetId = assertUuid(request.params?.id, "user_id");
     const body = parseBody(UpdateUserSchema, request.body);
 
     // Check user exists
@@ -238,7 +239,7 @@ export function registerUserRoutes(ctx) {
       return sendError(reply, request.requestId, new ApiError(403, "forbidden", "Only owners can delete users"));
     }
 
-    const targetId = String(request.params?.id || "");
+    const targetId = assertUuid(request.params?.id, "user_id");
     const actorUserId = request.auth?.user_id || null;
 
     // Prevent self-deletion
@@ -279,8 +280,10 @@ export function registerUserRoutes(ctx) {
       return sendError(reply, request.requestId, new ApiError(403, "forbidden", "Only owners can view assignments"));
     }
 
-    const projectId = String(request.query?.project_id || "").trim();
-    const userId = String(request.query?.user_id || "").trim();
+    const projectIdRaw = String(request.query?.project_id || "").trim();
+    const userIdRaw = String(request.query?.user_id || "").trim();
+    const projectId = projectIdRaw ? assertUuid(projectIdRaw, "project_id") : "";
+    const userId = userIdRaw ? assertUuid(userIdRaw, "user_id") : "";
 
     let query = `
       SELECT

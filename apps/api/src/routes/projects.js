@@ -1,5 +1,6 @@
 import { ApiError, parseBody, sendError, sendOk } from "../infra/api-contract.js";
 import { requireProjectScope } from "../infra/scope.js";
+import { assertUuid } from "../infra/utils.js";
 import { writeAuditEvent } from "../domains/core/audit.js";
 import { getEffectiveRole, getAccessibleProjectIds, canAccessProject } from "../infra/rbac.js";
 
@@ -126,11 +127,8 @@ export function registerProjectRoutes(ctx) {
   });
 
   registerPost("/projects/:id/select", async (request, reply) => {
-    const projectId = String(request.params?.id || "");
+    const projectId = assertUuid(request.params?.id, "project_id");
     const sid = request.auth?.session_id;
-    if (!projectId) {
-      return sendError(reply, request.requestId, new ApiError(400, "invalid_project_id", "Invalid project ID"));
-    }
 
     const project = await pool.query(
       "SELECT id, name, account_scope_id FROM projects WHERE id = $1 LIMIT 1",

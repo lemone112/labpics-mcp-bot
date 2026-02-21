@@ -1,5 +1,6 @@
 import { ApiError, parseBody, parseLimit, sendError, sendOk } from "../infra/api-contract.js";
 import { requireProjectScope } from "../infra/scope.js";
+import { assertUuid } from "../infra/utils.js";
 import { normalizeEvidenceRefs, writeAuditEvent } from "../domains/core/audit.js";
 import { findCachedResponse, getIdempotencyKey, storeCachedResponse } from "../infra/idempotency.js";
 
@@ -81,7 +82,7 @@ export function registerOfferRoutes(ctx) {
 
   registerPost("/offers/:id/approve-discount", async (request, reply) => {
     const scope = requireProjectScope(request);
-    const offerId = String(request.params?.id || "");
+    const offerId = assertUuid(request.params?.id, "offer_id");
     const body = parseBody(ApproveOfferSchema, request.body);
     const evidenceRefs = normalizeEvidenceRefs(body.evidence_refs);
     const { rows } = await pool.query(
@@ -129,7 +130,7 @@ export function registerOfferRoutes(ctx) {
 
   registerPost("/offers/:id/approve-send", async (request, reply) => {
     const scope = requireProjectScope(request);
-    const offerId = String(request.params?.id || "");
+    const offerId = assertUuid(request.params?.id, "offer_id");
     const body = parseBody(ApproveOfferSchema, request.body);
     const evidenceRefs = normalizeEvidenceRefs(body.evidence_refs);
     const { rows } = await pool.query(

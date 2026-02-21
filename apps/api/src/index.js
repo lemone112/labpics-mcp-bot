@@ -47,7 +47,7 @@ import { applyMigrations } from "../db/migrate-lib.js";
 import { createRedisPubSub } from "./infra/redis-pubsub.js";
 import { createSseBroadcaster } from "./infra/sse-broadcaster.js";
 import { createCacheLayer } from "./infra/cache.js";
-import { requiredEnv } from "./infra/utils.js";
+import { isUuid, requiredEnv } from "./infra/utils.js";
 import { createApiKeyAuth } from "./infra/api-keys.js";
 import { requireProjectAccess, requireRole, getEffectiveRole, canAccessProject, getAccessibleProjectIds } from "./infra/rbac.js";
 import {
@@ -145,7 +145,7 @@ function parseProjectIdsInput(value, max = 50) {
   const seen = new Set();
   for (const item of rawValues) {
     const normalized = String(item || "").trim();
-    if (!normalized || seen.has(normalized)) continue;
+    if (!normalized || !isUuid(normalized) || seen.has(normalized)) continue;
     deduped.push(normalized);
     seen.add(normalized);
     if (deduped.length >= max) break;
