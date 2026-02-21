@@ -194,16 +194,17 @@ export async function runScheduledReports(
     const { dateStart, dateEnd } = computeDateRange(template.schedule);
 
     try {
-      const report = await generateReport(pool, scope, template, dateStart, dateEnd);
+      const report = (await generateReport(pool, scope, template, dateStart, dateEnd)) as { id?: unknown };
+      const reportId = String(report?.id || "");
       stats.generated += 1;
       stats.details.push({
         template_id: template.id,
         template_name: template.name || "",
-        report_id: report.id,
+        report_id: reportId,
         status: "completed",
       });
       logger.info?.(
-        { template_id: template.id, template_name: template.name, report_id: report.id },
+        { template_id: template.id, template_name: template.name, report_id: reportId },
         "scheduled report generated"
       );
     } catch (error) {
