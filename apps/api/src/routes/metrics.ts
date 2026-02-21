@@ -160,6 +160,15 @@ export function registerMetricsRoutes(ctx: RouteCtx) {
   registerPost("/criteria/evaluate", async (request, reply) => {
     const scope = requireProjectScope(request as any);
     const body = parseBody<CriteriaEvaluateInput>(CriteriaEvaluateSchema as any, request.body);
+    const scopedIdempotencyKey = body.idempotency_key
+      ? `criteria_evaluate:${body.idempotency_key}`
+      : null;
+    if (scopedIdempotencyKey) {
+      const cached = await findCachedResponse(pool, scope.projectId, scopedIdempotencyKey);
+      if (cached) {
+        return reply.code((cached as any).status_code).send((cached as any).response_body);
+      }
+    }
     try {
       const result = await evaluateCriteriaAndStoreRun(
         pool,
@@ -167,7 +176,23 @@ export function registerMetricsRoutes(ctx: RouteCtx) {
         request.auth?.user_id || null,
         body
       );
-      return sendOk(reply, requestIdOf(request), { schema_version: 1, ...result }, 201);
+      const responseBody = {
+        ok: true,
+        schema_version: 1,
+        ...result,
+        request_id: requestIdOf(request),
+      };
+      if (scopedIdempotencyKey) {
+        await storeCachedResponse(
+          pool,
+          scope.projectId,
+          scopedIdempotencyKey,
+          "/criteria/evaluate",
+          201,
+          responseBody
+        );
+      }
+      return reply.code(201).send(responseBody);
     } catch (error) {
       return sendError(reply, requestIdOf(request), error);
     }

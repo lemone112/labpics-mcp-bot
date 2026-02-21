@@ -28,6 +28,14 @@ if (!integrationEnabled) {
     return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
+  function envInt(name, fallback, min, max) {
+    const raw = Number.parseInt(process.env[name] || "", 10);
+    if (!Number.isFinite(raw)) return fallback;
+    return Math.min(max, Math.max(min, raw));
+  }
+
+  const raceRepeats = envInt("CONCURRENCY_RACE_REPEATS", 6, 3, 24);
+
   async function waitForPostgres(pool, attempts = 30) {
     for (let i = 0; i < attempts; i += 1) {
       try {
@@ -64,6 +72,7 @@ if (!integrationEnabled) {
     let reviewerLink = null;
     let conditionA = null;
     let conditionB = null;
+    let metricConcurrencyId = null;
 
     before(async () => {
       pool = new Pool({ connectionString: requiredEnv("DATABASE_URL"), max: 20 });
@@ -151,6 +160,40 @@ if (!integrationEnabled) {
       reviewerLink = linkRows.find((row) => row.link_type === "reviewer")?.id || null;
       assert.ok(ownerLink);
       assert.ok(reviewerLink);
+
+      const { rows: metricRows } = await pool.query(
+        `
+          INSERT INTO metric_definitions(
+            metric_key,
+            version,
+            is_current,
+            name,
+            description,
+            unit,
+            value_type,
+            aggregation_type,
+            source,
+            enabled,
+            metadata
+          )
+          VALUES (
+            'concurrency.parallel.ingest',
+            1,
+            true,
+            'Concurrency metric ingest',
+            'Synthetic metric for race-condition tests',
+            'count',
+            'numeric',
+            'sum',
+            'integration-test',
+            true,
+            '{}'::jsonb
+          )
+          RETURNING id::text AS id
+        `
+      );
+      metricConcurrencyId = metricRows[0]?.id || null;
+      assert.ok(metricConcurrencyId);
     });
 
     after(async () => {
@@ -158,7 +201,7 @@ if (!integrationEnabled) {
     });
 
     it("keeps project assignments deterministic under parallel assign/unassign", async () => {
-      for (let attempt = 0; attempt < 6; attempt += 1) {
+      for (let attempt = 0; attempt < raceRepeats; attempt += 1) {
         await pool.query("DELETE FROM project_assignments WHERE user_id = $1 AND project_id = $2", [
           fixture.userA,
           fixture.projectA,
@@ -216,7 +259,7 @@ if (!integrationEnabled) {
     });
 
     it("serializes parallel employee condition updates and prevents overlaps", async () => {
-      for (let attempt = 0; attempt < 6; attempt += 1) {
+      for (let attempt = 0; attempt < raceRepeats; attempt += 1) {
         await pool.query(
           `
             UPDATE employee_conditions
@@ -299,7 +342,7 @@ if (!integrationEnabled) {
         VALUES ($1, $2, $3, $4, 'requires')
       `;
 
-      for (let attempt = 0; attempt < 6; attempt += 1) {
+      for (let attempt = 0; attempt < raceRepeats; attempt += 1) {
         await pool.query(
           `
             DELETE FROM client_executor_dependencies
@@ -425,6 +468,75 @@ if (!integrationEnabled) {
       assert.ok(cached);
       assert.equal(cached?.status_code, 201);
       assert.equal(typeof cached?.response_body, "object");
+    });
+
+    it("deduplicates parallel metric writes by unique ingest key", async () => {
+      const observedAt = "2026-07-01T00:00:00.000Z";
+      for (let attempt = 0; attempt < raceRepeats; attempt += 1) {
+        await pool.query(
+          `
+            DELETE FROM metric_observations
+            WHERE metric_id = $1
+              AND project_id = $2
+              AND account_scope_id = $3
+              AND subject_type = 'project'
+              AND subject_id = $2
+              AND observed_at = $4::timestamptz
+          `,
+          [metricConcurrencyId, fixture.projectA, fixture.scopeA, observedAt]
+        );
+
+        const writes = await Promise.allSettled(
+          Array.from({ length: 16 }, (_, idx) =>
+            pool.query(
+              `
+                INSERT INTO metric_observations(
+                  metric_id, project_id, account_scope_id, subject_type, subject_id,
+                  observed_at, value_numeric, value_text, dimensions, quality_flags, source, source_event_id, is_backfill
+                )
+                VALUES (
+                  $1, $2, $3, 'project', $2,
+                  $4::timestamptz, 42, NULL, '{}'::jsonb, '{}'::jsonb, 'integration-test', $5, false
+                )
+                ON CONFLICT (
+                  metric_id, project_id, account_scope_id, subject_type, subject_id, observed_at, dimension_hash
+                ) DO NOTHING
+                RETURNING id
+              `,
+              [metricConcurrencyId, fixture.projectA, fixture.scopeA, observedAt, `parallel-${attempt}-${idx}`]
+            )
+          )
+        );
+
+        assert.equal(
+          writes.filter((run) => run.status === "rejected").length,
+          0,
+          "parallel metric observation writes with ON CONFLICT must not fail"
+        );
+        const inserted = writes.filter(
+          (run) => run.status === "fulfilled" && run.value.rowCount === 1
+        ).length;
+        assert.equal(inserted, 1, "exactly one metric observation insert should win");
+
+        const { rows: countRows } = await pool.query(
+          `
+            SELECT count(*)::int AS count
+            FROM metric_observations
+            WHERE metric_id = $1
+              AND project_id = $2
+              AND account_scope_id = $3
+              AND subject_type = 'project'
+              AND subject_id = $2
+              AND observed_at = $4::timestamptz
+          `,
+          [metricConcurrencyId, fixture.projectA, fixture.scopeA, observedAt]
+        );
+        assert.equal(
+          countRows[0]?.count,
+          1,
+          "metric observation ingest idempotency key must keep a single row"
+        );
+      }
     });
   });
 }

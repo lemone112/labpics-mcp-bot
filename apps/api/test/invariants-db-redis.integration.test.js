@@ -79,6 +79,9 @@ if (!integrationEnabled) {
     let accountB = null;
     let opportunityA = null;
     let employeeA2 = null;
+    let metricInvariantId = null;
+    let criteriaInvariantId = null;
+    let criteriaRunInvariantId = null;
     let cache = null;
     let pubsub = null;
 
@@ -146,6 +149,110 @@ if (!integrationEnabled) {
       );
       employeeA2 = employeeRows[0]?.id || null;
       assert.ok(employeeA2);
+
+      const { rows: metricRows } = await pool.query(
+        `
+          INSERT INTO metric_definitions(
+            metric_key,
+            version,
+            is_current,
+            name,
+            description,
+            unit,
+            value_type,
+            aggregation_type,
+            source,
+            enabled,
+            metadata
+          )
+          VALUES (
+            'invariants.response_time',
+            1,
+            true,
+            'Invariant response time',
+            'Integration metric invariant checks',
+            'ms',
+            'numeric',
+            'avg',
+            'integration-test',
+            true,
+            '{}'::jsonb
+          )
+          RETURNING id::text AS id
+        `
+      );
+      metricInvariantId = metricRows[0]?.id || null;
+      assert.ok(metricInvariantId);
+
+      await pool.query(
+        `
+          INSERT INTO metric_dimensions(metric_id, dimension_key, dimension_type, required, allowed_values, metadata)
+          VALUES (
+            $1,
+            'channel',
+            'enum',
+            true,
+            '["email","chat"]'::jsonb,
+            '{}'::jsonb
+          )
+        `,
+        [metricInvariantId]
+      );
+
+      const { rows: criteriaRows } = await pool.query(
+        `
+          INSERT INTO criteria_definitions(
+            criteria_key,
+            version,
+            is_current,
+            name,
+            severity,
+            owner_domain,
+            rule_spec,
+            enabled,
+            metadata
+          )
+          VALUES (
+            'invariants.metric.threshold',
+            1,
+            true,
+            'Invariant metric threshold',
+            'medium',
+            'analytics',
+            '{"op":"metric_threshold","metric_key":"invariants.response_time","comparison":"lte","value":200}',
+            true,
+            '{}'::jsonb
+          )
+          RETURNING id::text AS id
+        `
+      );
+      criteriaInvariantId = criteriaRows[0]?.id || null;
+      assert.ok(criteriaInvariantId);
+
+      const { rows: runRows } = await pool.query(
+        `
+          INSERT INTO criteria_evaluation_runs(
+            project_id,
+            account_scope_id,
+            run_key,
+            status,
+            trigger_source,
+            criteria_version_snapshot
+          )
+          VALUES (
+            $1,
+            $2,
+            $3,
+            'running',
+            'integration-test',
+            '{}'::jsonb
+          )
+          RETURNING id::text AS id
+        `,
+        [fixture.projectA, fixture.scopeA, `invariants-run-${Date.now()}`]
+      );
+      criteriaRunInvariantId = runRows[0]?.id || null;
+      assert.ok(criteriaRunInvariantId);
 
       cache = createCacheLayer({ logger: silentLogger });
       pubsub = createRedisPubSub({ url: redisUrl, logger: silentLogger });
@@ -269,6 +376,115 @@ if (!integrationEnabled) {
               VALUES ($1, $2, $3, $4, 'requires')
             `,
             [fixture.projectA, fixture.scopeA, observerLink, ownerLink]
+          )
+      );
+    });
+
+    it("rejects metric/criteria scope mismatches and metric contract violations", async () => {
+      await assert.rejects(
+        () =>
+          pool.query(
+            `
+              INSERT INTO metric_observations(
+                metric_id, project_id, account_scope_id, subject_type, subject_id,
+                observed_at, value_numeric, value_text, dimensions, quality_flags, source, source_event_id, is_backfill
+              )
+              VALUES (
+                $1, $2, $3, 'project', $4,
+                now(), 120, NULL, '{"channel":"email"}'::jsonb, '{}'::jsonb, 'integration-test', 'missing-fk', false
+              )
+            `,
+            [randomUUID(), fixture.projectA, fixture.scopeA, fixture.projectA]
+          )
+      );
+
+      await assert.rejects(
+        () =>
+          pool.query(
+            `
+              INSERT INTO metric_observations(
+                metric_id, project_id, account_scope_id, subject_type, subject_id,
+                observed_at, value_numeric, value_text, dimensions, quality_flags, source, source_event_id, is_backfill
+              )
+              VALUES (
+                $1, $2, $3, 'employee', $4,
+                now(), 140, NULL, '{"channel":"email"}'::jsonb, '{}'::jsonb, 'integration-test', 'cross-scope-employee', false
+              )
+            `,
+            [metricInvariantId, fixture.projectA, fixture.scopeA, fixture.employeeB]
+          )
+      );
+
+      await assert.rejects(
+        () =>
+          pool.query(
+            `
+              INSERT INTO metric_observations(
+                metric_id, project_id, account_scope_id, subject_type, subject_id,
+                observed_at, value_numeric, value_text, dimensions, quality_flags, source, source_event_id, is_backfill
+              )
+              VALUES (
+                $1, $2, $3, 'employee', $4,
+                now(), 160, NULL, '{}'::jsonb, '{}'::jsonb, 'integration-test', 'missing-dim', false
+              )
+            `,
+            [metricInvariantId, fixture.projectA, fixture.scopeA, fixture.employeeA]
+          )
+      );
+
+      await assert.rejects(
+        () =>
+          pool.query(
+            `
+              INSERT INTO metric_observations(
+                metric_id, project_id, account_scope_id, subject_type, subject_id,
+                observed_at, value_numeric, value_text, dimensions, quality_flags, source, source_event_id, is_backfill
+              )
+              VALUES (
+                $1, $2, $3, 'employee', $4,
+                now(), 160, NULL, '{"channel":"voice"}'::jsonb, '{}'::jsonb, 'integration-test', 'bad-dim-value', false
+              )
+            `,
+            [metricInvariantId, fixture.projectA, fixture.scopeA, fixture.employeeA]
+          )
+      );
+
+      const inserted = await pool.query(
+        `
+          INSERT INTO metric_observations(
+            metric_id, project_id, account_scope_id, subject_type, subject_id,
+            observed_at, value_numeric, value_text, dimensions, quality_flags, source, source_event_id, is_backfill
+          )
+          VALUES (
+            $1, $2, $3, 'employee', $4,
+            now(), 130, NULL, '{"channel":"chat"}'::jsonb, '{}'::jsonb, 'integration-test', 'valid-metric', false
+          )
+          RETURNING id
+        `,
+        [metricInvariantId, fixture.projectA, fixture.scopeA, fixture.employeeA]
+      );
+      assert.equal(inserted.rowCount, 1);
+
+      await assert.rejects(
+        () =>
+          pool.query(
+            `
+              INSERT INTO criteria_evaluations(
+                run_id, criteria_id, project_id, account_scope_id, subject_type, subject_id, status,
+                score, reason, evidence_refs, metric_snapshot, threshold_snapshot, error_payload, evaluated_at
+              )
+              VALUES (
+                $1, $2, $3, $4, 'employee', $5, 'pass',
+                90, 'cross scope check', '[]'::jsonb, '{}'::jsonb, '{}'::jsonb, '{}'::jsonb, now()
+              )
+            `,
+            [
+              criteriaRunInvariantId,
+              criteriaInvariantId,
+              fixture.projectB,
+              fixture.scopeB,
+              fixture.employeeA,
+            ]
           )
       );
     });

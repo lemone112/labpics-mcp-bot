@@ -7,34 +7,66 @@
  * - Provides summary endpoint data for dashboard
  */
 
-/**
- * @param {string} value
- * @param {number} max
- * @returns {string}
- */
-function safeText(value, max = 4000) {
+import type { Pool } from "pg";
+
+type SearchScope = {
+  projectId: string | null | undefined;
+  accountScopeId: string | null | undefined;
+};
+
+type SearchEventPayload = {
+  query?: unknown;
+  resultCount?: number | null;
+  filters?: Record<string, unknown> | null;
+  userId?: string | null;
+  clickedResultId?: string | null;
+  clickedSourceType?: string | null;
+  eventType?: string | null;
+  durationMs?: number | null;
+};
+
+type SearchSummaryOptions = {
+  days?: number;
+  topQueriesLimit?: number;
+};
+
+type LoggerLike = Pick<Console, "warn">;
+
+type OverviewRow = {
+  total_searches?: number | null;
+  total_clicks?: number | null;
+  unique_queries?: number | null;
+  unique_users?: number | null;
+  avg_duration_ms?: number | null;
+  avg_result_count?: number | null;
+};
+
+type ClickRateRow = {
+  total_query_types?: number | null;
+  clicked_query_types?: number | null;
+};
+
+type QueryResultRow = Record<string, unknown>;
+
+function asFiniteNumber(value: unknown, fallback = 0): number {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function safeText(value: unknown, max = 4000): string {
   const text = String(value || "").trim();
   return text.slice(0, max);
 }
 
 /**
  * Track a search analytics event (query execution or result click).
- *
- * @param {import('pg').Pool} pool
- * @param {object} scope - { projectId, accountScopeId }
- * @param {object} event
- * @param {string} event.query - The search query text
- * @param {number} [event.resultCount] - Number of results returned
- * @param {object} [event.filters] - Applied filters (source types, date range, etc.)
- * @param {string|null} [event.userId] - Authenticated user ID
- * @param {string|null} [event.clickedResultId] - ID of clicked result (for click events)
- * @param {string|null} [event.clickedSourceType] - Source type of clicked result
- * @param {string} [event.eventType] - 'search' | 'click' | 'suggestion'
- * @param {number|null} [event.durationMs] - Query execution time in ms
- * @param {object} [logger]
- * @returns {Promise<string|null>} Inserted row ID or null on failure
  */
-export async function trackSearchEvent(pool, scope, event = {}, logger = console) {
+export async function trackSearchEvent(
+  pool: Pool,
+  scope: Partial<SearchScope> | null | undefined,
+  event: SearchEventPayload = {},
+  logger: LoggerLike = console
+): Promise<string | null> {
   const projectId = String(scope?.projectId || "").trim();
   const accountScopeId = String(scope?.accountScopeId || "").trim();
   if (!projectId || !accountScopeId) {
@@ -46,7 +78,7 @@ export async function trackSearchEvent(pool, scope, event = {}, logger = console
   }
 
   try {
-    const { rows } = await pool.query(
+    const { rows } = await pool.query<{ id: string }>(
       `
         INSERT INTO search_analytics(
           query,
@@ -74,13 +106,13 @@ export async function trackSearchEvent(pool, scope, event = {}, logger = console
         event.clickedResultId ? safeText(event.clickedResultId, 500) : null,
         event.clickedSourceType ? safeText(event.clickedSourceType, 100) : null,
         safeText(event.eventType || "search", 50),
-        Number.isFinite(event.durationMs) ? Math.round(event.durationMs) : null,
+        Number.isFinite(event.durationMs) ? Math.round(event.durationMs as number) : null,
       ]
     );
     return rows[0]?.id || null;
   } catch (error) {
     logger.warn(
-      { err: String(error?.message || error) },
+      { err: String((error as { message?: string })?.message || error) },
       "failed to track search analytics event"
     );
     return null;
@@ -89,22 +121,20 @@ export async function trackSearchEvent(pool, scope, event = {}, logger = console
 
 /**
  * Get search analytics summary for a project scope.
- *
- * @param {import('pg').Pool} pool
- * @param {object} scope - { projectId, accountScopeId }
- * @param {object} [options]
- * @param {number} [options.days] - Number of days to look back (default 30)
- * @param {number} [options.topQueriesLimit] - Max top queries to return (default 20)
- * @returns {Promise<object>} Analytics summary
  */
-export async function getSearchAnalyticsSummary(pool, scope, options = {}) {
+export async function getSearchAnalyticsSummary(
+  pool: Pool,
+  scope: SearchScope,
+  options: SearchSummaryOptions = {}
+) {
   const days = Math.max(1, Math.min(options.days || 30, 365));
   const topQueriesLimit = Math.max(1, Math.min(options.topQueriesLimit || 20, 100));
 
-  const [overviewResult, topQueriesResult, dailyVolumeResult, clickRateResult, sourceBreakdownResult] = await Promise.all([
-    // Overview stats
-    pool.query(
-      `
+  const [overviewResult, topQueriesResult, dailyVolumeResult, clickRateResult, sourceBreakdownResult] =
+    await Promise.all([
+      // Overview stats
+      pool.query<OverviewRow>(
+        `
         SELECT
           count(*) FILTER (WHERE event_type = 'search')::int AS total_searches,
           count(*) FILTER (WHERE event_type = 'click')::int AS total_clicks,
@@ -117,12 +147,12 @@ export async function getSearchAnalyticsSummary(pool, scope, options = {}) {
           AND account_scope_id = $2
           AND created_at >= now() - make_interval(days => $3)
       `,
-      [scope.projectId, scope.accountScopeId, days]
-    ),
+        [scope.projectId, scope.accountScopeId, days]
+      ),
 
-    // Top queries by frequency
-    pool.query(
-      `
+      // Top queries by frequency
+      pool.query<QueryResultRow>(
+        `
         SELECT
           query,
           count(*)::int AS search_count,
@@ -137,12 +167,12 @@ export async function getSearchAnalyticsSummary(pool, scope, options = {}) {
         ORDER BY search_count DESC
         LIMIT $4
       `,
-      [scope.projectId, scope.accountScopeId, days, topQueriesLimit]
-    ),
+        [scope.projectId, scope.accountScopeId, days, topQueriesLimit]
+      ),
 
-    // Daily search volume
-    pool.query(
-      `
+      // Daily search volume
+      pool.query<QueryResultRow>(
+        `
         SELECT
           date_trunc('day', created_at)::date AS day,
           count(*) FILTER (WHERE event_type = 'search')::int AS searches,
@@ -154,12 +184,12 @@ export async function getSearchAnalyticsSummary(pool, scope, options = {}) {
         GROUP BY date_trunc('day', created_at)
         ORDER BY day DESC
       `,
-      [scope.projectId, scope.accountScopeId, days]
-    ),
+        [scope.projectId, scope.accountScopeId, days]
+      ),
 
-    // Click-through rate (queries that led to clicks)
-    pool.query(
-      `
+      // Click-through rate (queries that led to clicks)
+      pool.query<ClickRateRow>(
+        `
         WITH search_sessions AS (
           SELECT DISTINCT query
           FROM search_analytics
@@ -180,12 +210,12 @@ export async function getSearchAnalyticsSummary(pool, scope, options = {}) {
           (SELECT count(*)::int FROM search_sessions) AS total_query_types,
           (SELECT count(*)::int FROM clicked_queries) AS clicked_query_types
       `,
-      [scope.projectId, scope.accountScopeId, days]
-    ),
+        [scope.projectId, scope.accountScopeId, days]
+      ),
 
-    // Clicked source type breakdown
-    pool.query(
-      `
+      // Clicked source type breakdown
+      pool.query<QueryResultRow>(
+        `
         SELECT
           clicked_source_type AS source_type,
           count(*)::int AS click_count
@@ -198,25 +228,26 @@ export async function getSearchAnalyticsSummary(pool, scope, options = {}) {
         GROUP BY clicked_source_type
         ORDER BY click_count DESC
       `,
-      [scope.projectId, scope.accountScopeId, days]
-    ),
-  ]);
+        [scope.projectId, scope.accountScopeId, days]
+      ),
+    ]);
 
   const overview = overviewResult.rows[0] || {};
   const clickRate = clickRateResult.rows[0] || {};
-  const ctr = clickRate.total_query_types > 0
-    ? Math.round((clickRate.clicked_query_types / clickRate.total_query_types) * 10000) / 100
-    : 0;
+  const totalQueryTypes = asFiniteNumber(clickRate.total_query_types, 0);
+  const clickedQueryTypes = asFiniteNumber(clickRate.clicked_query_types, 0);
+  const ctr =
+    totalQueryTypes > 0 ? Math.round((clickedQueryTypes / totalQueryTypes) * 10000) / 100 : 0;
 
   return {
     period_days: days,
     overview: {
-      total_searches: overview.total_searches || 0,
-      total_clicks: overview.total_clicks || 0,
-      unique_queries: overview.unique_queries || 0,
-      unique_users: overview.unique_users || 0,
-      avg_duration_ms: overview.avg_duration_ms || 0,
-      avg_result_count: overview.avg_result_count || 0,
+      total_searches: asFiniteNumber(overview.total_searches, 0),
+      total_clicks: asFiniteNumber(overview.total_clicks, 0),
+      unique_queries: asFiniteNumber(overview.unique_queries, 0),
+      unique_users: asFiniteNumber(overview.unique_users, 0),
+      avg_duration_ms: asFiniteNumber(overview.avg_duration_ms, 0),
+      avg_result_count: asFiniteNumber(overview.avg_result_count, 0),
       click_through_rate_pct: ctr,
     },
     top_queries: topQueriesResult.rows || [],

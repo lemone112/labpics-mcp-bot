@@ -343,8 +343,29 @@ test("MetricsQuerySchema rejects invalid ISO date filters", () => {
   );
 });
 
+test("MetricsQuerySchema and MetricsExportSchema reject inverted date window", () => {
+  assert.throws(
+    () =>
+      parseBody(MetricsQuerySchema, {
+        date_from: "2026-03-10T00:00:00.000Z",
+        date_to: "2026-03-01T00:00:00.000Z",
+      }),
+    (err) => err.code === "validation_error"
+  );
+
+  assert.throws(
+    () =>
+      parseBody(MetricsExportSchema, {
+        date_from: "2026-03-10T00:00:00.000Z",
+        date_to: "2026-03-01T00:00:00.000Z",
+      }),
+    (err) => err.code === "validation_error"
+  );
+});
+
 test("CriteriaEvaluateSchema validates evaluation batch payload", () => {
   const payload = parseBody(CriteriaEvaluateSchema, {
+    idempotency_key: "criteria-run-1",
     evaluations: [
       {
         criteria_key: "quality.delivery",
@@ -356,8 +377,10 @@ test("CriteriaEvaluateSchema validates evaluation batch payload", () => {
   });
 
   assert.equal(payload.schema_version, 1);
+  assert.equal(payload.idempotency_key, "criteria-run-1");
   assert.equal(payload.trigger_source, "api");
   assert.equal(payload.evaluations.length, 1);
+  assert.equal(payload.evaluations[0].segment_key, "default");
   assert.deepEqual(payload.evaluations[0].thresholds, {});
 });
 
@@ -371,6 +394,35 @@ test("CriteriaEvaluateSchema rejects invalid subject_id", () => {
             subject_type: "project",
             subject_id: "not-a-uuid",
             metric_values: {},
+          },
+        ],
+      }),
+    (err) => err.code === "validation_error"
+  );
+});
+
+test("CriteriaEvaluateSchema accepts explicit segment_key and rejects blank values", () => {
+  const payload = parseBody(CriteriaEvaluateSchema, {
+    evaluations: [
+      {
+        criteria_key: "quality.delivery",
+        segment_key: "enterprise",
+        subject_type: "project",
+        subject_id: "00000000-0000-4000-8000-000000000001",
+      },
+    ],
+  });
+  assert.equal(payload.evaluations[0].segment_key, "enterprise");
+
+  assert.throws(
+    () =>
+      parseBody(CriteriaEvaluateSchema, {
+        evaluations: [
+          {
+            criteria_key: "quality.delivery",
+            segment_key: "   ",
+            subject_type: "project",
+            subject_id: "00000000-0000-4000-8000-000000000001",
           },
         ],
       }),
@@ -420,4 +472,8 @@ test("metrics route contract endpoints exist", async () => {
   for (const endpoint of endpoints) {
     assert.ok(metricsRouteSource.includes(endpoint), `Expected endpoint ${endpoint} in metrics route module`);
   }
+  assert.ok(
+    metricsRouteSource.includes("criteria_evaluate:"),
+    "Expected criteria evaluate idempotency key prefix in metrics route module"
+  );
 });
