@@ -345,6 +345,7 @@ test("MetricsQuerySchema rejects invalid ISO date filters", () => {
 
 test("CriteriaEvaluateSchema validates evaluation batch payload", () => {
   const payload = parseBody(CriteriaEvaluateSchema, {
+    idempotency_key: "criteria-run-1",
     evaluations: [
       {
         criteria_key: "quality.delivery",
@@ -356,6 +357,7 @@ test("CriteriaEvaluateSchema validates evaluation batch payload", () => {
   });
 
   assert.equal(payload.schema_version, 1);
+  assert.equal(payload.idempotency_key, "criteria-run-1");
   assert.equal(payload.trigger_source, "api");
   assert.equal(payload.evaluations.length, 1);
   assert.equal(payload.evaluations[0].segment_key, "default");
@@ -450,4 +452,8 @@ test("metrics route contract endpoints exist", async () => {
   for (const endpoint of endpoints) {
     assert.ok(metricsRouteSource.includes(endpoint), `Expected endpoint ${endpoint} in metrics route module`);
   }
+  assert.ok(
+    metricsRouteSource.includes("criteria_evaluate:"),
+    "Expected criteria evaluate idempotency key prefix in metrics route module"
+  );
 });

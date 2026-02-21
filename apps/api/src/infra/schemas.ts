@@ -270,6 +270,7 @@ export const CriteriaEvaluateItemSchema = z.object({
 
 export const CriteriaEvaluateSchema = z.object({
   schema_version: z.literal(1).optional().default(1),
+  idempotency_key: optionalTrimmedString(255),
   run_key: optionalTrimmedString(200),
   trigger_source: optionalTrimmedString(100).default("api"),
   evaluations: z.array(CriteriaEvaluateItemSchema).min(1).max(200),
