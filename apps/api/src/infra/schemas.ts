@@ -164,6 +164,117 @@ export const SearchAnalyticsSummarySchema = z.object({
 });
 
 // ---------------------------------------------------------------------------
+// 10.1 Metrics & Criteria API contracts (Iter 66.3)
+// ---------------------------------------------------------------------------
+
+const metricValueTypeEnum = z.enum(["numeric", "text", "boolean", "json"]);
+const metricAggregationTypeEnum = z.enum([
+  "sum",
+  "avg",
+  "count",
+  "last",
+  "max",
+  "min",
+  "ratio",
+  "distinct_count",
+]);
+const metricSubjectTypeEnum = z.enum(["project", "employee", "crm_account", "crm_opportunity", "system"]);
+const metricDimensionTypeEnum = z.enum(["text", "number", "boolean", "date", "timestamp", "enum", "json"]);
+const sortOrderEnum = z.enum(["asc", "desc"]);
+
+const isoDateTimeString = z
+  .string()
+  .trim()
+  .refine((v) => !Number.isNaN(Date.parse(v)), { message: "Expected ISO datetime string" });
+
+export const MetricDefinitionDimensionSchema = z.object({
+  dimension_key: trimmedString(1, 100),
+  dimension_type: metricDimensionTypeEnum,
+  required: z.coerce.boolean().optional().default(false),
+  allowed_values: z.array(z.string()).optional().nullable().default(null),
+  metadata: z.object({}).passthrough().optional().default({}),
+});
+
+export const MetricDefinitionUpsertSchema = z.object({
+  schema_version: z.literal(1).optional().default(1),
+  metric_key: trimmedString(3, 150),
+  version: z.coerce.number().int().min(1).optional(),
+  promote_new_version: z.coerce.boolean().optional().default(false),
+  name: trimmedString(2, 200),
+  description: optionalTrimmedString(2000),
+  unit: optionalTrimmedString(50),
+  value_type: metricValueTypeEnum,
+  aggregation_type: metricAggregationTypeEnum,
+  source: optionalTrimmedString(200),
+  enabled: z.coerce.boolean().optional().default(true),
+  metadata: z.object({}).passthrough().optional().default({}),
+  dimensions: z.array(MetricDefinitionDimensionSchema).optional().default([]),
+});
+
+export const MetricsIngestObservationSchema = z.object({
+  metric_key: trimmedString(1, 150),
+  subject_type: metricSubjectTypeEnum,
+  subject_id: z.string().uuid(),
+  observed_at: isoDateTimeString,
+  value_numeric: z.coerce.number().optional().nullable().default(null),
+  value_text: optionalTrimmedString(4000),
+  dimensions: z.object({}).passthrough().optional().default({}),
+  quality_flags: z.object({}).passthrough().optional().default({}),
+  source: optionalTrimmedString(200),
+  source_event_id: optionalTrimmedString(500),
+  is_backfill: z.coerce.boolean().optional().default(false),
+});
+
+export const MetricsIngestSchema = z.object({
+  schema_version: z.literal(1).optional().default(1),
+  idempotency_key: trimmedString(1, 255),
+  observations: z.array(MetricsIngestObservationSchema).min(1).max(2000),
+});
+
+export const MetricsQuerySchema = z.object({
+  schema_version: z.coerce.number().int().optional().default(1),
+  metric_key: optionalTrimmedString(150),
+  subject_type: metricSubjectTypeEnum.optional().nullable().default(null),
+  subject_id: z.string().uuid().optional().nullable().default(null),
+  date_from: isoDateTimeString.optional().nullable().default(null),
+  date_to: isoDateTimeString.optional().nullable().default(null),
+  limit: z.coerce.number().int().min(1).max(500).optional().default(100),
+  offset: z.coerce.number().int().min(0).optional().default(0),
+  sort_by: z.enum(["observed_at", "ingested_at", "created_at"]).optional().default("observed_at"),
+  sort_order: sortOrderEnum.optional().default("desc"),
+});
+
+export const MetricsExportSchema = z.object({
+  schema_version: z.coerce.number().int().optional().default(1),
+  format: z.enum(["json", "csv"]).optional().default("json"),
+  metric_key: optionalTrimmedString(150),
+  subject_type: metricSubjectTypeEnum.optional().nullable().default(null),
+  subject_id: z.string().uuid().optional().nullable().default(null),
+  date_from: isoDateTimeString.optional().nullable().default(null),
+  date_to: isoDateTimeString.optional().nullable().default(null),
+  limit: z.coerce.number().int().min(1).max(5000).optional().default(1000),
+  offset: z.coerce.number().int().min(0).optional().default(0),
+  sort_by: z.enum(["observed_at", "ingested_at", "created_at"]).optional().default("observed_at"),
+  sort_order: sortOrderEnum.optional().default("desc"),
+});
+
+export const CriteriaEvaluateItemSchema = z.object({
+  criteria_key: trimmedString(1, 150),
+  subject_type: metricSubjectTypeEnum,
+  subject_id: z.string().uuid(),
+  metric_values: z.object({}).passthrough().optional().default({}),
+  thresholds: z.object({}).passthrough().optional().default({}),
+  evidence_refs: evidenceRefs,
+});
+
+export const CriteriaEvaluateSchema = z.object({
+  schema_version: z.literal(1).optional().default(1),
+  run_key: optionalTrimmedString(200),
+  trigger_source: optionalTrimmedString(100).default("api"),
+  evaluations: z.array(CriteriaEvaluateItemSchema).min(1).max(200),
+});
+
+// ---------------------------------------------------------------------------
 // 9.1  Signals & Identity schemas
 // ---------------------------------------------------------------------------
 
@@ -278,3 +389,8 @@ export type ConnectorRetryInput = z.infer<typeof ConnectorRetrySchema>;
 export type AnalyticsRefreshInput = z.infer<typeof AnalyticsRefreshSchema>;
 export type SearchAnalyticsTrackInput = z.infer<typeof SearchAnalyticsTrackSchema>;
 export type SearchAnalyticsSummaryInput = z.infer<typeof SearchAnalyticsSummarySchema>;
+export type MetricDefinitionUpsertInput = z.infer<typeof MetricDefinitionUpsertSchema>;
+export type MetricsIngestInput = z.infer<typeof MetricsIngestSchema>;
+export type MetricsQueryInput = z.infer<typeof MetricsQuerySchema>;
+export type MetricsExportInput = z.infer<typeof MetricsExportSchema>;
+export type CriteriaEvaluateInput = z.infer<typeof CriteriaEvaluateSchema>;

@@ -41,6 +41,11 @@ import {
   ContinuityApplySchema,
   SearchAnalyticsTrackSchema,
   SearchAnalyticsSummarySchema,
+  MetricDefinitionUpsertSchema,
+  MetricsIngestSchema,
+  MetricsQuerySchema,
+  MetricsExportSchema,
+  CriteriaEvaluateSchema,
 } from "./infra/schemas.js";
 import { checkRateLimit, rateLimitHook } from "./infra/rate-limit.js";
 import { applyMigrations } from "../db/migrate-lib.js";
@@ -66,6 +71,7 @@ import {
   registerApiKeyRoutes,
   registerUserRoutes,
   registerReportRoutes,
+  registerMetricsRoutes,
 } from "./routes/index.js";
 
 function isBcryptHash(value) {
@@ -852,6 +858,8 @@ async function main() {
     AnalyticsRefreshSchema, OutboundApproveSchema, OutboundProcessSchema,
     LoopsSyncSchema, UpsellStatusSchema, ContinuityApplySchema,
     SearchAnalyticsTrackSchema, SearchAnalyticsSummarySchema,
+    MetricDefinitionUpsertSchema, MetricsIngestSchema, MetricsQuerySchema,
+    MetricsExportSchema, CriteriaEvaluateSchema,
     // Auth helpers
     normalizeAccountUsername, assertLoginRateLimit, recordLoginFailure,
     clearLoginFailures, timingSafeStringEqual, auth, createSession,
@@ -877,6 +885,7 @@ async function main() {
   registerApiKeyRoutes(routeCtx);
   registerUserRoutes(routeCtx);
   registerReportRoutes(routeCtx);
+  registerMetricsRoutes(routeCtx);
 
 
   app.setErrorHandler((error, request, reply) => {
