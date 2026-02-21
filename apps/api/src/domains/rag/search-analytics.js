@@ -35,6 +35,16 @@ function safeText(value, max = 4000) {
  * @returns {Promise<string|null>} Inserted row ID or null on failure
  */
 export async function trackSearchEvent(pool, scope, event = {}, logger = console) {
+  const projectId = String(scope?.projectId || "").trim();
+  const accountScopeId = String(scope?.accountScopeId || "").trim();
+  if (!projectId || !accountScopeId) {
+    logger.warn(
+      { project_id: projectId || null, account_scope_id: accountScopeId || null },
+      "skipping search analytics event due to missing scope"
+    );
+    return null;
+  }
+
   try {
     const { rows } = await pool.query(
       `
@@ -59,8 +69,8 @@ export async function trackSearchEvent(pool, scope, event = {}, logger = console
         Number.isFinite(event.resultCount) ? event.resultCount : 0,
         JSON.stringify(event.filters || {}),
         event.userId || null,
-        scope.projectId || null,
-        scope.accountScopeId || null,
+        projectId,
+        accountScopeId,
         event.clickedResultId ? safeText(event.clickedResultId, 500) : null,
         event.clickedSourceType ? safeText(event.clickedSourceType, 100) : null,
         safeText(event.eventType || "search", 50),

@@ -66,6 +66,13 @@ jobs:
           DATABASE_URL: postgresql://app:app@127.0.0.1:5432/labpics_ci
         run: npm run test:migrations:idempotency
 
+      - name: API scope hardening integration
+        working-directory: apps/api
+        env:
+          DATABASE_URL: postgresql://app:app@127.0.0.1:5432/labpics_ci
+          SCOPE_HARDENING_INTEGRATION: "1"
+        run: npm run test:integration:scope
+
       - name: Server tests with coverage gates
         working-directory: apps/api
         run: npm run test:coverage:ci
