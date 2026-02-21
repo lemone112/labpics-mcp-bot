@@ -1,5 +1,6 @@
 import crypto from "node:crypto";
 import type { Pool } from "../types/index.js";
+import type { Role } from "./rbac.js";
 
 interface GeneratedApiKey {
   raw: string;
@@ -26,7 +27,7 @@ interface RequestWithHeaders {
     account_scope_id: string;
     session_id?: string;
     user_id?: string | null;
-    user_role?: "owner" | "pm";
+    user_role?: Role;
   };
   apiKey?: {
     id: string;
@@ -77,7 +78,7 @@ export function createApiKeyAuth(pool: Pool, logger: Console | { warn: (...args:
     }
 
     const normalizedScopes = sanitizeApiKeyScopes(key.scopes);
-    const userRole = normalizedScopes.includes("admin") ? "owner" : "pm";
+    const userRole: Role = normalizedScopes.includes("admin") ? "owner" : "pm";
 
     pool.query(
       "UPDATE api_keys SET last_used_at = now() WHERE id = $1",
