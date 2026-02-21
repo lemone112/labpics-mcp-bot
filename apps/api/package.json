@@ -18,6 +18,7 @@
     "test:integration:scope": "tsx --test test/scope-hardening.integration.test.js",
     "test:integration:workforce": "tsx --test test/workforce-schema.integration.test.js",
     "test:integration:client-executor": "tsx --test test/client-executor-graph.integration.test.js",
+    "test:integration:concurrency": "tsx --test test/concurrency-races.integration.test.js",
     "test:migrations:idempotency": "node scripts/check-migrations-idempotency.mjs",
     "typecheck": "tsc --noEmit"
   },

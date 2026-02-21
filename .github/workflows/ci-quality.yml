@@ -255,12 +255,21 @@ jobs:
           REDIS_URL: redis://127.0.0.1:6379
         run: set -o pipefail && mkdir -p test-results && npm run test:integration:invariants | tee test-results/invariants.tap
 
+      - name: Concurrency race integration tests
+        working-directory: apps/api
+        env:
+          CONCURRENCY_RACES_INTEGRATION: "1"
+          DATABASE_URL: postgresql://app:app@127.0.0.1:5432/labpics_invariants_ci
+        run: set -o pipefail && mkdir -p test-results && npm run test:integration:concurrency | tee test-results/concurrency.tap
+
       - name: Upload invariants test artifacts
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: invariants-integration-artifacts
-          path: apps/api/test-results/invariants.tap
+          path: |
+            apps/api/test-results/invariants.tap
+            apps/api/test-results/concurrency.tap
           if-no-files-found: error
 
   biome:
