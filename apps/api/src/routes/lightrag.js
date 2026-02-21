@@ -1,13 +1,10 @@
 import { ApiError, parseBody, sendError, sendOk } from "../infra/api-contract.js";
-import { assertDateRange, normalizeDateKey } from "./lightrag-date-utils.js";
 import { cacheKeyHash } from "../infra/cache.js";
 import { requireProjectScope } from "../infra/scope.js";
 import { writeAuditEvent } from "../domains/core/audit.js";
 import { getLightRagStatus, queryLightRag, refreshLightRag, submitLightRagFeedback } from "../domains/rag/lightrag.js";
 import { rankSearchResults, computeRankingStats } from "../domains/rag/search-ranking.js";
 import { trackSearchEvent, getSearchAnalyticsSummary } from "../domains/rag/search-analytics.js";
-
-
 
 /**
  * @param {object} ctx
@@ -18,11 +15,10 @@ export function registerLightragRoutes(ctx) {
   registerPost("/search", async (request, reply) => {
     const scope = requireProjectScope(request);
     const body = parseBody(SearchSchema, request.body);
-    assertDateRange(body.date_from, body.date_to);
     const result = await queryLightRag(
       pool,
       scope,
-      { query: body.query, topK: body.topK, sourceLimit: body.sourceLimit, dateFrom: body.date_from, dateTo: body.date_to, createdBy: request.auth?.username || null },
+      { query: body.query, topK: body.topK, sourceLimit: body.sourceLimit, createdBy: request.auth?.username || null },
       request.log
     );
     return sendOk(reply, request.requestId, {
@@ -41,9 +37,8 @@ export function registerLightragRoutes(ctx) {
   registerPost("/lightrag/query", async (request, reply) => {
     const scope = requireProjectScope(request);
     const body = parseBody(LightRagQuerySchema, request.body);
-    assertDateRange(body.date_from, body.date_to);
 
-    const ragCacheKey = `lightrag:${scope.projectId}:${cacheKeyHash(body.query, String(body.topK), JSON.stringify(body.sourceFilter || []), normalizeDateKey(body.date_from), normalizeDateKey(body.date_to))}`;
+    const ragCacheKey = `lightrag:${scope.projectId}:${cacheKeyHash(body.query, String(body.topK), JSON.stringify(body.sourceFilter || []))}`;
     const cached = await cache.get(ragCacheKey);
     if (cached) return sendOk(reply, request.requestId, { ...cached, cached: true });
 
@@ -51,7 +46,7 @@ export function registerLightragRoutes(ctx) {
     const result = await queryLightRag(
       pool,
       scope,
-      { query: body.query, topK: body.topK, sourceLimit: body.sourceLimit, sourceFilter: body.sourceFilter, dateFrom: body.date_from, dateTo: body.date_to, createdBy: request.auth?.username || null },
+      { query: body.query, topK: body.topK, sourceLimit: body.sourceLimit, sourceFilter: body.sourceFilter, createdBy: request.auth?.username || null },
       request.log
     );
     const durationMs = Date.now() - startTime;
@@ -73,7 +68,7 @@ export function registerLightragRoutes(ctx) {
     trackSearchEvent(pool, scope, {
       query: body.query,
       resultCount: rankedEvidence.length,
-      filters: { sourceFilter: body.sourceFilter, topK: body.topK, dateFrom: body.date_from, dateTo: body.date_to },
+      filters: { sourceFilter: body.sourceFilter, topK: body.topK },
       userId: request.auth?.user_id || null,
       eventType: "search",
       durationMs,
