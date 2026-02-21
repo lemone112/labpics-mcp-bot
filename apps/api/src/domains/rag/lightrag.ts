@@ -223,7 +223,7 @@ export async function refreshLightRag(
   scope: ProjectScope,
   logger: LoggerLike = console
 ): Promise<Record<string, unknown>> {
-  const embeddings = await runEmbeddings(pool, scope, logger);
+  const embeddings = await runEmbeddings(pool, scope, logger as Console);
   const status = await getLightRagStatus(pool, scope);
   return {
     embeddings,
@@ -287,7 +287,10 @@ export async function queryLightRag(
   const [chunkSearchRaw, messageRows, issueRows, opportunityRows] =
     await Promise.all([
       includeChunks
-        ? searchChunks(pool, scope, query, topK, logger, { dateFrom, dateTo })
+        ? searchChunks(pool, scope, query, topK, logger as Console, {
+            dateFrom,
+            dateTo,
+          })
         : { results: [], embedding_model: null, search_config: null },
       includeMessages
         ? pool.query<SourceRow>(
