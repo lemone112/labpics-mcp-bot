@@ -39,6 +39,12 @@ test("createRedisPubSub returns no-op when REDIS_URL not set", async () => {
   // close should not throw
   await pubsub.close();
 
+  const stats = pubsub.getStats();
+  assert.equal(typeof stats, "object");
+  assert.equal(stats.publish_total, 0);
+  assert.equal(stats.publish_failed_total, 0);
+  assert.equal(stats.subscribed_channels, 0);
+
   // Restore env
   if (original !== undefined) {
     process.env.REDIS_URL = original;

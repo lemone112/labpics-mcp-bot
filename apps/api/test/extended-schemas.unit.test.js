@@ -19,6 +19,11 @@ import {
   LoopsSyncSchema,
   UpsellStatusSchema,
   ContinuityApplySchema,
+  MetricDefinitionUpsertSchema,
+  MetricsIngestSchema,
+  MetricsQuerySchema,
+  MetricsExportSchema,
+  CriteriaEvaluateSchema,
 } from "../src/infra/schemas.js";
 
 // ===========================================================================
@@ -255,4 +260,164 @@ test("migration 0034 aligns NBA status contract to accepted/dismissed", async ()
     migration.includes("('proposed', 'accepted', 'dismissed', 'done', 'cancelled')"),
     "Expected new NBA status check set"
   );
+});
+
+// ---------------------------------------------------------------------------
+// 10.1 Metrics & Criteria API contracts
+// ---------------------------------------------------------------------------
+
+test("MetricDefinitionUpsertSchema defaults schema_version and dimensions", () => {
+  const payload = parseBody(MetricDefinitionUpsertSchema, {
+    metric_key: "sales.velocity",
+    name: "Sales Velocity",
+    value_type: "numeric",
+    aggregation_type: "avg",
+  });
+
+  assert.equal(payload.schema_version, 1);
+  assert.equal(payload.promote_new_version, false);
+  assert.deepEqual(payload.dimensions, []);
+});
+
+test("MetricDefinitionUpsertSchema rejects unsupported value_type", () => {
+  assert.throws(
+    () =>
+      parseBody(MetricDefinitionUpsertSchema, {
+        metric_key: "sales.velocity",
+        name: "Sales Velocity",
+        value_type: "money",
+        aggregation_type: "avg",
+      }),
+    (err) => err.code === "validation_error"
+  );
+});
+
+test("MetricsIngestSchema enforces idempotency key and observation limits", () => {
+  const payload = parseBody(MetricsIngestSchema, {
+    idempotency_key: "batch-1",
+    observations: [
+      {
+        metric_key: "sales.velocity",
+        subject_type: "project",
+        subject_id: "00000000-0000-4000-8000-000000000001",
+        observed_at: "2026-02-21T12:00:00.000Z",
+        value_numeric: 12.5,
+      },
+    ],
+  });
+
+  assert.equal(payload.schema_version, 1);
+  assert.equal(payload.observations.length, 1);
+  assert.equal(payload.observations[0].is_backfill, false);
+});
+
+test("MetricsIngestSchema rejects empty observation batch", () => {
+  assert.throws(
+    () =>
+      parseBody(MetricsIngestSchema, {
+        idempotency_key: "batch-empty",
+        observations: [],
+      }),
+    (err) => err.code === "validation_error"
+  );
+});
+
+test("MetricsQuerySchema and MetricsExportSchema have stable defaults", () => {
+  const queryPayload = parseBody(MetricsQuerySchema, {});
+  assert.equal(queryPayload.schema_version, 1);
+  assert.equal(queryPayload.limit, 100);
+  assert.equal(queryPayload.offset, 0);
+  assert.equal(queryPayload.sort_by, "observed_at");
+  assert.equal(queryPayload.sort_order, "desc");
+
+  const exportPayload = parseBody(MetricsExportSchema, {});
+  assert.equal(exportPayload.schema_version, 1);
+  assert.equal(exportPayload.limit, 1000);
+  assert.equal(exportPayload.format, "json");
+});
+
+test("MetricsQuerySchema rejects invalid ISO date filters", () => {
+  assert.throws(
+    () => parseBody(MetricsQuerySchema, { date_from: "yesterday", date_to: "tomorrow" }),
+    (err) => err.code === "validation_error"
+  );
+});
+
+test("CriteriaEvaluateSchema validates evaluation batch payload", () => {
+  const payload = parseBody(CriteriaEvaluateSchema, {
+    evaluations: [
+      {
+        criteria_key: "quality.delivery",
+        subject_type: "project",
+        subject_id: "00000000-0000-4000-8000-000000000001",
+        metric_values: { avg_response_minutes: 15 },
+      },
+    ],
+  });
+
+  assert.equal(payload.schema_version, 1);
+  assert.equal(payload.trigger_source, "api");
+  assert.equal(payload.evaluations.length, 1);
+  assert.deepEqual(payload.evaluations[0].thresholds, {});
+});
+
+test("CriteriaEvaluateSchema rejects invalid subject_id", () => {
+  assert.throws(
+    () =>
+      parseBody(CriteriaEvaluateSchema, {
+        evaluations: [
+          {
+            criteria_key: "quality.delivery",
+            subject_type: "project",
+            subject_id: "not-a-uuid",
+            metric_values: {},
+          },
+        ],
+      }),
+    (err) => err.code === "validation_error"
+  );
+});
+
+test("metrics/criteria schemas are imported in index.js", async () => {
+  const { readFileSync } = await import("node:fs");
+  const { join, dirname } = await import("node:path");
+  const { fileURLToPath } = await import("node:url");
+  const currentDir = dirname(fileURLToPath(import.meta.url));
+  const source = readFileSync(join(currentDir, "..", "src", "index.js"), "utf8");
+
+  const expected = [
+    "MetricDefinitionUpsertSchema",
+    "MetricsIngestSchema",
+    "MetricsQuerySchema",
+    "MetricsExportSchema",
+    "CriteriaEvaluateSchema",
+    "registerMetricsRoutes",
+  ];
+  for (const name of expected) {
+    assert.ok(source.includes(name), `Expected ${name} to be imported/used in index.js`);
+  }
+});
+
+test("metrics route contract endpoints exist", async () => {
+  const { readFileSync, existsSync } = await import("node:fs");
+  const { join, dirname } = await import("node:path");
+  const { fileURLToPath } = await import("node:url");
+  const currentDir = dirname(fileURLToPath(import.meta.url));
+  const routesDir = join(currentDir, "..", "src", "routes");
+  const metricsRoutePathTs = join(routesDir, "metrics.ts");
+  const metricsRoutePathJs = join(routesDir, "metrics.js");
+  const metricsRoutePath = existsSync(metricsRoutePathTs) ? metricsRoutePathTs : metricsRoutePathJs;
+  const metricsRouteSource = readFileSync(metricsRoutePath, "utf8");
+
+  const endpoints = [
+    "/metrics/definitions",
+    "/metrics/ingest",
+    "/metrics/query",
+    "/metrics/export",
+    "/criteria/evaluate",
+    "/criteria/runs/:id",
+  ];
+  for (const endpoint of endpoints) {
+    assert.ok(metricsRouteSource.includes(endpoint), `Expected endpoint ${endpoint} in metrics route module`);
+  }
 });

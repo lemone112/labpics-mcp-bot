@@ -1,0 +1,68 @@
+name: Performance Budgets
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 3 * * *"
+
+permissions:
+  contents: read
+
+jobs:
+  perf-budgets:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_DB: labpics_perf_ci
+          POSTGRES_USER: app
+          POSTGRES_PASSWORD: app
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U app -d labpics_perf_ci"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install all dependencies
+        run: npm ci
+
+      - name: Run performance budget gate
+        working-directory: apps/api
+        env:
+          PERF_BUDGETS_INTEGRATION: "1"
+          PERF_FAIL_ON_REGRESSION: "1"
+          PERF_RESULTS_PATH: test-results/perf-report.json
+          PERF_BUDGETS_CONFIG: perf/perf-budgets.json
+          DATABASE_URL: postgresql://app:app@127.0.0.1:5432/labpics_perf_ci
+          REDIS_URL: redis://127.0.0.1:6379
+        run: npm run perf:budget:ci
+
+      - name: Upload performance artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: perf-budgets-report
+          path: apps/api/test-results/perf-report.json
+          if-no-files-found: error

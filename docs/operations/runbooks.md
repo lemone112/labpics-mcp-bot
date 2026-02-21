@@ -1,5 +1,12 @@
 # Runbooks (эксплуатация, LightRAG-only)
 
+См. также:
+
+- `docs/operations/data-lifecycle-retention.md` — lifecycle-политики (retention, cleanup job, partitioning strategy).
+- `docs/operations/observability/workforce-metrics-dashboard.json` — dashboard package (health/freshness/perf).
+- `docs/operations/observability/workforce-metrics-alerts.json` — alert rules и пороги.
+- `docs/operations/observability/workforce-metrics-slos.md` — SLI/SLO и error budget policy.
+
 ## 1) Быстрый operational checklist
 
 1. `GET /health` и `GET /metrics` отвечают.

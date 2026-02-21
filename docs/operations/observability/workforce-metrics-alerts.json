@@ -1,0 +1,44 @@
+{
+  "alerts": [
+    {
+      "name": "workforce_metrics_ingest_error_rate_high",
+      "expr": "sum(rate(app_metrics_ingest_batches_failed_total[10m])) / clamp_min(sum(rate(app_metrics_ingest_batches_success_total[10m])) + sum(rate(app_metrics_ingest_batches_failed_total[10m])), 1) > 0.05",
+      "for": "10m",
+      "severity": "high",
+      "summary": "Высокая доля ошибок ingest (>5% за 10м)",
+      "runbook": "docs/operations/runbooks.md#4-падение-полноты-данных-между-системами"
+    },
+    {
+      "name": "workforce_metrics_criteria_failure_spike",
+      "expr": "sum(rate(app_criteria_runs_failed_total[15m])) > 1",
+      "for": "15m",
+      "severity": "high",
+      "summary": "Рост неуспешных criteria runs",
+      "runbook": "docs/operations/runbooks.md#2-lightrag-возвращает-пусто"
+    },
+    {
+      "name": "workforce_metrics_retention_cleanup_stuck",
+      "expr": "max(app_retention_cleanup_lag_days{table=\"search_analytics\"}) > 2",
+      "for": "30m",
+      "severity": "medium",
+      "summary": "Cleanup lag по search_analytics выше 2 дней",
+      "runbook": "docs/operations/data-lifecycle-retention.md"
+    },
+    {
+      "name": "workforce_metrics_pubsub_delivery_errors",
+      "expr": "sum(rate(app_redis_pubsub_publish_failed_total[10m])) + sum(rate(app_redis_pubsub_callback_errors_total[10m])) > 0",
+      "for": "10m",
+      "severity": "medium",
+      "summary": "Ошибки Redis pub/sub доставки",
+      "runbook": "docs/operations/runbooks.md#15-дашборд-не-обновляется-автоматически"
+    },
+    {
+      "name": "workforce_metrics_scope_violation_anomaly",
+      "expr": "sum(increase(app_scope_violation_total[30m])) > 0",
+      "for": "5m",
+      "severity": "critical",
+      "summary": "Обнаружены scope violations в write-path",
+      "runbook": "docs/operations/data-lifecycle-retention.md#5-rollback-plan"
+    }
+  ]
+}

@@ -1,0 +1,74 @@
+{
+  "regression_threshold_pct": 40,
+  "budgets": {
+    "write_ingest_p95_ms": 300,
+    "redis_pubsub_min_ops_sec": 150,
+    "cache_invalidation_p95_ms": 400,
+    "queries": {
+      "workforce_employee_lookup": 220,
+      "workforce_conditions_timeline": 220,
+      "graph_links_active_by_project": 250,
+      "graph_dependency_traversal": 250,
+      "search_analytics_scope_rollup": 280
+    }
+  },
+  "baselines": {
+    "write_ingest_p95_ms": 180,
+    "redis_pubsub_ops_sec": 350,
+    "cache_invalidation_p95_ms": 220,
+    "queries": {
+      "workforce_employee_lookup": 140,
+      "workforce_conditions_timeline": 150,
+      "graph_links_active_by_project": 170,
+      "graph_dependency_traversal": 170,
+      "search_analytics_scope_rollup": 190
+    }
+  },
+  "plan_shapes": {
+    "workforce_employee_lookup": {
+      "required_any_node_types": [
+        "Index Scan",
+        "Index Only Scan",
+        "Bitmap Index Scan",
+        "Bitmap Heap Scan"
+      ],
+      "required_index_name_prefixes": [
+        "employees_scope_status_updated_cover_idx"
+      ],
+      "forbidden_seq_scan_relations": [
+        "employees"
+      ],
+      "seq_scan_min_plan_rows": 500
+    },
+    "workforce_conditions_timeline": {
+      "required_any_node_types": [
+        "Index Scan",
+        "Index Only Scan",
+        "Bitmap Index Scan",
+        "Bitmap Heap Scan"
+      ],
+      "required_index_name_prefixes": [
+        "employee_conditions_employee_effective_cover_idx"
+      ],
+      "forbidden_seq_scan_relations": [
+        "employee_conditions"
+      ],
+      "seq_scan_min_plan_rows": 500
+    },
+    "graph_links_active_by_project": {
+      "required_any_node_types": [
+        "Index Scan",
+        "Index Only Scan",
+        "Bitmap Index Scan",
+        "Bitmap Heap Scan"
+      ],
+      "required_index_name_prefixes": [
+        "client_executor_links_active_project_scope_priority_idx"
+      ],
+      "forbidden_seq_scan_relations": [
+        "client_executor_links"
+      ],
+      "seq_scan_min_plan_rows": 500
+    }
+  }
+}

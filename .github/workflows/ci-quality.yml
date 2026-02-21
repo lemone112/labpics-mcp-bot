@@ -87,6 +87,13 @@ jobs:
           CLIENT_EXECUTOR_GRAPH_INTEGRATION: "1"
         run: npm run test:integration:client-executor
 
+      - name: API metrics layer integration
+        working-directory: apps/api
+        env:
+          DATABASE_URL: postgresql://app:app@127.0.0.1:5432/labpics_ci
+          METRICS_LAYER_INTEGRATION: "1"
+        run: npm run test:integration:metrics
+
       - name: API owner migration integration
         working-directory: apps/api
         env:

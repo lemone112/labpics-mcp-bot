@@ -63,6 +63,11 @@ test("default scheduled jobs are ensured once per scope", async () => {
   });
   const firstScopeCalls = calls.length;
   assert.ok(firstScopeCalls > 0, "must seed at least one default job");
+  const jobTypes = calls.map((params) => params[2]);
+  assert.ok(
+    jobTypes.includes("analytics_retention_cleanup"),
+    "default scheduled jobs must include analytics_retention_cleanup"
+  );
 
   await ensureDefaultScheduledJobs(pool, {
     projectId: "00000000-0000-4000-8000-000000000101",
