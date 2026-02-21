@@ -1,68 +1,11 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-
-// lightrag.js does not export internal helpers, so we re-implement them here
-// to test the core logic that queryLightRag depends on.
-// This approach validates the algorithm without needing a database.
-
-function asText(value, max = 4000) {
-  const text = String(value || "").trim();
-  if (!text) return "";
-  return text.slice(0, max);
-}
-
-function tokenizeQuery(query) {
-  const source = asText(query, 4000).toLowerCase();
-  if (!source) return [];
-  const tokens = source
-    .split(/[^a-zA-Zа-яА-Я0-9_]+/)
-    .map((item) => item.trim())
-    .filter((item) => item.length >= 3);
-  const deduped = [];
-  const seen = new Set();
-  for (const token of tokens) {
-    if (seen.has(token)) continue;
-    seen.add(token);
-    deduped.push(token);
-    if (deduped.length >= 6) break;
-  }
-  return deduped;
-}
-
-function sanitizeLike(text) {
-  return String(text || "").replace(/[%\\_]/g, "");
-}
-
-function buildLikePatterns(query) {
-  const tokens = tokenizeQuery(query);
-  if (!tokens.length) {
-    const fallback = sanitizeLike(asText(query, 300));
-    return fallback ? [`%${fallback}%`] : [];
-  }
-  return tokens.map((token) => `%${sanitizeLike(token)}%`);
-}
-
-function lightragAnswer(query, chunkCount, messageCount, issueCount, opportunityCount) {
-  const parts = [];
-  parts.push(`Запрос: "${asText(query, 500)}".`);
-  parts.push(`Найдено chunk-фрагментов: ${chunkCount}.`);
-  parts.push(`Совпадений в сообщениях: ${messageCount}.`);
-  parts.push(`Совпадений в задачах Linear: ${issueCount}.`);
-  parts.push(`Совпадений в сделках/офферах: ${opportunityCount}.`);
-  return parts.join(" ");
-}
-
-function buildEvidenceFromRows(rows, sourceType) {
-  return rows.map((row) => ({
-    source_type: sourceType,
-    source_pk: row.id,
-    source_ref: row.source_ref || null,
-    title: row.title || row.name || null,
-    snippet: row.snippet || null,
-    created_at: row.created_at || row.updated_at || null,
-    metadata: row.metadata || {},
-  }));
-}
+import {
+  buildEvidenceFromRows,
+  buildLikePatterns,
+  lightragAnswer,
+  tokenizeQuery,
+} from "../src/domains/rag/lightrag.js";
 
 describe("tokenizeQuery", () => {
   it("splits by non-alphanumeric characters", () => {

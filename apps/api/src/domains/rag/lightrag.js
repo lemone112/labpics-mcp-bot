@@ -6,13 +6,13 @@ function toPositiveInt(value, fallback, min = 1, max = 200) {
   return Math.max(min, Math.min(max, parsed));
 }
 
-function asText(value, max = 4000) {
+export function asText(value, max = 4000) {
   const text = String(value || "").trim();
   if (!text) return "";
   return text.slice(0, max);
 }
 
-function tokenizeQuery(query) {
+export function tokenizeQuery(query) {
   const source = asText(query, 4000).toLowerCase();
   if (!source) return [];
   const tokens = source
@@ -30,11 +30,11 @@ function tokenizeQuery(query) {
   return deduped;
 }
 
-function sanitizeLike(text) {
+export function sanitizeLike(text) {
   return text.replace(/[%\\_]/g, "");
 }
 
-function buildLikePatterns(query) {
+export function buildLikePatterns(query) {
   const tokens = tokenizeQuery(query);
   if (!tokens.length) {
     const fallback = sanitizeLike(asText(query, 300));
@@ -49,7 +49,7 @@ function toDateOrNull(value) {
   return Number.isNaN(date.getTime()) ? null : date;
 }
 
-function lightragAnswer(query, chunkCount, messageCount, issueCount, opportunityCount) {
+export function lightragAnswer(query, chunkCount, messageCount, issueCount, opportunityCount) {
   const parts = [];
   parts.push(`Запрос: "${asText(query, 500)}".`);
   parts.push(`Найдено chunk-фрагментов: ${chunkCount}.`);
@@ -59,7 +59,7 @@ function lightragAnswer(query, chunkCount, messageCount, issueCount, opportunity
   return parts.join(" ");
 }
 
-function buildEvidenceFromRows(rows, sourceType) {
+export function buildEvidenceFromRows(rows, sourceType) {
   return rows.map((row) => ({
     source_type: sourceType,
     source_pk: row.id,
