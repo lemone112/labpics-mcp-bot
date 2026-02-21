@@ -14,6 +14,7 @@
     "test:coverage:ci": "c8 --reporter=text --reporter=lcov --reporter=json-summary tsx --test test/**/*.test.js && node scripts/check-coverage-gates.mjs",
     "test:integration:lightrag": "tsx --test test/lightrag-db-redis.integration.test.js",
     "test:integration:scope": "tsx --test test/scope-hardening.integration.test.js",
+    "test:integration:workforce": "tsx --test test/workforce-schema.integration.test.js",
     "test:migrations:idempotency": "node scripts/check-migrations-idempotency.mjs",
     "typecheck": "tsc --noEmit"
   },
