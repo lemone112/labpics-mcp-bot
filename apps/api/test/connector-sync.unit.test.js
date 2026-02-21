@@ -90,9 +90,11 @@ describe("connector-sync query functions", () => {
 
     await listConnectorErrors(pool, scope, { status: " FAILED ", limit: "9999" });
     await listConnectorErrors(pool, scope, { status: null, limit: "bad" });
+    await listConnectorErrors(pool, scope, { status: "pending", limit: 0 });
 
     assert.deepStrictEqual(calls[0], [scope.projectId, scope.accountScopeId, "failed", 500]);
     assert.deepStrictEqual(calls[1], [scope.projectId, scope.accountScopeId, "", 100]);
+    assert.deepStrictEqual(calls[2], [scope.projectId, scope.accountScopeId, "pending", 1]);
   });
 });
 
@@ -136,5 +138,33 @@ describe("connector-sync execution boundaries", () => {
     const dueCall = calls.find((call) => call.text.includes("next_retry_at <= now()"));
     assert.ok(dueCall, "expected due-errors query call");
     assert.deepStrictEqual(dueCall.params, [scope.projectId, scope.accountScopeId, 200]);
+  });
+
+  it("retryConnectorErrors records failed retries and emits warning event", async () => {
+    let insertEvents = 0;
+    const pool = {
+      query: async (sql, params) => {
+        const text = String(sql);
+        if (text.includes("INSERT INTO connector_events")) {
+          insertEvents += 1;
+          return { rows: [] };
+        }
+        if (text.includes("FROM connector_errors") && text.includes("next_retry_at <= now()")) {
+          assert.deepStrictEqual(params, [scope.projectId, scope.accountScopeId, 20]);
+          return { rows: [{ id: "err-1", connector: "unknown" }] };
+        }
+        throw new Error(`Unexpected SQL in test pool: ${text.slice(0, 80)}`);
+      },
+    };
+
+    const result = await retryConnectorErrors(pool, scope, { logger: {} });
+
+    assert.equal(result.due, 1);
+    assert.equal(result.succeeded, 0);
+    assert.equal(result.failed, 1);
+    assert.equal(result.retried.length, 1);
+    assert.equal(result.retried[0].status, "failed");
+    assert.match(String(result.retried[0].error || ""), /unsupported_connector/);
+    assert.equal(insertEvents, 3, "expected start, warning, finish process events");
   });
 });
