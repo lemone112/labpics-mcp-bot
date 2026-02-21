@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useState } from "react";
 import { PanelLeft } from "lucide-react";
 
 import { MobileControlTowerTabbar } from "@/components/mobile-control-tower-tabbar";
@@ -20,7 +20,7 @@ import { readStorageBool, writeStorageBool } from "@/lib/safe-storage";
 import { Separator } from "@/components/ui/separator";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 
-const PAGE_TITLES_RU: Record<string, string> = {
+const PAGE_TITLES_RU = {
   "Control Tower": "Центр управления",
   "Signals + NBA": "Сигналы и NBA",
   Offers: "Офферы",
@@ -38,13 +38,7 @@ const PAGE_TITLES_RU: Record<string, string> = {
 const STORAGE_DESKTOP_SIDEBAR_OPEN = "labpics:ui:desktop-project-sidebar-open";
 const STORAGE_MOBILE_SHEET_OPEN = "labpics:ui:mobile-projects-sheet-open";
 
-type PageShellProps = {
-  title: string;
-  subtitle?: string | null;
-  children: ReactNode;
-};
-
-export function PageShell({ title, subtitle, children }: PageShellProps) {
+export function PageShell({ title, subtitle, children }) {
   const pageTitle = PAGE_TITLES_RU[title] ?? title;
   const [projectsSidebarOpen, setProjectsSidebarOpen] = useState(() =>
     readStorageBool(STORAGE_DESKTOP_SIDEBAR_OPEN, true)
