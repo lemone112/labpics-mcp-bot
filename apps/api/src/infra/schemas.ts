@@ -20,12 +20,6 @@ const probability = z.coerce.number().min(0).max(1).default(0.1);
 const accountStageEnum = z.enum(["active", "inactive", "prospect"]);
 const opportunityStageEnum = z.enum(["discovery", "qualified", "proposal", "negotiation", "won", "lost"]);
 
-
-function hasInvalidDateRange(dateFrom: Date | null | undefined, dateTo: Date | null | undefined) {
-  if (!dateFrom || !dateTo) return false;
-  return dateFrom.getTime() > dateTo.getTime();
-}
-
 // ---------------------------------------------------------------------------
 // 7.1  CRM schemas
 // ---------------------------------------------------------------------------
@@ -130,16 +124,6 @@ export const LightRagQuerySchema = z.object({
   topK: z.coerce.number().int().min(1).max(50).optional().default(10),
   sourceLimit: z.coerce.number().int().min(1).max(25).optional(),
   sourceFilter: z.array(z.string()).optional().nullable().default(null),
-  date_from: z.coerce.date().optional().nullable().default(null),
-  date_to: z.coerce.date().optional().nullable().default(null),
-}).superRefine((value, ctx) => {
-  if (hasInvalidDateRange(value.date_from, value.date_to)) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      path: ["date_from"],
-      message: "date_from must be less than or equal to date_to",
-    });
-  }
 });
 
 export const LightRagFeedbackSchema = z.object({
@@ -152,16 +136,6 @@ export const SearchSchema = z.object({
   query: trimmedString(1, 4000),
   topK: z.coerce.number().int().min(1).max(50).optional().default(10),
   sourceLimit: z.coerce.number().int().min(1).max(25).optional(),
-  date_from: z.coerce.date().optional().nullable().default(null),
-  date_to: z.coerce.date().optional().nullable().default(null),
-}).superRefine((value, ctx) => {
-  if (hasInvalidDateRange(value.date_from, value.date_to)) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      path: ["date_from"],
-      message: "date_from must be less than or equal to date_to",
-    });
-  }
 });
 
 // ---------------------------------------------------------------------------
