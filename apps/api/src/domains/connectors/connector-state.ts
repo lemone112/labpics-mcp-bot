@@ -1,30 +1,114 @@
 import crypto from "node:crypto";
+import type { Pool, ProjectScope } from "../../types/index.js";
 
-function clampInt(value, fallback, min = 0, max = 1000) {
+export function clampInt(
+  value: unknown,
+  fallback: number,
+  min = 0,
+  max = 1000
+): number {
   const parsed = Number.parseInt(String(value ?? ""), 10);
   if (!Number.isFinite(parsed)) return fallback;
   return Math.max(min, Math.min(max, parsed));
 }
 
-function addSeconds(date, seconds) {
+export function addSeconds(date: Date, seconds: number): Date {
   return new Date(date.getTime() + seconds * 1000);
 }
 
-function nextBackoffSeconds(attempt, baseSeconds = 30, capSeconds = 6 * 60 * 60) {
+export function nextBackoffSeconds(
+  attempt: number,
+  baseSeconds = 30,
+  capSeconds = 6 * 60 * 60
+): number {
   const power = Math.max(0, Math.min(10, attempt - 1));
   const seconds = baseSeconds * Math.pow(2, power);
   return Math.min(capSeconds, seconds);
 }
 
-function dedupeKeyForError({ connector, mode, operation, sourceRef, errorKind }) {
+interface DedupeKeyInput {
+  connector: string;
+  mode: string;
+  operation: string;
+  sourceRef?: string | null;
+  errorKind?: string | null;
+}
+
+export function dedupeKeyForError({
+  connector,
+  mode,
+  operation,
+  sourceRef,
+  errorKind,
+}: DedupeKeyInput): string {
   return crypto
     .createHash("sha1")
     .update(`${connector}:${mode}:${operation}:${sourceRef || ""}:${errorKind || ""}`)
     .digest("hex");
 }
 
-export async function getConnectorSyncState(pool, scope, connector) {
-  const { rows } = await pool.query(
+export interface ConnectorSyncStateRow {
+  project_id: string;
+  account_scope_id: string;
+  connector: string;
+  mode: string;
+  cursor_ts: string | null;
+  cursor_id: string | null;
+  page_cursor: string | null;
+  last_success_at: string | null;
+  last_attempt_at: string | null;
+  status: string;
+  retry_count: number;
+  last_error: string | null;
+  meta: Record<string, unknown> | null;
+  updated_at: string;
+}
+
+interface SyncPatch {
+  cursor_ts?: string | null;
+  cursor_id?: string | null;
+  page_cursor?: string | null;
+  meta?: Record<string, unknown>;
+}
+
+interface RetryStateLike {
+  retry_count?: unknown;
+}
+
+interface RegisterConnectorErrorOptions {
+  connector?: unknown;
+  mode?: unknown;
+  operation?: unknown;
+  source_ref?: unknown;
+  error_kind?: unknown;
+  error_message?: unknown;
+  payload_json?: unknown;
+  dedupe_key?: string;
+}
+
+interface ConnectorErrorRow {
+  id: string;
+  connector: string;
+  mode: string;
+  operation: string;
+  source_ref: string | null;
+  error_kind: string;
+  error_message: string;
+  payload_json: Record<string, unknown> | null;
+  attempt: number;
+  next_retry_at: string;
+  status: string;
+  dedupe_key: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export async function getConnectorSyncState(
+  pool: Pool,
+  scope: ProjectScope,
+  connector: string
+): Promise<ConnectorSyncStateRow | null> {
+  const { rows } = await pool.query<ConnectorSyncStateRow>(
     `
       SELECT
         project_id,
@@ -52,7 +136,13 @@ export async function getConnectorSyncState(pool, scope, connector) {
   return rows[0] || null;
 }
 
-export async function markConnectorSyncRunning(pool, scope, connector, mode, existingState = null) {
+export async function markConnectorSyncRunning(
+  pool: Pool,
+  scope: ProjectScope,
+  connector: string,
+  mode: string,
+  existingState: RetryStateLike | null = null
+): Promise<void> {
   const retryCount = clampInt(existingState?.retry_count, 0);
   await pool.query(
     `
@@ -79,7 +169,13 @@ export async function markConnectorSyncRunning(pool, scope, connector, mode, exi
   );
 }
 
-export async function markConnectorSyncSuccess(pool, scope, connector, mode, patch = {}) {
+export async function markConnectorSyncSuccess(
+  pool: Pool,
+  scope: ProjectScope,
+  connector: string,
+  mode: string,
+  patch: SyncPatch = {}
+): Promise<void> {
   await pool.query(
     `
       INSERT INTO connector_sync_state(
@@ -126,7 +222,14 @@ export async function markConnectorSyncSuccess(pool, scope, connector, mode, pat
   );
 }
 
-export async function markConnectorSyncFailure(pool, scope, connector, mode, errorMessage, existingState = null) {
+export async function markConnectorSyncFailure(
+  pool: Pool,
+  scope: ProjectScope,
+  connector: string,
+  mode: string,
+  errorMessage: unknown,
+  existingState: RetryStateLike | null = null
+): Promise<void> {
   const retryCount = clampInt(existingState?.retry_count, 0) + 1;
   await pool.query(
     `
@@ -151,22 +254,47 @@ export async function markConnectorSyncFailure(pool, scope, connector, mode, err
         last_attempt_at = now(),
         updated_at = now()
     `,
-    [scope.projectId, scope.accountScopeId, connector, mode, retryCount, String(errorMessage || "").slice(0, 2000)]
+    [
+      scope.projectId,
+      scope.accountScopeId,
+      connector,
+      mode,
+      retryCount,
+      String(errorMessage || "").slice(0, 2000),
+    ]
   );
 }
 
-export async function registerConnectorError(pool, scope, options = {}) {
+export async function registerConnectorError(
+  pool: Pool,
+  scope: ProjectScope,
+  options: RegisterConnectorErrorOptions = {}
+): Promise<{
+  id: string | null;
+  attempt: number;
+  status: string;
+  next_retry_at: string;
+}> {
   const connector = String(options.connector || "").trim().toLowerCase();
   const mode = String(options.mode || "http").trim().toLowerCase();
   const operation = String(options.operation || "sync").trim().slice(0, 200);
   const sourceRef = String(options.source_ref || "").trim().slice(0, 500) || null;
-  const errorKind = String(options.error_kind || "connector_error").trim().slice(0, 200);
-  const errorMessage = String(options.error_message || "connector error").trim().slice(0, 4000);
-  const payloadJson = options.payload_json && typeof options.payload_json === "object" ? options.payload_json : {};
+  const errorKind = String(options.error_kind || "connector_error")
+    .trim()
+    .slice(0, 200);
+  const errorMessage = String(options.error_message || "connector error")
+    .trim()
+    .slice(0, 4000);
+  const payloadJson =
+    options.payload_json && typeof options.payload_json === "object"
+      ? (options.payload_json as Record<string, unknown>)
+      : {};
   const maxAttempts = clampInt(process.env.CONNECTOR_MAX_RETRIES, 5, 1, 20);
-  const dedupeKey = options.dedupe_key || dedupeKeyForError({ connector, mode, operation, sourceRef, errorKind });
+  const dedupeKey =
+    options.dedupe_key ||
+    dedupeKeyForError({ connector, mode, operation, sourceRef, errorKind });
 
-  const existing = await pool.query(
+  const existing = await pool.query<{ id: string; attempt: number }>(
     `
       SELECT id, attempt
       FROM connector_errors
@@ -181,11 +309,17 @@ export async function registerConnectorError(pool, scope, options = {}) {
     [scope.projectId, scope.accountScopeId, connector, dedupeKey]
   );
 
-  const attempt = existing.rows[0] ? clampInt(existing.rows[0].attempt, 1) + 1 : 1;
+  const attempt = existing.rows[0]
+    ? clampInt(existing.rows[0].attempt, 1) + 1
+    : 1;
   const now = new Date();
-  const retryAfterSeconds = nextBackoffSeconds(attempt, clampInt(process.env.CONNECTOR_RETRY_BASE_SECONDS, 30, 5, 300));
+  const retryAfterSeconds = nextBackoffSeconds(
+    attempt,
+    clampInt(process.env.CONNECTOR_RETRY_BASE_SECONDS, 30, 5, 300)
+  );
   const nextRetryAt = addSeconds(now, retryAfterSeconds);
-  const status = attempt >= maxAttempts ? "dead_letter" : attempt > 1 ? "retrying" : "pending";
+  const status =
+    attempt >= maxAttempts ? "dead_letter" : attempt > 1 ? "retrying" : "pending";
 
   if (existing.rows[0]) {
     await pool.query(
@@ -222,10 +356,15 @@ export async function registerConnectorError(pool, scope, options = {}) {
         status,
       ]
     );
-    return { id: existing.rows[0].id, attempt, status, next_retry_at: nextRetryAt.toISOString() };
+    return {
+      id: existing.rows[0].id,
+      attempt,
+      status,
+      next_retry_at: nextRetryAt.toISOString(),
+    };
   }
 
-  const inserted = await pool.query(
+  const inserted = await pool.query<{ id: string }>(
     `
       INSERT INTO connector_errors(
         project_id,
@@ -270,7 +409,11 @@ export async function registerConnectorError(pool, scope, options = {}) {
   };
 }
 
-export async function resolveConnectorErrors(pool, scope, connector) {
+export async function resolveConnectorErrors(
+  pool: Pool,
+  scope: ProjectScope,
+  connector: string
+): Promise<number> {
   const result = await pool.query(
     `
       UPDATE connector_errors
@@ -287,9 +430,13 @@ export async function resolveConnectorErrors(pool, scope, connector) {
   return result.rowCount || 0;
 }
 
-export async function listDueConnectorErrors(pool, scope, limit = 20) {
+export async function listDueConnectorErrors(
+  pool: Pool,
+  scope: ProjectScope,
+  limit = 20
+): Promise<ConnectorErrorRow[]> {
   const safeLimit = clampInt(limit, 20, 1, 500);
-  const { rows } = await pool.query(
+  const { rows } = await pool.query<ConnectorErrorRow>(
     `
       SELECT
         id,
@@ -319,9 +466,13 @@ export async function listDueConnectorErrors(pool, scope, limit = 20) {
   return rows;
 }
 
-export async function listDeadLetterErrors(pool, scope, limit = 50) {
+export async function listDeadLetterErrors(
+  pool: Pool,
+  scope: ProjectScope,
+  limit = 50
+): Promise<ConnectorErrorRow[]> {
   const safeLimit = clampInt(limit, 50, 1, 500);
-  const { rows } = await pool.query(
+  const { rows } = await pool.query<ConnectorErrorRow>(
     `
       SELECT
         id, connector, mode, operation, source_ref,
@@ -340,8 +491,12 @@ export async function listDeadLetterErrors(pool, scope, limit = 50) {
   return rows;
 }
 
-export async function retryDeadLetterError(pool, scope, errorId) {
-  const result = await pool.query(
+export async function retryDeadLetterError(
+  pool: Pool,
+  scope: ProjectScope,
+  errorId: string
+): Promise<ConnectorErrorRow | null> {
+  const result = await pool.query<ConnectorErrorRow>(
     `
       UPDATE connector_errors
       SET status = 'pending',
@@ -359,8 +514,12 @@ export async function retryDeadLetterError(pool, scope, errorId) {
   return result.rows[0] || null;
 }
 
-export async function resolveConnectorErrorById(pool, scope, errorId) {
-  const result = await pool.query(
+export async function resolveConnectorErrorById(
+  pool: Pool,
+  scope: ProjectScope,
+  errorId: string
+): Promise<string | null> {
+  const result = await pool.query<{ id: string }>(
     `
       UPDATE connector_errors
       SET status = 'resolved',
