@@ -22,8 +22,8 @@ CREATE TABLE IF NOT EXISTS employees (
     CHECK (btrim(display_name) <> '')
 );
 
-CREATE UNIQUE INDEX IF NOT EXISTS employees_user_id_unique_idx
-  ON employees (user_id) WHERE user_id IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS employees_scope_user_id_unique_idx
+  ON employees (account_scope_id, user_id) WHERE user_id IS NOT NULL;
 
 CREATE INDEX IF NOT EXISTS employees_scope_status_idx
   ON employees (account_scope_id, status);
@@ -157,6 +157,12 @@ BEGIN
   IF NEW.effective_to IS NOT NULL AND NEW.effective_to <= NEW.effective_from THEN
     RAISE EXCEPTION 'employee_conditions effective_to must be greater than effective_from';
   END IF;
+
+  -- Serialize competing writes for same employee condition timeline.
+  PERFORM 1
+  FROM employees
+  WHERE id = NEW.employee_id
+  FOR UPDATE;
 
   SELECT c.id
   INTO conflict_id
