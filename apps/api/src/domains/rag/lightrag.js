@@ -211,110 +211,204 @@ export async function queryLightRag(pool, scope, options = {}, logger = console)
   const includeChunks = !sourceFilter || sourceFilter.has("chunks");
 
   const emptyResult = { rows: [] };
-  const [chunkSearch, messageRows, issueRows, opportunityRows] = await Promise.all([
+  const sourceParams = [scope.projectId, scope.accountScopeId, safePatterns, dateFrom, dateToExclusive, sourceLimit, fuzzyQuery];
+
+  const runSourceQueries = async (useFuzzy = true) => Promise.all([
     includeChunks ? searchChunks(pool, scope, query, topK, logger, { dateFrom, dateTo }) : { results: [], embedding_model: null, search_config: null },
     includeMessages ? pool.query(
-      `
-        SELECT
-          id,
-          message_id::text AS source_ref,
-          left(COALESCE(content, ''), 500) AS snippet,
-          created_at,
-          GREATEST(similarity(COALESCE(content, ''), $7::text), 0) AS relevance_score,
-          jsonb_build_object(
-            'sender_type', sender_type,
-            'conversation_global_id', conversation_global_id,
-            'contact_global_id', contact_global_id
-          ) AS metadata
-        FROM cw_messages
-        WHERE project_id = $1
-          AND account_scope_id = $2
-          AND btrim(COALESCE(content, '')) <> ''
-          AND (
-            COALESCE(content, '') ILIKE ANY($3::text[])
-            OR similarity(COALESCE(content, ''), $7::text) >= 0.3
-          )
-          AND ($4::timestamptz IS NULL OR created_at >= $4::timestamptz)
-          AND ($5::timestamptz IS NULL OR created_at < $5::timestamptz)
-        ORDER BY relevance_score DESC, created_at DESC NULLS LAST
-        LIMIT $6
-      `,
-      [scope.projectId, scope.accountScopeId, safePatterns, dateFrom, dateToExclusive, sourceLimit, fuzzyQuery]
+      useFuzzy
+        ? `
+            SELECT
+              id,
+              message_id::text AS source_ref,
+              left(COALESCE(content, ''), 500) AS snippet,
+              created_at,
+              GREATEST(similarity(COALESCE(content, ''), $7::text), 0) AS relevance_score,
+              jsonb_build_object(
+                'sender_type', sender_type,
+                'conversation_global_id', conversation_global_id,
+                'contact_global_id', contact_global_id
+              ) AS metadata
+            FROM cw_messages
+            WHERE project_id = $1
+              AND account_scope_id = $2
+              AND btrim(COALESCE(content, '')) <> ''
+              AND (
+                COALESCE(content, '') ILIKE ANY($3::text[])
+                OR similarity(COALESCE(content, ''), $7::text) >= 0.3
+              )
+              AND ($4::timestamptz IS NULL OR created_at >= $4::timestamptz)
+              AND ($5::timestamptz IS NULL OR created_at < $5::timestamptz)
+            ORDER BY relevance_score DESC, created_at DESC NULLS LAST
+            LIMIT $6
+          `
+        : `
+            SELECT
+              id,
+              message_id::text AS source_ref,
+              left(COALESCE(content, ''), 500) AS snippet,
+              created_at,
+              0::double precision AS relevance_score,
+              jsonb_build_object(
+                'sender_type', sender_type,
+                'conversation_global_id', conversation_global_id,
+                'contact_global_id', contact_global_id
+              ) AS metadata
+            FROM cw_messages
+            WHERE project_id = $1
+              AND account_scope_id = $2
+              AND btrim(COALESCE(content, '')) <> ''
+              AND COALESCE(content, '') ILIKE ANY($3::text[])
+              AND ($4::timestamptz IS NULL OR created_at >= $4::timestamptz)
+              AND ($5::timestamptz IS NULL OR created_at < $5::timestamptz)
+            ORDER BY created_at DESC NULLS LAST
+            LIMIT $6
+          `,
+      sourceParams
     ) : emptyResult,
     includeIssues ? pool.query(
-      `
-        SELECT
-          id,
-          external_id::text AS source_ref,
-          title,
-          left(COALESCE(next_step, ''), 320) AS snippet,
-          updated_at,
-          GREATEST(
-            similarity(COALESCE(title, ''), $7::text),
-            similarity(COALESCE(next_step, ''), $7::text),
-            0
-          ) AS relevance_score,
-          jsonb_build_object(
-            'state', state,
-            'priority', priority,
-            'assignee_name', assignee_name,
-            'due_date', due_date
-          ) AS metadata
-        FROM linear_issues_raw
-        WHERE project_id = $1
-          AND account_scope_id = $2
-          AND (
-            COALESCE(title, '') ILIKE ANY($3::text[])
-            OR COALESCE(next_step, '') ILIKE ANY($3::text[])
-            OR similarity(COALESCE(title, ''), $7::text) >= 0.3
-            OR similarity(COALESCE(next_step, ''), $7::text) >= 0.3
-          )
-          AND ($4::timestamptz IS NULL OR updated_at >= $4::timestamptz)
-          AND ($5::timestamptz IS NULL OR updated_at < $5::timestamptz)
-        ORDER BY relevance_score DESC, updated_at DESC NULLS LAST
-        LIMIT $6
-      `,
-      [scope.projectId, scope.accountScopeId, safePatterns, dateFrom, dateToExclusive, sourceLimit, fuzzyQuery]
+      useFuzzy
+        ? `
+            SELECT
+              id,
+              external_id::text AS source_ref,
+              title,
+              left(COALESCE(next_step, ''), 320) AS snippet,
+              updated_at,
+              GREATEST(
+                similarity(COALESCE(title, ''), $7::text),
+                similarity(COALESCE(next_step, ''), $7::text),
+                0
+              ) AS relevance_score,
+              jsonb_build_object(
+                'state', state,
+                'priority', priority,
+                'assignee_name', assignee_name,
+                'due_date', due_date
+              ) AS metadata
+            FROM linear_issues_raw
+            WHERE project_id = $1
+              AND account_scope_id = $2
+              AND (
+                COALESCE(title, '') ILIKE ANY($3::text[])
+                OR COALESCE(next_step, '') ILIKE ANY($3::text[])
+                OR similarity(COALESCE(title, ''), $7::text) >= 0.3
+                OR similarity(COALESCE(next_step, ''), $7::text) >= 0.3
+              )
+              AND ($4::timestamptz IS NULL OR updated_at >= $4::timestamptz)
+              AND ($5::timestamptz IS NULL OR updated_at < $5::timestamptz)
+            ORDER BY relevance_score DESC, updated_at DESC NULLS LAST
+            LIMIT $6
+          `
+        : `
+            SELECT
+              id,
+              external_id::text AS source_ref,
+              title,
+              left(COALESCE(next_step, ''), 320) AS snippet,
+              updated_at,
+              0::double precision AS relevance_score,
+              jsonb_build_object(
+                'state', state,
+                'priority', priority,
+                'assignee_name', assignee_name,
+                'due_date', due_date
+              ) AS metadata
+            FROM linear_issues_raw
+            WHERE project_id = $1
+              AND account_scope_id = $2
+              AND (
+                COALESCE(title, '') ILIKE ANY($3::text[])
+                OR COALESCE(next_step, '') ILIKE ANY($3::text[])
+              )
+              AND ($4::timestamptz IS NULL OR updated_at >= $4::timestamptz)
+              AND ($5::timestamptz IS NULL OR updated_at < $5::timestamptz)
+            ORDER BY updated_at DESC NULLS LAST
+            LIMIT $6
+          `,
+      sourceParams
     ) : emptyResult,
     includeOpportunities ? pool.query(
-      `
-        SELECT
-          id,
-          external_id::text AS source_ref,
-          COALESCE(title, account_external_id, id) AS title,
-          left(COALESCE(next_step, ''), 320) AS snippet,
-          updated_at,
-          GREATEST(
-            similarity(COALESCE(title, ''), $7::text),
-            similarity(COALESCE(next_step, ''), $7::text),
-            similarity(COALESCE(stage, ''), $7::text),
-            0
-          ) AS relevance_score,
-          jsonb_build_object(
-            'stage', stage,
-            'amount', amount,
-            'probability', probability,
-            'expected_close_date', expected_close_date
-          ) AS metadata
-        FROM attio_opportunities_raw
-        WHERE project_id = $1
-          AND account_scope_id = $2
-          AND (
-            COALESCE(title, '') ILIKE ANY($3::text[])
-            OR COALESCE(next_step, '') ILIKE ANY($3::text[])
-            OR COALESCE(stage, '') ILIKE ANY($3::text[])
-            OR similarity(COALESCE(title, ''), $7::text) >= 0.3
-            OR similarity(COALESCE(next_step, ''), $7::text) >= 0.3
-            OR similarity(COALESCE(stage, ''), $7::text) >= 0.3
-          )
-          AND ($4::timestamptz IS NULL OR updated_at >= $4::timestamptz)
-          AND ($5::timestamptz IS NULL OR updated_at < $5::timestamptz)
-        ORDER BY relevance_score DESC, updated_at DESC NULLS LAST
-        LIMIT $6
-      `,
-      [scope.projectId, scope.accountScopeId, safePatterns, dateFrom, dateToExclusive, sourceLimit, fuzzyQuery]
+      useFuzzy
+        ? `
+            SELECT
+              id,
+              external_id::text AS source_ref,
+              COALESCE(title, account_external_id, id) AS title,
+              left(COALESCE(next_step, ''), 320) AS snippet,
+              updated_at,
+              GREATEST(
+                similarity(COALESCE(title, ''), $7::text),
+                similarity(COALESCE(next_step, ''), $7::text),
+                similarity(COALESCE(stage, ''), $7::text),
+                0
+              ) AS relevance_score,
+              jsonb_build_object(
+                'stage', stage,
+                'amount', amount,
+                'probability', probability,
+                'expected_close_date', expected_close_date
+              ) AS metadata
+            FROM attio_opportunities_raw
+            WHERE project_id = $1
+              AND account_scope_id = $2
+              AND (
+                COALESCE(title, '') ILIKE ANY($3::text[])
+                OR COALESCE(next_step, '') ILIKE ANY($3::text[])
+                OR COALESCE(stage, '') ILIKE ANY($3::text[])
+                OR similarity(COALESCE(title, ''), $7::text) >= 0.3
+                OR similarity(COALESCE(next_step, ''), $7::text) >= 0.3
+                OR similarity(COALESCE(stage, ''), $7::text) >= 0.3
+              )
+              AND ($4::timestamptz IS NULL OR updated_at >= $4::timestamptz)
+              AND ($5::timestamptz IS NULL OR updated_at < $5::timestamptz)
+            ORDER BY relevance_score DESC, updated_at DESC NULLS LAST
+            LIMIT $6
+          `
+        : `
+            SELECT
+              id,
+              external_id::text AS source_ref,
+              COALESCE(title, account_external_id, id) AS title,
+              left(COALESCE(next_step, ''), 320) AS snippet,
+              updated_at,
+              0::double precision AS relevance_score,
+              jsonb_build_object(
+                'stage', stage,
+                'amount', amount,
+                'probability', probability,
+                'expected_close_date', expected_close_date
+              ) AS metadata
+            FROM attio_opportunities_raw
+            WHERE project_id = $1
+              AND account_scope_id = $2
+              AND (
+                COALESCE(title, '') ILIKE ANY($3::text[])
+                OR COALESCE(next_step, '') ILIKE ANY($3::text[])
+                OR COALESCE(stage, '') ILIKE ANY($3::text[])
+              )
+              AND ($4::timestamptz IS NULL OR updated_at >= $4::timestamptz)
+              AND ($5::timestamptz IS NULL OR updated_at < $5::timestamptz)
+            ORDER BY updated_at DESC NULLS LAST
+            LIMIT $6
+          `,
+      sourceParams
     ) : emptyResult,
   ]);
+
+  let chunkSearch;
+  let messageRows;
+  let issueRows;
+  let opportunityRows;
+  try {
+    [chunkSearch, messageRows, issueRows, opportunityRows] = await runSourceQueries(true);
+  } catch (error) {
+    if (error?.code !== "42883") {
+      throw error;
+    }
+    logger.warn({ err: String(error?.message || error) }, "pg_trgm similarity unavailable; falling back to ILIKE-only search");
+    [chunkSearch, messageRows, issueRows, opportunityRows] = await runSourceQueries(false);
+  }
 
   const messages = messageRows.rows || [];
   const issues = issueRows.rows || [];
