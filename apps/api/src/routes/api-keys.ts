@@ -1,6 +1,6 @@
 import { generateApiKey, sanitizeApiKeyScopes } from "../infra/api-keys.js";
 import { ApiError, sendError } from "../infra/api-contract.js";
-import { getEffectiveRole } from "../infra/rbac.js";
+import { getEffectiveRole, hasPermission } from "../infra/rbac.js";
 import { assertUuid, requestIdOf } from "../infra/utils.js";
 import type { Pool } from "../types/index.js";
 import type { FastifyReply, FastifyRequest } from "fastify";
@@ -9,6 +9,8 @@ type RequestLike = FastifyRequest & {
   auth?: {
     active_project_id?: string | null;
     account_scope_id?: string | null;
+    user_id?: string | null;
+    user_role?: "owner" | "pm" | "delivery_lead" | "executor" | "viewer" | null;
   };
   apiKey?: { id: string; scopes?: string[] };
   body?: Record<string, unknown>;
@@ -27,7 +29,7 @@ interface RouteCtx {
 
 function requireOwnerSession(request: RequestLike, reply: ReplyLike) {
   const role = getEffectiveRole(request);
-  if (role !== "owner" || request.apiKey) {
+  if (!hasPermission(role, "api_keys.manage") || request.apiKey) {
     return sendError(reply, requestIdOf(request), new ApiError(403, "forbidden", "Only owner session can manage API keys"));
   }
   return null;

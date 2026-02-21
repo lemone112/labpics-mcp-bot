@@ -1,7 +1,7 @@
 import { ApiError, parseBody, sendError, sendOk } from "../infra/api-contract.js";
 import { assertUuid } from "../infra/utils.js";
 import { writeAuditEvent } from "../domains/core/audit.js";
-import { getEffectiveRole, getAccessibleProjectIds, canAccessProject } from "../infra/rbac.js";
+import { getEffectiveRole, getAccessibleProjectIds, canAccessProject, hasPermission } from "../infra/rbac.js";
 import type { Pool, FastifyReply, FastifyRequest } from "../types/index.js";
 import type { ZodTypeAny } from "zod";
 
@@ -13,7 +13,7 @@ type RequestLike = FastifyRequest & {
     active_project_id?: string | null;
     account_scope_id?: string | null;
     user_id?: string | null;
-    user_role?: "owner" | "pm" | null;
+    user_role?: "owner" | "pm" | "delivery_lead" | "executor" | "viewer" | null;
     session_id?: string | null;
     username?: string | null;
   };
@@ -77,7 +77,7 @@ export function registerProjectRoutes(ctx: RouteCtx) {
 
   registerPost("/projects", async (request, reply) => {
     const userRole = getEffectiveRole(request as any);
-    if (userRole !== "owner") {
+    if (!hasPermission(userRole, "project.create")) {
       return sendError(reply, request.requestId, new ApiError(403, "forbidden", "Only owners can create projects"));
     }
 

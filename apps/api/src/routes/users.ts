@@ -1,6 +1,6 @@
 import { ApiError, parseBody, sendError, sendOk } from "../infra/api-contract.js";
 import { writeAuditEvent } from "../domains/core/audit.js";
-import { getEffectiveRole } from "../infra/rbac.js";
+import { getEffectiveRole, hasPermission } from "../infra/rbac.js";
 import { assertUuid, requestIdOf } from "../infra/utils.js";
 import { z } from "zod";
 import bcrypt from "bcrypt";
@@ -12,12 +12,12 @@ const BCRYPT_ROUNDS = 12;
 const CreateUserSchema = z.object({
   username: z.string().transform((s) => s.trim().toLowerCase()).pipe(z.string().min(2).max(200)),
   password: z.string().min(8, "Password must be at least 8 characters").max(200),
-  role: z.enum(["owner", "pm"]).default("pm"),
+  role: z.enum(["owner", "pm", "delivery_lead", "executor", "viewer"]).default("pm"),
   email: z.string().email().max(300).optional().nullable().default(null),
 });
 
 const UpdateUserSchema = z.object({
-  role: z.enum(["owner", "pm"]).optional(),
+  role: z.enum(["owner", "pm", "delivery_lead", "executor", "viewer"]).optional(),
   email: z.string().email().max(300).optional().nullable(),
   password: z.string().min(8).max(200).optional(),
 });
@@ -37,7 +37,7 @@ type RequestLike = FastifyRequest & {
     active_project_id?: string | null;
     account_scope_id?: string | null;
     user_id?: string | null;
-    user_role?: "owner" | "pm" | null;
+    user_role?: "owner" | "pm" | "delivery_lead" | "executor" | "viewer" | null;
     username?: string | null;
   };
   params?: Record<string, unknown>;
@@ -64,7 +64,7 @@ interface RouteCtx {
 
 function requireOwner(request: RequestLike, reply: ReplyLike, message: string) {
   const role = getEffectiveRole(request);
-  if (role !== "owner") {
+  if (!hasPermission(role, "user.manage")) {
     return sendError(reply, requestIdOf(request), new ApiError(403, "forbidden", message));
   }
   return null;
