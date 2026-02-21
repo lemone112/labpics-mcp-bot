@@ -8,19 +8,23 @@ import { applyContinuityActions, buildContinuityPreview, listContinuityActions }
 import { applyIdentitySuggestions, listIdentityLinks, listIdentitySuggestions, previewIdentitySuggestions } from "../domains/identity/identity-graph.js";
 import type { Pool } from "../types/index.js";
 import type { ZodTypeAny } from "zod";
+import type { FastifyReply, FastifyRequest } from "fastify";
 
-type RequestLike = {
-  auth?: { username?: string | null };
+type RequestLike = FastifyRequest & {
+  auth?: {
+    active_project_id?: string | null;
+    account_scope_id?: string | null;
+    user_id?: string | null;
+    user_role?: "owner" | "pm" | null;
+    username?: string | null;
+  };
   params?: Record<string, unknown>;
   query?: Record<string, unknown>;
   body?: unknown;
   requestId?: string;
 };
 
-type ReplyLike = {
-  code: (statusCode: number) => ReplyLike;
-  send: (payload: unknown) => unknown;
-};
+type ReplyLike = FastifyReply;
 
 type RegisterFn = (
   path: string,
@@ -41,6 +45,10 @@ interface RouteCtx {
   ContinuityApplySchema: ZodTypeAny;
 }
 
+function requestIdOf(request: RequestLike): string {
+  return String(request.requestId || request.id);
+}
+
 async function recordScopedAudit(
   pool: Pool,
   request: RequestLike,
@@ -52,7 +60,7 @@ async function recordScopedAudit(
     projectId: scope.projectId,
     accountScopeId: scope.accountScopeId,
     actorUsername: request.auth?.username || null,
-    requestId: request.requestId,
+    requestId: requestIdOf(request),
   });
 }
 
@@ -74,7 +82,7 @@ export function registerSignalRoutes(ctx: RouteCtx) {
 
   // --- Identity ---
   registerPost("/identity/suggestions/preview", async (request, reply) => {
-    const scope = requireProjectScope(request);
+    const scope = requireProjectScope(request as any);
     const body = parseBody(IdentityPreviewSchema, request.body) as { limit: number };
     const result = await previewIdentitySuggestions(pool, scope, body.limit);
 
@@ -86,22 +94,22 @@ export function registerSignalRoutes(ctx: RouteCtx) {
       payload: { generated: result.generated, stored: result.stored },
       evidenceRefs: [],
     });
-    return sendOk(reply, request.requestId, result);
+    return sendOk(reply, requestIdOf(request), result);
   });
 
   registerGet("/identity/suggestions", async (request, reply) => {
-    const scope = requireProjectScope(request);
+    const scope = requireProjectScope(request as any);
     const rows = await listIdentitySuggestions(pool, scope, {
       status: request.query?.status,
       limit: request.query?.limit,
     });
-    return sendOk(reply, request.requestId, { suggestions: rows });
+    return sendOk(reply, requestIdOf(request), { suggestions: rows });
   });
 
   registerPost("/identity/suggestions/apply", async (request, reply) => {
-    const scope = requireProjectScope(request);
+    const scope = requireProjectScope(request as any);
     const body = parseBody(IdentitySuggestionApplySchema, request.body) as { suggestion_ids: string[] };
-    const result = await applyIdentitySuggestions(pool, scope, body.suggestion_ids, request.auth?.username || null);
+    const result = await applyIdentitySuggestions(pool, scope, body.suggestion_ids, (request.auth?.username || null) as any);
 
     await recordScopedAudit(pool, request, scope, {
       action: "identity.apply",
@@ -109,23 +117,23 @@ export function registerSignalRoutes(ctx: RouteCtx) {
       entityId: scope.projectId,
       status: "ok",
       payload: { applied: result.applied },
-      evidenceRefs: result.links.flatMap((row) => row.evidence_refs || []),
+      evidenceRefs: result.links.flatMap((row: any) => row.evidence_refs || []),
     });
-    return sendOk(reply, request.requestId, result);
+    return sendOk(reply, requestIdOf(request), result);
   });
 
   registerGet("/identity/links", async (request, reply) => {
-    const scope = requireProjectScope(request);
+    const scope = requireProjectScope(request as any);
     const rows = await listIdentityLinks(pool, scope, {
       status: request.query?.status,
       limit: request.query?.limit,
     });
-    return sendOk(reply, request.requestId, { links: rows });
+    return sendOk(reply, requestIdOf(request), { links: rows });
   });
 
   // --- Signals ---
   registerPost("/signals/extract", async (request, reply) => {
-    const scope = requireProjectScope(request);
+    const scope = requireProjectScope(request as any);
     const result = await extractSignalsAndNba(pool, scope);
 
     await recordScopedAudit(pool, request, scope, {
@@ -136,26 +144,26 @@ export function registerSignalRoutes(ctx: RouteCtx) {
       payload: result,
       evidenceRefs: [],
     });
-    return sendOk(reply, request.requestId, { result });
+    return sendOk(reply, requestIdOf(request), { result });
   });
 
   registerGet("/signals", async (request, reply) => {
-    const scope = requireProjectScope(request);
+    const scope = requireProjectScope(request as any);
     const signals = await listSignals(pool, scope, {
       status: request.query?.status,
       severity_min: request.query?.severity_min,
       limit: request.query?.limit,
     });
-    return sendOk(reply, request.requestId, { signals });
+    return sendOk(reply, requestIdOf(request), { signals });
   });
 
   registerPost("/signals/:id/status", async (request, reply) => {
-    const scope = requireProjectScope(request);
+    const scope = requireProjectScope(request as any);
     const body = parseBody(SignalStatusSchema, request.body) as { status: string };
     const signalId = assertUuid(request.params?.id, "signal_id");
     const signal = await updateSignalStatus(pool, scope, signalId, body.status);
     if (!signal) {
-      return sendError(reply, request.requestId, new ApiError(404, "signal_not_found", "Signal not found"));
+      return sendError(reply, requestIdOf(request), new ApiError(404, "signal_not_found", "Signal not found"));
     }
 
     await recordScopedAudit(pool, request, scope, {
@@ -166,26 +174,26 @@ export function registerSignalRoutes(ctx: RouteCtx) {
       payload: { status: signal.status },
       evidenceRefs: signal.evidence_refs || [],
     });
-    return sendOk(reply, request.requestId, { signal });
+    return sendOk(reply, requestIdOf(request), { signal });
   });
 
   // --- NBA ---
   registerGet("/nba", async (request, reply) => {
-    const scope = requireProjectScope(request);
+    const scope = requireProjectScope(request as any);
     const items = await listNba(pool, scope, {
       status: request.query?.status,
       limit: request.query?.limit,
     });
-    return sendOk(reply, request.requestId, { items });
+    return sendOk(reply, requestIdOf(request), { items });
   });
 
   registerPost("/nba/:id/status", async (request, reply) => {
-    const scope = requireProjectScope(request);
+    const scope = requireProjectScope(request as any);
     const body = parseBody(NbaStatusSchema, request.body) as { status: string };
     const nbaId = assertUuid(request.params?.id, "nba_id");
     const item = await updateNbaStatus(pool, scope, nbaId, body.status);
     if (!item) {
-      return sendError(reply, request.requestId, new ApiError(404, "nba_not_found", "NBA item not found"));
+      return sendError(reply, requestIdOf(request), new ApiError(404, "nba_not_found", "NBA item not found"));
     }
 
     await recordScopedAudit(pool, request, scope, {
@@ -196,12 +204,12 @@ export function registerSignalRoutes(ctx: RouteCtx) {
       payload: { status: item.status },
       evidenceRefs: item.evidence_refs || [],
     });
-    return sendOk(reply, request.requestId, { item });
+    return sendOk(reply, requestIdOf(request), { item });
   });
 
   // --- Upsell ---
   registerPost("/upsell/radar/refresh", async (request, reply) => {
-    const scope = requireProjectScope(request);
+    const scope = requireProjectScope(request as any);
     const result = await refreshUpsellRadar(pool, scope);
 
     await recordScopedAudit(pool, request, scope, {
@@ -212,25 +220,25 @@ export function registerSignalRoutes(ctx: RouteCtx) {
       payload: result,
       evidenceRefs: [],
     });
-    return sendOk(reply, request.requestId, { result });
+    return sendOk(reply, requestIdOf(request), { result });
   });
 
   registerGet("/upsell/radar", async (request, reply) => {
-    const scope = requireProjectScope(request);
+    const scope = requireProjectScope(request as any);
     const rows = await listUpsellRadar(pool, scope, {
       status: request.query?.status,
       limit: request.query?.limit,
     });
-    return sendOk(reply, request.requestId, { opportunities: rows });
+    return sendOk(reply, requestIdOf(request), { opportunities: rows });
   });
 
   registerPost("/upsell/:id/status", async (request, reply) => {
-    const scope = requireProjectScope(request);
+    const scope = requireProjectScope(request as any);
     const body = parseBody(UpsellStatusSchema, request.body) as { status: string };
     const upsellId = assertUuid(request.params?.id, "upsell_id");
     const item = await updateUpsellStatus(pool, scope, upsellId, body.status);
     if (!item) {
-      return sendError(reply, request.requestId, new ApiError(404, "upsell_not_found", "Upsell opportunity not found"));
+      return sendError(reply, requestIdOf(request), new ApiError(404, "upsell_not_found", "Upsell opportunity not found"));
     }
 
     await recordScopedAudit(pool, request, scope, {
@@ -241,13 +249,13 @@ export function registerSignalRoutes(ctx: RouteCtx) {
       payload: { status: item.status },
       evidenceRefs: item.evidence_refs || [],
     });
-    return sendOk(reply, request.requestId, { item });
+    return sendOk(reply, requestIdOf(request), { item });
   });
 
   // --- Continuity ---
   registerPost("/continuity/preview", async (request, reply) => {
-    const scope = requireProjectScope(request);
-    const result = await buildContinuityPreview(pool, scope, request.auth?.username || null);
+    const scope = requireProjectScope(request as any);
+    const result = await buildContinuityPreview(pool, scope, (request.auth?.username || null) as any);
 
     await recordScopedAudit(pool, request, scope, {
       action: "continuity.preview",
@@ -255,24 +263,24 @@ export function registerSignalRoutes(ctx: RouteCtx) {
       entityId: scope.projectId,
       status: "ok",
       payload: { touched: result.touched },
-      evidenceRefs: result.rows.flatMap((row) => row.evidence_refs || []),
+      evidenceRefs: result.rows.flatMap((row: any) => row.evidence_refs || []),
     });
-    return sendOk(reply, request.requestId, result);
+    return sendOk(reply, requestIdOf(request), result);
   });
 
   registerGet("/continuity/actions", async (request, reply) => {
-    const scope = requireProjectScope(request);
+    const scope = requireProjectScope(request as any);
     const actions = await listContinuityActions(pool, scope, {
       status: request.query?.status,
       limit: request.query?.limit,
     });
-    return sendOk(reply, request.requestId, { actions });
+    return sendOk(reply, requestIdOf(request), { actions });
   });
 
   registerPost("/continuity/apply", async (request, reply) => {
-    const scope = requireProjectScope(request);
+    const scope = requireProjectScope(request as any);
     const body = parseBody(ContinuityApplySchema, request.body) as { action_ids: string[] };
-    const result = await applyContinuityActions(pool, scope, body.action_ids, request.auth?.username || null);
+    const result = await applyContinuityActions(pool, scope, body.action_ids, (request.auth?.username || null) as any);
 
     await recordScopedAudit(pool, request, scope, {
       action: "continuity.apply",
@@ -280,8 +288,8 @@ export function registerSignalRoutes(ctx: RouteCtx) {
       entityId: scope.projectId,
       status: "ok",
       payload: { applied: result.applied },
-      evidenceRefs: result.actions.flatMap((row) => row.evidence_refs || []),
+      evidenceRefs: result.actions.flatMap((row: any) => row.evidence_refs || []),
     });
-    return sendOk(reply, request.requestId, result);
+    return sendOk(reply, requestIdOf(request), result);
   });
 }

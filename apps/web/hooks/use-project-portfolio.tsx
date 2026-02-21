@@ -10,7 +10,7 @@ import { usePortfolioFilters } from "@/hooks/use-portfolio-filters";
 
 type ProjectLike = {
   id: string | number;
-  name?: string;
+  name?: string | null;
   [key: string]: unknown;
 };
 

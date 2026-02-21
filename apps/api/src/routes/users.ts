@@ -5,6 +5,7 @@ import { assertUuid } from "../infra/utils.js";
 import { z } from "zod";
 import bcrypt from "bcrypt";
 import type { Pool } from "../types/index.js";
+import type { FastifyReply, FastifyRequest } from "fastify";
 
 const BCRYPT_ROUNDS = 12;
 
@@ -31,9 +32,12 @@ const UnassignProjectSchema = z.object({
   project_id: z.string().uuid(),
 });
 
-type RequestLike = {
+type RequestLike = FastifyRequest & {
   auth?: {
+    active_project_id?: string | null;
+    account_scope_id?: string | null;
     user_id?: string | null;
+    user_role?: "owner" | "pm" | null;
     username?: string | null;
   };
   params?: Record<string, unknown>;
@@ -45,10 +49,7 @@ type RequestLike = {
   };
 };
 
-type ReplyLike = {
-  code: (statusCode: number) => ReplyLike;
-  send: (payload: unknown) => unknown;
-};
+type ReplyLike = FastifyReply;
 
 type RegisterFn = (
   path: string,
@@ -61,10 +62,14 @@ interface RouteCtx {
   pool: Pool;
 }
 
+function requestIdOf(request: RequestLike): string {
+  return String(request.requestId || request.id);
+}
+
 function requireOwner(request: RequestLike, reply: ReplyLike, message: string) {
   const role = getEffectiveRole(request);
   if (role !== "owner") {
-    return sendError(reply, request.requestId, new ApiError(403, "forbidden", message));
+    return sendError(reply, requestIdOf(request), new ApiError(403, "forbidden", message));
   }
   return null;
 }
@@ -98,7 +103,7 @@ export function registerUserRoutes(ctx: RouteCtx) {
         ORDER BY created_at ASC
       `
     );
-    return sendOk(reply, request.requestId, { users: rows });
+    return sendOk(reply, requestIdOf(request), { users: rows });
   });
 
   registerGet("/users/:id", async (request, reply) => {
@@ -108,7 +113,7 @@ export function registerUserRoutes(ctx: RouteCtx) {
 
     // Users can view their own profile; owners can view anyone
     if (role !== "owner" && targetId !== userId) {
-      return sendError(reply, request.requestId, new ApiError(403, "forbidden", "Access denied"));
+      return sendError(reply, requestIdOf(request), new ApiError(403, "forbidden", "Access denied"));
     }
 
     const { rows } = await pool.query(
@@ -121,7 +126,7 @@ export function registerUserRoutes(ctx: RouteCtx) {
       [targetId]
     );
     if (!rows[0]) {
-      return sendError(reply, request.requestId, new ApiError(404, "user_not_found", "User not found"));
+      return sendError(reply, requestIdOf(request), new ApiError(404, "user_not_found", "User not found"));
     }
 
     // Include assigned projects
@@ -139,7 +144,7 @@ export function registerUserRoutes(ctx: RouteCtx) {
       [targetId]
     );
 
-    return sendOk(reply, request.requestId, {
+    return sendOk(reply, requestIdOf(request), {
       user: rows[0],
       project_assignments: assignments,
     });
@@ -158,7 +163,7 @@ export function registerUserRoutes(ctx: RouteCtx) {
       [body.username]
     );
     if (existing.length > 0) {
-      return sendError(reply, request.requestId, new ApiError(409, "username_taken", "Username already exists"));
+      return sendError(reply, requestIdOf(request), new ApiError(409, "username_taken", "Username already exists"));
     }
 
     // Check for duplicate email
@@ -168,7 +173,7 @@ export function registerUserRoutes(ctx: RouteCtx) {
         [body.email]
       );
       if (emailExists.length > 0) {
-        return sendError(reply, request.requestId, new ApiError(409, "email_taken", "Email already in use"));
+        return sendError(reply, requestIdOf(request), new ApiError(409, "email_taken", "Email already in use"));
       }
     }
 
@@ -190,12 +195,12 @@ export function registerUserRoutes(ctx: RouteCtx) {
       entityType: "user",
       entityId: rows[0].id,
       status: "ok",
-      requestId: request.requestId,
+      requestId: requestIdOf(request),
       payload: { username: body.username, role: body.role },
       evidenceRefs: [],
     });
 
-    return sendOk(reply, request.requestId, { user: rows[0] }, 201);
+    return sendOk(reply, requestIdOf(request), { user: rows[0] }, 201);
   });
 
   registerPost("/users/:id/update", async (request, reply) => {
@@ -211,7 +216,7 @@ export function registerUserRoutes(ctx: RouteCtx) {
       [targetId]
     );
     if (!existing[0]) {
-      return sendError(reply, request.requestId, new ApiError(404, "user_not_found", "User not found"));
+      return sendError(reply, requestIdOf(request), new ApiError(404, "user_not_found", "User not found"));
     }
 
     const updates: string[] = [];
@@ -230,7 +235,7 @@ export function registerUserRoutes(ctx: RouteCtx) {
           [body.email, targetId]
         );
         if (emailExists.length > 0) {
-          return sendError(reply, request.requestId, new ApiError(409, "email_taken", "Email already in use"));
+          return sendError(reply, requestIdOf(request), new ApiError(409, "email_taken", "Email already in use"));
         }
       }
       updates.push(`email = $${paramIndex++}`);
@@ -243,7 +248,7 @@ export function registerUserRoutes(ctx: RouteCtx) {
     }
 
     if (updates.length === 0) {
-      return sendError(reply, request.requestId, new ApiError(400, "no_changes", "No fields to update"));
+      return sendError(reply, requestIdOf(request), new ApiError(400, "no_changes", "No fields to update"));
     }
 
     updates.push("updated_at = now()");
@@ -263,7 +268,7 @@ export function registerUserRoutes(ctx: RouteCtx) {
       entityType: "user",
       entityId: targetId,
       status: "ok",
-      requestId: request.requestId,
+      requestId: requestIdOf(request),
       payload: {
         target_username: existing[0].username,
         changes: Object.keys(body).filter((k) => body[k as keyof typeof body] !== undefined && k !== "password"),
@@ -271,7 +276,7 @@ export function registerUserRoutes(ctx: RouteCtx) {
       evidenceRefs: [],
     });
 
-    return sendOk(reply, request.requestId, { user: rows[0] });
+    return sendOk(reply, requestIdOf(request), { user: rows[0] });
   });
 
   registerPost("/users/:id/delete", async (request, reply) => {
@@ -283,7 +288,7 @@ export function registerUserRoutes(ctx: RouteCtx) {
 
     // Prevent self-deletion
     if (actorUserId && targetId === actorUserId) {
-      return sendError(reply, request.requestId, new ApiError(400, "self_delete", "Cannot delete your own account"));
+      return sendError(reply, requestIdOf(request), new ApiError(400, "self_delete", "Cannot delete your own account"));
     }
 
     const { rows: existing } = await pool.query(
@@ -291,7 +296,7 @@ export function registerUserRoutes(ctx: RouteCtx) {
       [targetId]
     );
     if (!existing[0]) {
-      return sendError(reply, request.requestId, new ApiError(404, "user_not_found", "User not found"));
+      return sendError(reply, requestIdOf(request), new ApiError(404, "user_not_found", "User not found"));
     }
 
     await pool.query("DELETE FROM app_users WHERE id = $1", [targetId]);
@@ -305,12 +310,12 @@ export function registerUserRoutes(ctx: RouteCtx) {
       entityType: "user",
       entityId: targetId,
       status: "ok",
-      requestId: request.requestId,
+      requestId: requestIdOf(request),
       payload: { deleted_username: existing[0].username },
       evidenceRefs: [],
     });
 
-    return sendOk(reply, request.requestId, { deleted: true });
+    return sendOk(reply, requestIdOf(request), { deleted: true });
   });
 
   // --- Project assignments (owner-only) ---
@@ -349,7 +354,7 @@ export function registerUserRoutes(ctx: RouteCtx) {
     query += " ORDER BY pa.assigned_at ASC";
 
     const { rows } = await pool.query(query, values);
-    return sendOk(reply, request.requestId, { assignments: rows });
+    return sendOk(reply, requestIdOf(request), { assignments: rows });
   });
 
   registerPost("/project-assignments", async (request, reply) => {
@@ -364,7 +369,7 @@ export function registerUserRoutes(ctx: RouteCtx) {
       [body.user_id]
     );
     if (!userRows[0]) {
-      return sendError(reply, request.requestId, new ApiError(404, "user_not_found", "User not found"));
+      return sendError(reply, requestIdOf(request), new ApiError(404, "user_not_found", "User not found"));
     }
 
     // Verify project exists
@@ -373,7 +378,7 @@ export function registerUserRoutes(ctx: RouteCtx) {
       [body.project_id]
     );
     if (!projectRows[0]) {
-      return sendError(reply, request.requestId, new ApiError(404, "project_not_found", "Project not found"));
+      return sendError(reply, requestIdOf(request), new ApiError(404, "project_not_found", "Project not found"));
     }
 
     const assignedBy = request.auth?.user_id || null;
@@ -390,7 +395,7 @@ export function registerUserRoutes(ctx: RouteCtx) {
 
     // ON CONFLICT returns no rows if already assigned
     if (rows.length === 0) {
-      return sendOk(reply, request.requestId, {
+      return sendOk(reply, requestIdOf(request), {
         assignment: null,
         already_assigned: true,
       });
@@ -405,7 +410,7 @@ export function registerUserRoutes(ctx: RouteCtx) {
       entityType: "project_assignment",
       entityId: rows[0].id,
       status: "ok",
-      requestId: request.requestId,
+      requestId: requestIdOf(request),
       payload: {
         user_id: body.user_id,
         username: userRows[0].username,
@@ -414,7 +419,7 @@ export function registerUserRoutes(ctx: RouteCtx) {
       evidenceRefs: [],
     });
 
-    return sendOk(reply, request.requestId, {
+    return sendOk(reply, requestIdOf(request), {
       assignment: rows[0],
       already_assigned: false,
     }, 201);
@@ -432,7 +437,7 @@ export function registerUserRoutes(ctx: RouteCtx) {
     );
 
     if (deleted.length === 0) {
-      return sendError(reply, request.requestId, new ApiError(404, "assignment_not_found", "Assignment not found"));
+      return sendError(reply, requestIdOf(request), new ApiError(404, "assignment_not_found", "Assignment not found"));
     }
 
     bestEffortAudit(pool, request, {
@@ -444,11 +449,11 @@ export function registerUserRoutes(ctx: RouteCtx) {
       entityType: "project_assignment",
       entityId: deleted[0].id,
       status: "ok",
-      requestId: request.requestId,
+      requestId: requestIdOf(request),
       payload: { user_id: body.user_id, project_id: body.project_id },
       evidenceRefs: [],
     });
 
-    return sendOk(reply, request.requestId, { removed: true });
+    return sendOk(reply, requestIdOf(request), { removed: true });
   });
 }
