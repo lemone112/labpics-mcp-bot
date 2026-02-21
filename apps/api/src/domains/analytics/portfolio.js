@@ -1,7 +1,7 @@
 import { fail } from "../../infra/api-contract.js";
 import { toPositiveInt, toNumber, clamp } from '../../infra/utils.js';
 
-function uniqueProjectIds(input) {
+export function uniqueProjectIds(input) {
   if (!Array.isArray(input)) return [];
   const deduped = new Set();
   for (const item of input) {
@@ -13,7 +13,7 @@ function uniqueProjectIds(input) {
   return Array.from(deduped);
 }
 
-function computeClientValueScore(metrics) {
+export function computeClientValueScore(metrics) {
   const expectedRevenue = toNumber(metrics.expected_revenue, 0);
   const healthScore = toNumber(metrics.health_score, 0);
   const messageSignal = toNumber(metrics.messages_7d, 0);
@@ -27,7 +27,7 @@ function computeClientValueScore(metrics) {
   return Math.round(clamp(22 + revenueSignal + engagementSignal + healthSignal - riskPenalty, 0, 100));
 }
 
-function toDiscountLimit(clientValueScore) {
+export function toDiscountLimit(clientValueScore) {
   const score = toNumber(clientValueScore, 0);
   if (score >= 85) return 18;
   if (score >= 70) return 14;
@@ -837,7 +837,7 @@ export async function getPortfolioOverview(pool, options = {}) {
   };
 }
 
-function normalizeMessageAttachments(rawAttachments) {
+export function normalizeMessageAttachments(rawAttachments) {
   if (!Array.isArray(rawAttachments)) return [];
   return rawAttachments
     .slice(0, 8)

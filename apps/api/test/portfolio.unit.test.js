@@ -1,70 +1,11 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-
-// Re-implement pure functions from portfolio.js for unit testing
-
-function toNumber(value, fallback = 0) {
-  const parsed = Number(value);
-  if (!Number.isFinite(parsed)) return fallback;
-  return parsed;
-}
-
-function clamp(value, min, max) {
-  const n = Number(value);
-  if (!Number.isFinite(n)) return min;
-  return Math.max(min, Math.min(max, n));
-}
-
-function uniqueProjectIds(input) {
-  if (!Array.isArray(input)) return [];
-  const deduped = new Set();
-  for (const item of input) {
-    const normalized = String(item || "").trim();
-    if (!normalized) continue;
-    deduped.add(normalized);
-    if (deduped.size >= 100) break;
-  }
-  return Array.from(deduped);
-}
-
-function computeClientValueScore(metrics) {
-  const expectedRevenue = toNumber(metrics.expected_revenue, 0);
-  const healthScore = toNumber(metrics.health_score, 0);
-  const messageSignal = toNumber(metrics.messages_7d, 0);
-  const riskPressure = toNumber(metrics.risks_open, 0);
-
-  const revenueSignal = Math.min(28, Math.log10(1 + Math.max(0, expectedRevenue)) * 7);
-  const engagementSignal = Math.min(16, messageSignal * 0.8);
-  const healthSignal = Math.min(42, healthScore * 0.42);
-  const riskPenalty = Math.min(30, riskPressure * 5.5);
-
-  return Math.round(clamp(22 + revenueSignal + engagementSignal + healthSignal - riskPenalty, 0, 100));
-}
-
-function toDiscountLimit(clientValueScore) {
-  const score = toNumber(clientValueScore, 0);
-  if (score >= 85) return 18;
-  if (score >= 70) return 14;
-  if (score >= 55) return 10;
-  if (score >= 40) return 7;
-  return 5;
-}
-
-function normalizeMessageAttachments(rawAttachments) {
-  if (!Array.isArray(rawAttachments)) return [];
-  return rawAttachments
-    .slice(0, 8)
-    .map((item) => {
-      if (!item || typeof item !== "object") return null;
-      return {
-        id: String(item.id || item.file_id || item.url || item.data_url || ""),
-        name: String(item.file_name || item.filename || item.name || "attachment"),
-        url: String(item.data_url || item.url || item.download_url || ""),
-        content_type: String(item.file_type || item.content_type || item.mime_type || "file"),
-      };
-    })
-    .filter((item) => item && item.id);
-}
+import {
+  computeClientValueScore,
+  normalizeMessageAttachments,
+  toDiscountLimit,
+  uniqueProjectIds,
+} from "../src/domains/analytics/portfolio.js";
 
 describe("uniqueProjectIds", () => {
   it("deduplicates project IDs", () => {
