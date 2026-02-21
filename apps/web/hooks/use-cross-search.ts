@@ -8,25 +8,46 @@ const MIN_QUERY_LENGTH = 2;
 const MAX_RECENT_SEARCHES = 8;
 const STORAGE_KEY = "labpics:recent-searches";
 
-/**
- * Reads recent searches from localStorage.
- * @returns {string[]}
- */
-function loadRecentSearches() {
+type SearchFilters = {
+  types?: string[];
+  projectId?: string | null;
+  dateFrom?: string | null;
+  dateTo?: string | null;
+  status?: string[];
+};
+
+type SearchResult = Record<string, unknown>;
+
+type CrossSearchState = {
+  query: string;
+  setQuery: (value: string) => void;
+  filters: Required<SearchFilters>;
+  isSearching: boolean;
+  results: SearchResult[];
+  totalCount: number;
+  countsByType: Record<string, number>;
+  suggestions: string[];
+  recentSearches: string[];
+  error: string | null;
+  search: (q?: string) => Promise<void>;
+  clearResults: () => void;
+  clearRecentSearches: () => void;
+};
+
+function loadRecentSearches(): string[] {
   if (typeof window === "undefined") return [];
   try {
     const raw = window.localStorage.getItem(STORAGE_KEY);
-    return raw ? JSON.parse(raw).slice(0, MAX_RECENT_SEARCHES) : [];
+    const parsed = raw ? (JSON.parse(raw) as unknown) : [];
+    return Array.isArray(parsed)
+      ? parsed.map((item) => String(item || "")).filter(Boolean).slice(0, MAX_RECENT_SEARCHES)
+      : [];
   } catch {
     return [];
   }
 }
 
-/**
- * Saves a query to recent searches in localStorage.
- * @param {string} query
- */
-function saveRecentSearch(query) {
+function saveRecentSearch(query: string): void {
   if (typeof window === "undefined" || !query.trim()) return;
   try {
     const existing = loadRecentSearches();
@@ -38,42 +59,22 @@ function saveRecentSearch(query) {
   }
 }
 
-/**
- * useCrossSearch — global search across all sections.
- *
- * Features:
- * - Debounced query (300ms)
- * - Faceted results by type
- * - Recent search history (localStorage)
- * - Minimum query length (2 chars)
- *
- * @param {{
- *   filters?: import("@/types/cross-search").SearchFilters,
- *   enabled?: boolean,
- * }} options
- * @returns {import("@/types/cross-search").SearchState & {
- *   setQuery: (q: string) => void,
- *   search: (q?: string) => Promise<void>,
- *   clearResults: () => void,
- *   clearRecentSearches: () => void,
- * }}
- */
-export function useCrossSearch(options = {}) {
+export function useCrossSearch(options: { filters?: SearchFilters; enabled?: boolean } = {}): CrossSearchState {
   const { filters = {}, enabled = true } = options;
 
   const [query, setQuery] = useState("");
   const [isSearching, setIsSearching] = useState(false);
-  const [results, setResults] = useState([]);
+  const [results, setResults] = useState<SearchResult[]>([]);
   const [totalCount, setTotalCount] = useState(0);
-  const [countsByType, setCountsByType] = useState({});
-  const [suggestions, setSuggestions] = useState([]);
-  const [recentSearches, setRecentSearches] = useState(() => loadRecentSearches());
-  const [error, setError] = useState(null);
+  const [countsByType, setCountsByType] = useState<Record<string, number>>({});
+  const [suggestions, setSuggestions] = useState<string[]>([]);
+  const [recentSearches, setRecentSearches] = useState<string[]>(() => loadRecentSearches());
+  const [error, setError] = useState<string | null>(null);
 
-  const debounceRef = useRef(null);
-  const abortRef = useRef(null);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
 
-  const stableFilters = useMemo(
+  const stableFilters = useMemo<Required<SearchFilters>>(
     () => ({
       types: filters.types || [],
       projectId: filters.projectId || null,
@@ -87,11 +88,11 @@ export function useCrossSearch(options = {}) {
       filters.dateFrom,
       filters.dateTo,
       filters.status?.join(","),
-    ],
+    ]
   );
 
   const performSearch = useCallback(
-    async (searchQuery) => {
+    async (searchQuery: string) => {
       const trimmed = String(searchQuery || "").trim();
       if (trimmed.length < MIN_QUERY_LENGTH) {
         setResults([]);
@@ -102,7 +103,6 @@ export function useCrossSearch(options = {}) {
         return;
       }
 
-      // Abort any in-flight request
       if (abortRef.current) {
         abortRef.current.abort();
       }
@@ -114,38 +114,29 @@ export function useCrossSearch(options = {}) {
 
       try {
         const params = new URLSearchParams({ q: trimmed });
-        if (stableFilters.types.length) {
-          params.set("types", stableFilters.types.join(","));
-        }
-        if (stableFilters.projectId) {
-          params.set("project_id", stableFilters.projectId);
-        }
-        if (stableFilters.dateFrom) {
-          params.set("date_from", stableFilters.dateFrom);
-        }
-        if (stableFilters.dateTo) {
-          params.set("date_to", stableFilters.dateTo);
-        }
-        if (stableFilters.status.length) {
-          params.set("status", stableFilters.status.join(","));
-        }
+        if (stableFilters.types.length) params.set("types", stableFilters.types.join(","));
+        if (stableFilters.projectId) params.set("project_id", stableFilters.projectId);
+        if (stableFilters.dateFrom) params.set("date_from", stableFilters.dateFrom);
+        if (stableFilters.dateTo) params.set("date_to", stableFilters.dateTo);
+        if (stableFilters.status.length) params.set("status", stableFilters.status.join(","));
 
         const data = await apiFetch(`/search?${params.toString()}`);
-
-        // Check if request was aborted during fetch
         if (controller.signal.aborted) return;
 
-        setResults(Array.isArray(data?.results) ? data.results : []);
-        setTotalCount(data?.totalCount ?? 0);
-        setCountsByType(data?.countsByType ?? {});
-        setSuggestions(Array.isArray(data?.suggestions) ? data.suggestions : []);
+        setResults(Array.isArray((data as { results?: unknown[] } | null)?.results) ? ((data as { results: unknown[] }).results as SearchResult[]) : []);
+        setTotalCount((data as { totalCount?: number } | null)?.totalCount ?? 0);
+        setCountsByType((data as { countsByType?: Record<string, number> } | null)?.countsByType ?? {});
+        setSuggestions(
+          Array.isArray((data as { suggestions?: unknown[] } | null)?.suggestions)
+            ? (data as { suggestions: unknown[] }).suggestions.map((s) => String(s || "")).filter(Boolean)
+            : []
+        );
 
-        // Save to recent searches
         saveRecentSearch(trimmed);
         setRecentSearches(loadRecentSearches());
       } catch (err) {
         if (controller.signal.aborted) return;
-        setError(err?.message || "Search failed");
+        setError((err as { message?: string } | null)?.message || "Search failed");
         setResults([]);
         setTotalCount(0);
       } finally {
@@ -154,14 +145,13 @@ export function useCrossSearch(options = {}) {
         }
       }
     },
-    [stableFilters],
+    [stableFilters]
   );
 
-  // Debounced auto-search on query change
   useEffect(() => {
     if (!enabled) return;
 
-    clearTimeout(debounceRef.current);
+    if (debounceRef.current) clearTimeout(debounceRef.current);
 
     if (query.trim().length < MIN_QUERY_LENGTH) {
       setResults([]);
@@ -172,16 +162,17 @@ export function useCrossSearch(options = {}) {
     }
 
     debounceRef.current = setTimeout(() => {
-      performSearch(query);
+      void performSearch(query);
     }, DEBOUNCE_MS);
 
-    return () => clearTimeout(debounceRef.current);
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
   }, [query, enabled, performSearch]);
 
-  // Cleanup on unmount
   useEffect(() => {
     return () => {
-      clearTimeout(debounceRef.current);
+      if (debounceRef.current) clearTimeout(debounceRef.current);
       if (abortRef.current) abortRef.current.abort();
     };
   }, []);
@@ -203,13 +194,13 @@ export function useCrossSearch(options = {}) {
   }, []);
 
   const search = useCallback(
-    async (q) => {
+    async (q?: string) => {
       const searchQuery = q !== undefined ? q : query;
       setQuery(searchQuery);
-      clearTimeout(debounceRef.current);
+      if (debounceRef.current) clearTimeout(debounceRef.current);
       await performSearch(searchQuery);
     },
-    [query, performSearch],
+    [query, performSearch]
   );
 
   return {

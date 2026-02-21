@@ -4,30 +4,23 @@ import { useCallback, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/api";
 
-// ── Query Keys ────────────────────────────────────────────────
+type Notification = Record<string, unknown>;
+type NotificationCategory = string;
 
 const NOTIFICATION_KEYS = {
-  all: ["notifications"],
-  list: (filters) => ["notifications", "list", filters],
-  count: () => ["notifications", "count"],
+  all: ["notifications"] as const,
+  list: (filters: unknown) => ["notifications", "list", filters] as const,
+  count: () => ["notifications", "count"] as const,
 };
 
-// ── useNotificationCount — lightweight badge counter ──────────
-
-/**
- * Polls for unread notification count.
- * Used by the bell icon in the header.
- *
- * @param {{ enabled?: boolean }} options
- */
-export function useNotificationCount(options = {}) {
+export function useNotificationCount(options: { enabled?: boolean } = {}) {
   const { enabled = true } = options;
 
   const query = useQuery({
     queryKey: NOTIFICATION_KEYS.count(),
     queryFn: async () => {
       const data = await apiFetch("/notifications/count");
-      return { unreadCount: data?.unreadCount ?? 0 };
+      return { unreadCount: (data as { unreadCount?: number } | null)?.unreadCount ?? 0 };
     },
     enabled,
     staleTime: 15_000,
@@ -42,20 +35,13 @@ export function useNotificationCount(options = {}) {
   };
 }
 
-// ── useNotifications — full notification list ─────────────────
-
-/**
- * Fetches paginated notification list for the notification center.
- *
- * @param {{
- *   page?: number,
- *   pageSize?: number,
- *   category?: import("@/types/notifications").NotificationCategory | null,
- *   unreadOnly?: boolean,
- *   enabled?: boolean,
- * }} options
- */
-export function useNotifications(options = {}) {
+export function useNotifications(options: {
+  page?: number;
+  pageSize?: number;
+  category?: NotificationCategory | null;
+  unreadOnly?: boolean;
+  enabled?: boolean;
+} = {}) {
   const {
     page = 1,
     pageSize = 20,
@@ -66,7 +52,7 @@ export function useNotifications(options = {}) {
 
   const filters = useMemo(
     () => ({ page, pageSize, category, unreadOnly }),
-    [page, pageSize, category, unreadOnly],
+    [page, pageSize, category, unreadOnly]
   );
 
   const query = useQuery({
@@ -81,10 +67,12 @@ export function useNotifications(options = {}) {
 
       const data = await apiFetch(`/notifications?${params.toString()}`);
       return {
-        notifications: Array.isArray(data?.notifications) ? data.notifications : [],
-        unreadCount: data?.unreadCount ?? 0,
-        totalCount: data?.totalCount ?? 0,
-        hasMore: data?.hasMore ?? false,
+        notifications: Array.isArray((data as { notifications?: unknown[] } | null)?.notifications)
+          ? ((data as { notifications: unknown[] }).notifications as Notification[])
+          : [],
+        unreadCount: (data as { unreadCount?: number } | null)?.unreadCount ?? 0,
+        totalCount: (data as { totalCount?: number } | null)?.totalCount ?? 0,
+        hasMore: (data as { hasMore?: boolean } | null)?.hasMore ?? false,
       };
     },
     enabled,
@@ -104,11 +92,6 @@ export function useNotifications(options = {}) {
   };
 }
 
-// ── useNotificationMutations ──────────────────────────────────
-
-/**
- * Provides mutation functions for notifications.
- */
 export function useNotificationMutations() {
   const queryClient = useQueryClient();
 
@@ -117,7 +100,7 @@ export function useNotificationMutations() {
   }, [queryClient]);
 
   const markRead = useMutation({
-    mutationFn: async (ids) => {
+    mutationFn: async (ids: string[] | string) => {
       return apiFetch("/notifications/read", {
         method: "POST",
         body: { ids: Array.isArray(ids) ? ids : [ids] },
@@ -134,7 +117,7 @@ export function useNotificationMutations() {
   });
 
   const dismiss = useMutation({
-    mutationFn: async (id) => {
+    mutationFn: async (id: string) => {
       return apiFetch(`/notifications/${id}`, { method: "DELETE" });
     },
     onSuccess: invalidate,

@@ -3,9 +3,7 @@
 import { useMemo } from "react";
 import { useActionQueueCounts } from "@/hooks/use-action-queue";
 
-// Maps action queue categories to nav item keys.
-// This bridges the action queue system to the navigation UI.
-const CATEGORY_TO_NAV_KEY = {
+const CATEGORY_TO_NAV_KEY: Record<string, string> = {
   message: "messages",
   agreement: "agreements",
   risk: "risks",
@@ -14,34 +12,31 @@ const CATEGORY_TO_NAV_KEY = {
   project: "projects",
 };
 
-// Threshold for "critical" severity on badges
 const CRITICAL_THRESHOLD = 10;
 const WARNING_THRESHOLD = 5;
 
-/**
- * useNavBadges — derives nav badge configs from action queue counts.
- *
- * Returns a map of nav item keys to badge configs, plus the total
- * count of pending items across all categories.
- *
- * @param {{ enabled?: boolean }} options
- * @returns {import("@/types/nav-badges").NavBadgeState}
- */
-export function useNavBadges(options = {}) {
+type NavBadgeConfig = {
+  key: string;
+  variant: "count";
+  severity: "default" | "warning" | "critical";
+  count: number;
+  ariaLabel: string;
+  pulse: boolean;
+};
+
+export function useNavBadges(options: { enabled?: boolean } = {}) {
   const { enabled = true } = options;
   const { counts, isLoading } = useActionQueueCounts({ enabled });
 
-  const badges = useMemo(() => {
-    /** @type {Record<string, import("@/types/nav-badges").NavBadgeConfig | null>} */
-    const map = {};
-
+  const badges = useMemo<Record<string, NavBadgeConfig | null>>(() => {
+    const map: Record<string, NavBadgeConfig | null> = {};
     if (!counts?.byCategory) return map;
 
     for (const [category, count] of Object.entries(counts.byCategory)) {
       const navKey = CATEGORY_TO_NAV_KEY[category];
       if (!navKey || count <= 0) continue;
 
-      let severity = "default";
+      let severity: NavBadgeConfig["severity"] = "default";
       let pulse = false;
 
       if (count >= CRITICAL_THRESHOLD) {
@@ -61,9 +56,8 @@ export function useNavBadges(options = {}) {
       };
     }
 
-    // If there are overdue items, overlay them on the dashboard badge
     if (counts.overdue > 0) {
-      map["dashboard"] = {
+      map.dashboard = {
         key: "dashboard",
         variant: "count",
         severity: "critical",

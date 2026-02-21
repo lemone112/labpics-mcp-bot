@@ -4,23 +4,31 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 
 const STORAGE_PREFIX = "labpics:table:";
 
-/**
- * Reads persisted table preferences from localStorage.
- */
-function loadPreferences(tableId) {
+type SortDirection = "asc" | "desc";
+type SortState = { columnId: string; direction: SortDirection } | null;
+type FilterState = { columnId: string; value: unknown; operator?: string };
+type SelectionMode = "none" | "single" | "multi";
+type DataTableColumn = { id: string; defaultVisible?: boolean };
+
+type PersistedPrefs = {
+  sort?: SortState;
+  filters?: FilterState[];
+  page?: number;
+  pageSize?: number;
+  columnVisibility?: Record<string, boolean>;
+} | null;
+
+function loadPreferences(tableId: string): PersistedPrefs {
   if (typeof window === "undefined") return null;
   try {
     const raw = window.localStorage.getItem(`${STORAGE_PREFIX}${tableId}`);
-    return raw ? JSON.parse(raw) : null;
+    return raw ? (JSON.parse(raw) as PersistedPrefs) : null;
   } catch {
     return null;
   }
 }
 
-/**
- * Saves table preferences to localStorage.
- */
-function savePreferences(tableId, prefs) {
+function savePreferences(tableId: string, prefs: PersistedPrefs): void {
   if (typeof window === "undefined") return;
   try {
     window.localStorage.setItem(`${STORAGE_PREFIX}${tableId}`, JSON.stringify(prefs));
@@ -29,23 +37,15 @@ function savePreferences(tableId, prefs) {
   }
 }
 
-/**
- * useDataTable — manages standardized table state.
- *
- * Provides sorting, filtering, selection, pagination, and column visibility
- * with optional localStorage persistence.
- *
- * @param {{
- *   tableId: string,
- *   defaultSort?: import("@/types/data-table").SortState | null,
- *   defaultPageSize?: number,
- *   totalItems?: number,
- *   selectionMode?: import("@/types/data-table").SelectionMode,
- *   persistPreferences?: boolean,
- *   columns?: import("@/types/data-table").DataTableColumn[],
- * }} config
- */
-export function useDataTable(config) {
+export function useDataTable(config: {
+  tableId: string;
+  defaultSort?: SortState;
+  defaultPageSize?: number;
+  totalItems?: number;
+  selectionMode?: SelectionMode;
+  persistPreferences?: boolean;
+  columns?: DataTableColumn[];
+}) {
   const {
     tableId,
     defaultSort = null,
@@ -56,45 +56,33 @@ export function useDataTable(config) {
     columns = [],
   } = config;
 
-  // Load persisted preferences
   const persisted = useMemo(
     () => (persistPreferences ? loadPreferences(tableId) : null),
-    [tableId, persistPreferences],
+    [tableId, persistPreferences]
   );
 
-  // ── Sort ────────────────────────────────────────────────────
-  const [sort, setSort] = useState(
-    persisted?.sort ?? defaultSort,
-  );
+  const [sort, setSort] = useState<SortState>(persisted?.sort ?? defaultSort);
 
-  const toggleSort = useCallback(
-    (columnId) => {
-      setSort((prev) => {
-        if (prev?.columnId === columnId) {
-          // Toggle direction, then remove
-          if (prev.direction === "asc") return { columnId, direction: "desc" };
-          return null; // Remove sort
-        }
-        return { columnId, direction: "asc" };
-      });
-    },
-    [],
-  );
+  const toggleSort = useCallback((columnId: string) => {
+    setSort((prev) => {
+      if (prev?.columnId === columnId) {
+        if (prev.direction === "asc") return { columnId, direction: "desc" };
+        return null;
+      }
+      return { columnId, direction: "asc" };
+    });
+  }, []);
 
-  // ── Filters ─────────────────────────────────────────────────
-  const [filters, setFilters] = useState(
-    persisted?.filters ?? [],
-  );
+  const [filters, setFilters] = useState<FilterState[]>(persisted?.filters ?? []);
 
-  const addFilter = useCallback((filter) => {
+  const addFilter = useCallback((filter: FilterState) => {
     setFilters((prev) => {
-      // Replace existing filter for same column
       const filtered = prev.filter((f) => f.columnId !== filter.columnId);
       return [...filtered, filter];
     });
   }, []);
 
-  const removeFilter = useCallback((columnId) => {
+  const removeFilter = useCallback((columnId: string) => {
     setFilters((prev) => prev.filter((f) => f.columnId !== columnId));
   }, []);
 
@@ -102,14 +90,11 @@ export function useDataTable(config) {
     setFilters([]);
   }, []);
 
-  // ── Global Filter ───────────────────────────────────────────
   const [globalFilter, setGlobalFilter] = useState("");
-
-  // ── Selection ───────────────────────────────────────────────
-  const [selectedIds, setSelectedIds] = useState(new Set());
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   const toggleSelection = useCallback(
-    (id) => {
+    (id: string) => {
       if (selectionMode === "none") return;
       setSelectedIds((prev) => {
         const next = new Set(prev);
@@ -127,11 +112,11 @@ export function useDataTable(config) {
         return next;
       });
     },
-    [selectionMode],
+    [selectionMode]
   );
 
   const toggleSelectAll = useCallback(
-    (allIds) => {
+    (allIds: string[]) => {
       if (selectionMode !== "multi") return;
       setSelectedIds((prev) => {
         const allSelected = allIds.every((id) => prev.has(id));
@@ -139,28 +124,25 @@ export function useDataTable(config) {
         return new Set(allIds);
       });
     },
-    [selectionMode],
+    [selectionMode]
   );
 
   const clearSelection = useCallback(() => {
     setSelectedIds(new Set());
   }, []);
 
-  // ── Pagination ──────────────────────────────────────────────
-  const [page, setPage] = useState(persisted?.page ?? 1);
-  const [pageSize, setPageSize] = useState(
-    persisted?.pageSize ?? defaultPageSize,
-  );
+  const [page, setPage] = useState<number>(persisted?.page ?? 1);
+  const [pageSize, setPageSize] = useState<number>(persisted?.pageSize ?? defaultPageSize);
 
   const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
 
   const goToPage = useCallback(
-    (p) => {
+    (p: number) => {
       const clamped = Math.max(1, Math.min(p, totalPages));
       setPage(clamped);
       clearSelection();
     },
-    [totalPages, clearSelection],
+    [totalPages, clearSelection]
   );
 
   const nextPage = useCallback(() => {
@@ -172,37 +154,34 @@ export function useDataTable(config) {
   }, [page, goToPage]);
 
   const changePageSize = useCallback(
-    (size) => {
+    (size: number) => {
       setPageSize(size);
       setPage(1);
       clearSelection();
     },
-    [clearSelection],
+    [clearSelection]
   );
 
-  // Reset to page 1 when filters/sort change
   useEffect(() => {
     setPage(1);
   }, [sort, filters, globalFilter]);
 
-  // ── Column Visibility ───────────────────────────────────────
-  const [columnVisibility, setColumnVisibility] = useState(() => {
+  const [columnVisibility, setColumnVisibility] = useState<Record<string, boolean>>(() => {
     if (persisted?.columnVisibility) return persisted.columnVisibility;
-    const initial = {};
+    const initial: Record<string, boolean> = {};
     for (const col of columns) {
       initial[col.id] = col.defaultVisible !== false;
     }
     return initial;
   });
 
-  const toggleColumnVisibility = useCallback((columnId) => {
+  const toggleColumnVisibility = useCallback((columnId: string) => {
     setColumnVisibility((prev) => ({
       ...prev,
       [columnId]: !prev[columnId],
     }));
   }, []);
 
-  // ── Persist Preferences ─────────────────────────────────────
   useEffect(() => {
     if (!persistPreferences) return;
     savePreferences(tableId, {
@@ -214,34 +193,26 @@ export function useDataTable(config) {
     });
   }, [persistPreferences, tableId, sort, filters, page, pageSize, columnVisibility]);
 
-  // ── Visible Columns ─────────────────────────────────────────
   const visibleColumns = useMemo(
     () => columns.filter((col) => columnVisibility[col.id] !== false),
-    [columns, columnVisibility],
+    [columns, columnVisibility]
   );
 
   return {
-    // Sort
     sort,
     setSort,
     toggleSort,
-
-    // Filters
     filters,
     addFilter,
     removeFilter,
     clearFilters,
     globalFilter,
     setGlobalFilter,
-
-    // Selection
     selectedIds,
     selectedCount: selectedIds.size,
     toggleSelection,
     toggleSelectAll,
     clearSelection,
-
-    // Pagination
     page,
     pageSize,
     totalItems,
@@ -250,14 +221,10 @@ export function useDataTable(config) {
     nextPage,
     prevPage,
     changePageSize,
-
-    // Column visibility
     columnVisibility,
     toggleColumnVisibility,
     visibleColumns,
-
-    // Helpers
     hasActiveFilters: filters.length > 0 || globalFilter.length > 0,
-    isAllSelected: (allIds) => allIds.length > 0 && allIds.every((id) => selectedIds.has(id)),
+    isAllSelected: (allIds: string[]) => allIds.length > 0 && allIds.every((id) => selectedIds.has(id)),
   };
 }
