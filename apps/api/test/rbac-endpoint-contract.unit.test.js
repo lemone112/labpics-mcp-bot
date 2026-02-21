@@ -68,8 +68,8 @@ test("GET /users contract: owner allowed, other roles denied", async () => {
     ownerReply
   );
   assert.equal(ownerReply.statusCode, 200);
-  assert.equal(Array.isArray(ownerReply.payload?.data?.users), true);
-  assert.equal(ownerReply.payload?.data?.users?.length, 1);
+  assert.equal(Array.isArray(ownerReply.payload?.users), true);
+  assert.equal(ownerReply.payload?.users?.length, 1);
 
   for (const role of ["pm", "delivery_lead", "executor", "viewer"]) {
     const deniedReply = createReply();
@@ -81,6 +81,6 @@ test("GET /users contract: owner allowed, other roles denied", async () => {
       deniedReply
     );
     assert.equal(deniedReply.statusCode, 403, `${role} must be denied`);
-    assert.equal(deniedReply.payload?.error?.code, "forbidden");
+    assert.equal(deniedReply.payload?.error, "forbidden");
   }
 });
